@@ -64,7 +64,6 @@ export class MainShow extends React.Component<any, any> {
   constructor(props, context) {
     super(props, context);
     this.state = {select: select.showItemConduct};
-    // topic.subscribe('mainShow/idicatorClicked', (selectItem)=>this.setState({select: selectItem}));
   }
 
   render() {
