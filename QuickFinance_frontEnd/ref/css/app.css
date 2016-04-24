@@ -116,6 +116,20 @@ span {
     display: block;
 }
 
+.mainCarousel-inner>.next {
+    left: 100%;
+}
+
+.mainCarousel-inner>.next, .carousel-inner>.prev {
+    position: absolute;
+    top: 0;
+    width: 100%;
+}
+
+.mainCarousel-inner>.active.left {
+    left: -100%;
+}
+
 .mainCarousel-container {
     width: 970px;
     padding-right: 15px;

@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "QuickFinance", "QuickFinance\QuickFinance.pyproj", "{7906416D-FCD7-4BD6-90AC-B0166F09C3F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuickFinance_frontEnd", "QuickFinance_frontEnd\QuickFinance_frontEnd.csproj", "{F4C55B51-0BCD-4BA4-8373-E5DE3877CF03}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7906416D-FCD7-4BD6-90AC-B0166F09C3F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7906416D-FCD7-4BD6-90AC-B0166F09C3F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7906416D-FCD7-4BD6-90AC-B0166F09C3F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7906416D-FCD7-4BD6-90AC-B0166F09C3F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4C55B51-0BCD-4BA4-8373-E5DE3877CF03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4C55B51-0BCD-4BA4-8373-E5DE3877CF03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4C55B51-0BCD-4BA4-8373-E5DE3877CF03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4C55B51-0BCD-4BA4-8373-E5DE3877CF03}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
