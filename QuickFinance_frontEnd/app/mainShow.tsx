@@ -77,7 +77,7 @@ export class MainShow extends React.Component<any, any> {
   constructor(props, context) {
     super(props, context);
     this.state = {select: select.showItemConduct, next: undefined, isSlide: false};
-    topic.subscribe('mainShow/idicatorClicked', this.slide);
+    topic.subscribe('mainShow/idicatorClicked', this.slide.bind(this));
   }
 
   slide(selectItem: select) {
@@ -93,7 +93,7 @@ export class MainShow extends React.Component<any, any> {
             next = select.showItemConduct;
             break;
       }
-      this.state = {select: selectItem, next: next, isSlide: true};
+      this.setState({select: selectItem, next: next, isSlide: true});
   }
 
   render() {
