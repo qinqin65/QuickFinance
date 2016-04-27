@@ -49,14 +49,14 @@ span {
 }
 
 /*首页旋转木马*/
-.mainCarousel {
+.carousel {
   position: relative;
 }
 
-.mainCarousel-indicators {
+.carousel-indicators {
     position: absolute;
     bottom: 10px;
-    left: 50%;
+    left: 32rem;
     z-index: 15;
     width: 60%;
     padding-left: 0;
@@ -65,7 +65,7 @@ span {
     list-style: none;
 }
 
-.mainCarousel-indicators li {
+.carousel-indicators li {
     display: inline-block;
     width: 10px;
     height: 10px;
@@ -78,14 +78,14 @@ span {
     border-radius: 10px;
 }
 
-.mainCarousel-indicators .active {
+.carousel-indicators .active {
     width: 12px;
     height: 12px;
     margin: 0;
     background-color: #fff;
 }
 
-.mainCarousel-inner {
+.carousel-inner {
     margin-left: 7rem;
     margin-top: 7rem;
     position: relative;
@@ -93,7 +93,7 @@ span {
     overflow: hidden;
 }
 
-.mainCarousel-inner>.mainCarousel-item {
+.carousel-inner>.carousel-item {
     position: relative;
     display: none;
     -webkit-transition: .6s ease-in-out left;
@@ -101,36 +101,36 @@ span {
     transition: .6s ease-in-out left;
 }
 
-.mainCarousel .mainCarousel-item {
+.carousel .carousel-item {
   height: 30rem;
   background-color: #777;
 }
 
-.mainCarousel-inner>.mainCarousel-item.active, .mainCarousel-inner>.mainCarousel-item.next.left, .mainCarousel-inner>.mainCarousel-item.prev.right {
+.carousel-inner>.carousel-item.active, .carousel-inner>.carousel-item.next.left, .carousel-inner>.carousel-item.prev.right {
     width: 50rem;
     -webkit-transform: translate3d(0,0,0);
      transform: translate3d(0,0,0); 
 }
 
-.mainCarousel-inner>.active, .mainCarousel-inner>.next, .mainCarousel-inner>.prev {
+.carousel-inner>.active, .carousel-inner>.next, .carousel-inner>.prev {
     display: block;
 }
 
-.mainCarousel-inner>.next {
+.carousel-inner>.next {
     left: 100%;
 }
 
-.mainCarousel-inner>.next, .carousel-inner>.prev {
+.carousel-inner>.next, .carousel-inner>.prev {
     position: absolute;
     top: 0;
     width: 100%;
 }
 
-.mainCarousel-inner>.active.left {
+.carousel-inner>.active.left {
     left: -100%;
 }
 
-.mainCarousel-container {
+.carousel-container {
     width: 970px;
     padding-right: 15px;
     padding-left: 15px;
@@ -138,7 +138,7 @@ span {
     margin-left: auto;
 }
 
-.mainCarousel-caption {
+.carousel-caption {
     z-index: 10;
     right: 20%;
     left: 20%;
