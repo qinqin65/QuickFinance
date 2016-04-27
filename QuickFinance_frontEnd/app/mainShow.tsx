@@ -6,21 +6,21 @@ export enum select{showItemConduct, showItemKeepAccount, showItemQuick}
 
 class Items {
     static showItemConduct = 
-        <div className="mainCarousel-caption">
+        <div className="carousel-caption">
             <h1>{ lang.conductFinance }</h1>
             <p>{ lang.conductFinanceTip1 }</p>
             <p>{ lang.conductFinanceTip2 }</p>
         </div>
     
     static showItemKeepAccount =
-        <div className="mainCarousel-caption">
+        <div className="carousel-caption">
             <h1>{ lang.keepAccount }</h1>
             <p>{ lang.keepAccountTip1 }</p>
             <p>{ lang.keepAccountTip2 }</p>
         </div>
         
     static showItemQuick = 
-        <div className="mainCarousel-caption">
+        <div className="carousel-caption">
             <h1>{ lang.quickFinance }</h1>
             <p>{ lang.quickFinanceTip1 }</p>
             <p>{ lang.quickFinanceTip2 }</p>
@@ -47,8 +47,8 @@ class ContentFrame extends React.Component<any, any> {
   
   render() {
     return (
-    <div className= { this.props.isSelect ? "mainCarousel-item active" : "mainCarousel-item" }>
-        <div className="mainCarousel-container">
+    <div className= { this.props.isSelect ? "carousel-item active" : "carousel-item" }>
+        <div className="carousel-container">
             <div className="carousel-caption">
                 { this.props.child }
             </div>
@@ -68,13 +68,13 @@ export class MainShow extends React.Component<any, any> {
 
   render() {
     return (
-      <div id= { this.carouselId } className="mainCarousel" data-ride="carousel">
-        <ol className="mainCarousel-indicators">
+      <div id= { this.carouselId } className="carousel" data-ride="carousel">
+        <ol className="carousel-indicators">
             <Indicator target = { this.carouselId } slideNum = "0" itemName = { select.showItemConduct } isSelect = { this.state.select == select.showItemConduct } />
             <Indicator target = { this.carouselId } slideNum = "1" itemName = { select.showItemConduct } isSelect = { this.state.select == select.showItemKeepAccount } />
             <Indicator target = { this.carouselId } slideNum = "2" itemName = { select.showItemConduct } isSelect = { this.state.select == select.showItemQuick } />
         </ol>
-        <div className="mainCarousel-inner" role="listbox">
+        <div className="carousel-inner" role="listbox">
             <ContentFrame child = { Items.showItemConduct } isSelect = { this.state.select == select.showItemConduct } />
             <ContentFrame child = { Items.showItemKeepAccount } isSelect = { this.state.select == select.showItemKeepAccount } />
             <ContentFrame child = { Items.showItemQuick } isSelect = { this.state.select == select.showItemQuick } />
