@@ -1,6 +1,7 @@
 ﻿import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 // import * as topic from 'dojo/topic';
+import Carousel from 'carousel'
 
 export enum select{showItemConduct, showItemKeepAccount, showItemQuick}
 
@@ -59,11 +60,16 @@ class ContentFrame extends React.Component<any, any> {
 }
 
 export class MainShow extends React.Component<any, any> {
-  carouselId = 'mainShowCarousel'
+  carouselId = 'mainShowCarousel';
+  carouselObj = null;
 
   constructor(props, context) {
     super(props, context);
     this.state = {select: select.showItemConduct};
+  }
+  
+  componentDidMount() {
+      this.carouselObj = new Carousel(this.carouselId);
   }
 
   render() {
