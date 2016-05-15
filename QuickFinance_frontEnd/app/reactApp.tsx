@@ -1,5 +1,6 @@
 ﻿import * as React from 'react';
 import {MainShow} from 'mainShow';
+import Login from 'login';
 
 export class App extends React.Component<any, any> {
   constructor(props, context) {
@@ -8,7 +9,10 @@ export class App extends React.Component<any, any> {
 
   render() {
     return (
-      <MainShow />
+      <div>
+        <MainShow />
+        <Login />
+      </div>
     );
   }
 }
