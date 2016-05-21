@@ -57,7 +57,7 @@ export default class Login extends React.Component<any, any> {
     
     this.loadingLayer = (
       <div className="main_login">
-        <i className="loading"></i>
+        <i className="loading fa fa-refresh fa-spin"></i>
       </div>
     );
     
