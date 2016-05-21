@@ -231,7 +231,9 @@ label {
 }
 
 .login_header a {
-    margin-left: 25%;
+    display: inline-block;
+    width: 50%;
+    text-align: center;
 }
 
 .switch_btn_focus {
