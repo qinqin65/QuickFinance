@@ -212,7 +212,6 @@ label {
 .login {
     display: inline-block;
     float: right;
-    height: 15rem;
     margin: 0 auto;
     margin-top: 7rem;
     width: 418px;
@@ -310,7 +309,7 @@ label {
     transition: border-color ease-in-out .15s,box-shadow ease-in-out .15s;
 }
 
-#inputPassword {
+.main_login>input {
     margin-bottom: 10px;
     border-top-left-radius: 0;
     border-top-right-radius: 0;

@@ -53,6 +53,10 @@ class Register extends React.Component<any, any> {
     super(props, context);
   }
   
+  registerHandle() {
+    
+  }
+  
   render() {
     return (
       <div className="main_login">
@@ -62,7 +66,7 @@ class Register extends React.Component<any, any> {
         <input type="password" id="inputPassword" className="form-control" placeholder="Password" required="" />
         <label htmlFor="inputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
         <input type="password" id="inputPasswordAgain" className="form-control" placeholder="Password" required="" />
-        <button className="btn-lg" type="submit" onClick = { this.btLoginHandle.bind(this) }>{ lang.register }</button>
+        <button className="btn-lg" type="submit" onClick = { this.registerHandle.bind(this) }>{ lang.register }</button>
       </div>
     )
   }
@@ -91,7 +95,7 @@ export default class Login extends React.Component<any, any> {
             <LoginHeader select = { this.state.select } />
             { 
                this.state.isLoading ? this.loadingLayer :
-               this.state.select == select.login ? <MainLogin /> : <div /> 
+               this.state.select == select.login ? <MainLogin /> : <Register /> 
              }
         </div>
     )}
