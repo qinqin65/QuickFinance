@@ -48,6 +48,26 @@ class MainLogin extends React.Component<any, any> {
   }
 }
 
+class Register extends React.Component<any, any> {
+  constructor(props, context) {
+    super(props, context);
+  }
+  
+  render() {
+    return (
+      <div className="main_login">
+        <label htmlFor="inputUserName" className="sr-only">{ lang.userName }</label>
+        <input type="text" id="inputUserName" className="form-control" required="" autofocus="" />
+        <label htmlFor="inputPassword" className="sr-only">{ lang.password }</label>
+        <input type="password" id="inputPassword" className="form-control" placeholder="Password" required="" />
+        <label htmlFor="inputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
+        <input type="password" id="inputPasswordAgain" className="form-control" placeholder="Password" required="" />
+        <button className="btn-lg" type="submit" onClick = { this.btLoginHandle.bind(this) }>{ lang.register }</button>
+      </div>
+    )
+  }
+}
+
 export default class Login extends React.Component<any, any> {
   loadingLayer: any;
   
