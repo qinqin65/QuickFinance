@@ -22,7 +22,7 @@
     password: '密码',
     login: '登录',
     register: '注册',
-    rememberMe: '记住我'
+    rememberMe: '记住我',
     passwordAgain: '再次输入密码',
     register: '注册'
   }
