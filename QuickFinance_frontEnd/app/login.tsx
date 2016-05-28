@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
+import {Validete, validateType} from 'validate'
 
 enum select{login, register};
 enum layerState{wait, loading};
@@ -22,21 +23,32 @@ class LoginHeader extends React.Component<any, any> {
 }
 
 class MainLogin extends React.Component<any, any> {
+  validates: Validete;
+  
   constructor(props, context) {
     super(props, context);
+    this.validates = new Validete();
+  }
+  
+  componentDidMount() {
+    this.validates.addValiItems('lgInputUserName', validateType.needed);
+    this.validates.addValiItems('lgInputPassword', validateType.needed);
   }
   
   btLoginHandle() {
-    topic.publish('login/loginBtnClicked', true)
+    if(this.validates.validate()) {
+      topic.publish('login/loginBtnClicked', true);
+    }
+    
   }
 
   render() {
     return (
       <div className="main_login">
-        <label htmlFor="inputUserName" className="sr-only">{ lang.userName }</label>
-        <input type="text" id="inputUserName" className="form-control" required="" autofocus="" />
-        <label htmlFor="inputPassword" className="sr-only">{ lang.password }</label>
-        <input type="password" id="inputPassword" className="form-control" placeholder="Password" required="" />
+        <label htmlFor="lgInputUserName" className="sr-only">{ lang.userName }</label>
+        <input type="text" id="lgInputUserName" className="form-control" required autofocus />
+        <label htmlFor="lgInputPassword" className="sr-only">{ lang.password }</label>
+        <input type="password" id="lgInputPassword" className="form-control" placeholder="Password" required />
         <div className="checkbox">
             <label>
                 <input type="checkbox" value="remember-me" />{ lang.rememberMe }
@@ -49,23 +61,35 @@ class MainLogin extends React.Component<any, any> {
 }
 
 class Register extends React.Component<any, any> {
+  validates: Validete;
+  
   constructor(props, context) {
     super(props, context);
+    this.validates = new Validete();
+  }
+  
+  componentDidMount() {
+    this.validates.addValiItems('regInputUserName', validateType.needed);
+    this.validates.addValiItems('regInputPassword', validateType.needed);
+    this.validates.addValiItems('regInputPasswordAgain', validateType.needed);
   }
   
   registerHandle() {
+    if(this.validates.validate()) {
+      topic.publish('login/registerBtnClicked', true);
+    }
     
   }
   
   render() {
     return (
       <div className="main_login">
-        <label htmlFor="inputUserName" className="sr-only">{ lang.userName }</label>
-        <input type="text" id="inputUserName" className="form-control" required="" autofocus="" />
-        <label htmlFor="inputPassword" className="sr-only">{ lang.password }</label>
-        <input type="password" id="inputPassword" className="form-control" placeholder="Password" required="" />
-        <label htmlFor="inputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
-        <input type="password" id="inputPasswordAgain" className="form-control" placeholder="Password" required="" />
+        <label htmlFor="regInputUserName" className="sr-only">{ lang.userName }</label>
+        <input type="text" id="regInputUserName" className="form-control" required="" autofocus="" />
+        <label htmlFor="regInputPassword" className="sr-only">{ lang.password }</label>
+        <input type="password" id="regInputPassword" className="form-control" placeholder="Password" required="" />
+        <label htmlFor="regInputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
+        <input type="password" id="regInputPasswordAgain" className="form-control" placeholder="Password" required="" />
         <button className="btn-lg" type="submit" onClick = { this.registerHandle.bind(this) }>{ lang.register }</button>
       </div>
     )
@@ -87,6 +111,7 @@ export default class Login extends React.Component<any, any> {
     
     topic.subscribe('login/itemClicked', (selectItem)=>this.setState({select: selectItem}));
     topic.subscribe('login/loginBtnClicked', (isLoading)=>this.setState({isLoading}));
+    topic.subscribe('login/registerBtnClicked', (isLoading)=>this.setState({isLoading}));
   }
 
   render() {
