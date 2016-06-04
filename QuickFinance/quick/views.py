@@ -10,6 +10,6 @@ def home(request):
         context_instance = RequestContext(request,
         {
             'title':'Home Page',
-            'year':datetime.now().year,
+            # 'year':datetime.now().year,
         })
     )
