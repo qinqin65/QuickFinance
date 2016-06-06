@@ -17,15 +17,10 @@ import quick.views as quickView
 urlpatterns = patterns(
     '',
     url(r'^$', quickView.home, name='home'),
-    # Examples:
-    #url(r'^$', 'app.views.home', name='home'),
-    url(r'^contact$', 'app.views.contact', name='contact'),
-    url(r'^about', 'app.views.about', name='about'),
     url(r'^login/$',
         djangoAuthView.login,
         {
             'template_name': 'app/login.html',
-            # 'authentication_form': BootstrapAuthenticationForm,
             'extra_context':
             {
                 'title':'Log in',
