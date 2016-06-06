@@ -1,0 +1,42 @@
+{% load staticfiles %}
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>快账-在线记账</title>
+    <link rel="stylesheet" href="{% static 'quick/ref/css/app.css' %}" type="text/css" />
+    <link rel="stylesheet" href="{% static 'quick/ref/css/font-awesome.min.css' %}" type="text/css" />
+    <script>
+        var dojoConfig = {
+            "dojo-debug-messages": true,
+            "baseUrl": "/static/quick",
+            "async": true,
+            tlmSiblingOfDojo: false,
+            packages: [
+                {
+                    name: "react",
+                    location: "ref/js",
+                    main: "react"
+                },
+                {
+                    name: "react-dom",
+                    location: "ref/js",
+                    main: "react-dom"
+                }
+            ]
+        };
+    </script>
+    <script src="{% static 'quick/ref/js/dojo.js.uncompressed.js' %}"></script>
+</head>
+<body>
+    <div id="mastheader"></div>
+    <div id="content"></div>
+    <footer id="pageFooter" class="page-footer"></footer>
+    <script>
+        require(['app', 'dojo/domReady!'], function(app) {
+            app.renderApp();
+        });
+    </script>
+</body>
+</html>
