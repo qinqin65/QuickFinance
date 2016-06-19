@@ -135,7 +135,7 @@ INSTALLED_APPS = (
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'quick',
-    'user',
+    # 'user',
     # Uncomment the next line to enable the admin:
     # 'django.contrib.admin',
     # Uncomment the next line to enable admin documentation:
@@ -175,4 +175,4 @@ LOGGING = {
 TEST_RUNNER = 'django.test.runner.DiscoverRunner'
 
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-AUTH_USER_MODEL = 'user.MyUser'
+# AUTH_USER_MODEL = 'user.MyUser'

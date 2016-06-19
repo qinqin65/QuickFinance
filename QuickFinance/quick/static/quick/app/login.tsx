@@ -1,7 +1,9 @@
 import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import {Validete, validateType} from 'validate'
+import * as xhr from 'dojo/request/xhr';
+import {Validete, validateType} from 'validate';
+import {Config, Util} from 'util';
 
 enum select{login, register};
 enum layerState{wait, loading};
@@ -38,6 +40,23 @@ class MainLogin extends React.Component<any, any> {
   btLoginHandle() {
     if(this.validates.validate()) {
       topic.publish('login/loginBtnClicked', true);
+      
+      let option: any = {
+        handleAs: 'json', 
+        // headers: {
+        //   HTTP_X_CSRFTOKEN: Util.getCSRF()
+        // },
+        data: {
+          'userName': this.refs.lgInputUserName,
+          'password': this.refs.lgInputPassword,
+          'csrfmiddlewaretoken': Util.getCSRF()
+        }
+      };
+      xhr.post(`${Config.requestHost}/login`, option).then((data)=>{
+        console.debug('test data');
+      }, (error)=>{
+        console.error(error);
+      });
     }
     
   }
@@ -46,9 +65,9 @@ class MainLogin extends React.Component<any, any> {
     return (
       <div className="main_login">
         <label htmlFor="lgInputUserName" className="sr-only">{ lang.userName }</label>
-        <input type="text" id="lgInputUserName" className="form-control" required autofocus />
+        <input ref='lgInputUserName' type="text" id="lgInputUserName" className="form-control" required autofocus />
         <label htmlFor="lgInputPassword" className="sr-only">{ lang.password }</label>
-        <input type="password" id="lgInputPassword" className="form-control" placeholder="Password" required />
+        <input ref='lgInputPassword' type="password" id="lgInputPassword" className="form-control" placeholder="Password" required />
         <div className="checkbox">
             <label>
                 <input type="checkbox" value="remember-me" />{ lang.rememberMe }

@@ -43,6 +43,81 @@ define("carousel", ["require", "exports", 'dojo/dom', 'dojo/query', 'dojo/on'], 
     exports.__esModule = true;
     exports["default"] = Carousel;
 });
+define("util", ["require", "exports", 'dojo/cookie'], function (require, exports, cookie) {
+    "use strict";
+    var Config = (function () {
+        function Config() {
+        }
+        Config.requestHost = 'http://localhost:8000/quick';
+        return Config;
+    }());
+    exports.Config = Config;
+    var Util = (function () {
+        function Util() {
+        }
+        Util.getCSRF = function () {
+            var csrf = cookie('csrftoken');
+            return csrf;
+        };
+        return Util;
+    }());
+    exports.Util = Util;
+});
+define("validate", ["require", "exports", 'dojo/dom', 'dojo/on'], function (require, exports, dom, on) {
+    "use strict";
+    (function (validateType) {
+        validateType[validateType["needed"] = 0] = "needed";
+        validateType[validateType["mail"] = 1] = "mail";
+        validateType[validateType["phone"] = 2] = "phone";
+    })(exports.validateType || (exports.validateType = {}));
+    var validateType = exports.validateType;
+    ;
+    var Validete = (function () {
+        function Validete() {
+            this.validateItems = [];
+        }
+        Validete.prototype.addValiItems = function (item, type) {
+            this.validateItems.push({ item: item, type: type });
+        };
+        Validete.prototype.neededvalidate = function (nodeId) {
+            var node = dom.byId(nodeId);
+            if (node === null) {
+                return true;
+            }
+            else if (node.value) {
+                return true;
+            }
+            else {
+                node.classList.add('needed');
+                on.once(node, 'click', function () { return node.classList.remove('needed'); });
+                return false;
+            }
+        };
+        Validete.prototype.validate = function () {
+            var isPassed = true;
+            for (var i = 0; i < this.validateItems.length; i++) {
+                var itemObj = this.validateItems[i];
+                var itemId = itemObj.item;
+                var type = itemObj.type;
+                switch (type) {
+                    case validateType.needed:
+                        var result = this.neededvalidate(itemId);
+                        if (isPassed) {
+                            isPassed = result;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            // this.validateItems.forEach((itemObj)=>{
+            // });
+            return isPassed;
+        };
+        return Validete;
+    }());
+    exports.Validete = Validete;
+});
 define("navBar", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.js', 'dojo/topic'], function (require, exports, React, lang, topic) {
     "use strict";
     (function (select) {
@@ -142,62 +217,7 @@ define("mainShow", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResour
     }(React.Component));
     exports.MainShow = MainShow;
 });
-define("validate", ["require", "exports", 'dojo/dom', 'dojo/on'], function (require, exports, dom, on) {
-    "use strict";
-    (function (validateType) {
-        validateType[validateType["needed"] = 0] = "needed";
-        validateType[validateType["mail"] = 1] = "mail";
-        validateType[validateType["phone"] = 2] = "phone";
-    })(exports.validateType || (exports.validateType = {}));
-    var validateType = exports.validateType;
-    ;
-    var Validete = (function () {
-        function Validete() {
-            this.validateItems = [];
-        }
-        Validete.prototype.addValiItems = function (item, type) {
-            this.validateItems.push({ item: item, type: type });
-        };
-        Validete.prototype.neededvalidate = function (nodeId) {
-            var node = dom.byId(nodeId);
-            if (node === null) {
-                return true;
-            }
-            else if (node.value) {
-                return true;
-            }
-            else {
-                node.classList.add('needed');
-                on.once(node, 'click', function () { return node.classList.remove('needed'); });
-                return false;
-            }
-        };
-        Validete.prototype.validate = function () {
-            var isPassed = true;
-            for (var i = 0; i < this.validateItems.length; i++) {
-                var itemObj = this.validateItems[i];
-                var itemId = itemObj.item;
-                var type = itemObj.type;
-                switch (type) {
-                    case validateType.needed:
-                        var result = this.neededvalidate(itemId);
-                        if (isPassed) {
-                            isPassed = result;
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-            // this.validateItems.forEach((itemObj)=>{
-            // });
-            return isPassed;
-        };
-        return Validete;
-    }());
-    exports.Validete = Validete;
-});
-define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.js', 'dojo/topic', "validate"], function (require, exports, React, lang, topic, validate_1) {
+define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.js', 'dojo/topic', 'dojo/request/xhr', "validate", "util"], function (require, exports, React, lang, topic, xhr, validate_1, util_1) {
     "use strict";
     var select;
     (function (select) {
@@ -234,10 +254,26 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
         MainLogin.prototype.btLoginHandle = function () {
             if (this.validates.validate()) {
                 topic.publish('login/loginBtnClicked', true);
+                var option = {
+                    handleAs: 'json',
+                    // headers: {
+                    //   HTTP_X_CSRFTOKEN: Util.getCSRF()
+                    // },
+                    data: {
+                        'userName': this.refs.lgInputUserName,
+                        'password': this.refs.lgInputPassword,
+                        'csrfmiddlewaretoken': util_1.Util.getCSRF()
+                    }
+                };
+                xhr.post(util_1.Config.requestHost + "/login", option).then(function (data) {
+                    console.debug('test data');
+                }, function (error) {
+                    console.error(error);
+                });
             }
         };
         MainLogin.prototype.render = function () {
-            return (React.createElement("div", {className: "main_login"}, React.createElement("label", {htmlFor: "lgInputUserName", className: "sr-only"}, lang.userName), React.createElement("input", {type: "text", id: "lgInputUserName", className: "form-control", required: true, autofocus: true}), React.createElement("label", {htmlFor: "lgInputPassword", className: "sr-only"}, lang.password), React.createElement("input", {type: "password", id: "lgInputPassword", className: "form-control", placeholder: "Password", required: true}), React.createElement("div", {className: "checkbox"}, React.createElement("label", null, React.createElement("input", {type: "checkbox", value: "remember-me"}), lang.rememberMe)), React.createElement("button", {className: "btn-lg", type: "submit", onClick: this.btLoginHandle.bind(this)}, lang.login)));
+            return (React.createElement("div", {className: "main_login"}, React.createElement("label", {htmlFor: "lgInputUserName", className: "sr-only"}, lang.userName), React.createElement("input", {ref: 'lgInputUserName', type: "text", id: "lgInputUserName", className: "form-control", required: true, autofocus: true}), React.createElement("label", {htmlFor: "lgInputPassword", className: "sr-only"}, lang.password), React.createElement("input", {ref: 'lgInputPassword', type: "password", id: "lgInputPassword", className: "form-control", placeholder: "Password", required: true}), React.createElement("div", {className: "checkbox"}, React.createElement("label", null, React.createElement("input", {type: "checkbox", value: "remember-me"}), lang.rememberMe)), React.createElement("button", {className: "btn-lg", type: "submit", onClick: this.btLoginHandle.bind(this)}, lang.login)));
         };
         return MainLogin;
     }(React.Component));
