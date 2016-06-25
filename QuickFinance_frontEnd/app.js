@@ -227,8 +227,9 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
     ;
     var layerState;
     (function (layerState) {
-        layerState[layerState["wait"] = 0] = "wait";
+        layerState[layerState["error"] = 0] = "error";
         layerState[layerState["loading"] = 1] = "loading";
+        layerState[layerState["showContent"] = 2] = "showContent";
     })(layerState || (layerState = {}));
     ;
     var LoginHeader = (function (_super) {
@@ -253,22 +254,23 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
         };
         MainLogin.prototype.btLoginHandle = function () {
             if (this.validates.validate()) {
-                topic.publish('login/loginBtnClicked', true);
+                topic.publish('login/loginBtnClicked', null);
                 var option = {
                     handleAs: 'json',
-                    // headers: {
-                    //   HTTP_X_CSRFTOKEN: Util.getCSRF()
-                    // },
                     data: {
                         'userName': this.refs.lgInputUserName.value,
                         'password': this.refs.lgInputPassword.value,
                         'csrfmiddlewaretoken': util_1.Util.getCSRF()
                     }
                 };
-                xhr.post(util_1.Config.requestHost + "/login", option).then(function (data) {
-                    console.debug('data:', data);
+                xhr.post(util_1.Config.requestHost + "/login", option)
+                    .then(function (data) {
+                    if (!data.state || data.state == 'error') {
+                        topic.publish('login/error', data.info);
+                    }
                 }, function (error) {
-                    console.error(error);
+                    topic.publish('login/error', lang.xhrErr);
+                    ;
                 });
             }
         };
@@ -290,7 +292,7 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
         };
         Register.prototype.registerHandle = function () {
             if (this.validates.validate()) {
-                topic.publish('login/registerBtnClicked', true);
+                topic.publish('login/registerBtnClicked', null);
             }
         };
         Register.prototype.render = function () {
@@ -298,20 +300,34 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
         };
         return Register;
     }(React.Component));
+    var Error = (function (_super) {
+        __extends(Error, _super);
+        function Error(props, context) {
+            _super.call(this, props, context);
+        }
+        Error.prototype.render = function () {
+            return (React.createElement("div", {className: "main_login"}, React.createElement("span", {className: "login_err"}, "" + lang.error + this.props.errorMsg), React.createElement("span", {className: "login_back", onClick: function () { return topic.publish('login/backToContent', null); }}, lang.backToLogin)));
+        };
+        return Error;
+    }(React.Component));
     var Login = (function (_super) {
         __extends(Login, _super);
         function Login(props, context) {
             var _this = this;
             _super.call(this, props, context);
-            this.state = { select: select.login, isLoading: false };
+            this.state = { select: select.login, layerState: layerState.showContent };
+            this.errorMsg = '';
             this.loadingLayer = (React.createElement("div", {className: "main_login"}, React.createElement("i", {className: "loading fa fa-refresh fa-spin"})));
             topic.subscribe('login/itemClicked', function (selectItem) { return _this.setState({ select: selectItem }); });
-            topic.subscribe('login/loginBtnClicked', function (isLoading) { return _this.setState({ isLoading: isLoading }); });
-            topic.subscribe('login/registerBtnClicked', function (isLoading) { return _this.setState({ isLoading: isLoading }); });
+            topic.subscribe('login/loginBtnClicked', function () { return _this.setState({ layerState: layerState.loading }); });
+            topic.subscribe('login/registerBtnClicked', function () { return _this.setState({ layerState: layerState.loading }); });
+            topic.subscribe('login/error', function (err) { _this.setState({ layerState: layerState.error }); _this.errorMsg = err; });
+            topic.subscribe('login/backToContent', function () { return _this.setState({ layerState: layerState.showContent }); });
         }
         Login.prototype.render = function () {
-            return (React.createElement("div", {className: "login"}, React.createElement(LoginHeader, {select: this.state.select}), this.state.isLoading ? this.loadingLayer :
-                this.state.select == select.login ? React.createElement(MainLogin, null) : React.createElement(Register, null)));
+            return (React.createElement("div", {className: "login"}, React.createElement(LoginHeader, {select: this.state.select}), this.state.layerState == layerState.error ? React.createElement(Error, {errorMsg: this.errorMsg}) :
+                this.state.layerState == layerState.loading ? this.loadingLayer :
+                    this.state.select == select.login ? React.createElement(MainLogin, null) : React.createElement(Register, null)));
         };
         return Login;
     }(React.Component));

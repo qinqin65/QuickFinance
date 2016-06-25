@@ -6,7 +6,7 @@ import {Validete, validateType} from 'validate';
 import {Config, Util} from 'util';
 
 enum select{login, register};
-enum layerState{wait, loading};
+enum layerState{error, loading, showContent};
 
 class LoginHeader extends React.Component<any, any> {
   constructor(props, context) {
@@ -39,23 +39,22 @@ class MainLogin extends React.Component<any, any> {
   
   btLoginHandle() {
     if(this.validates.validate()) {
-      topic.publish('login/loginBtnClicked', true);
-      
+      topic.publish('login/loginBtnClicked', null);
       let option: any = {
         handleAs: 'json', 
-        // headers: {
-        //   HTTP_X_CSRFTOKEN: Util.getCSRF()
-        // },
         data: {
           'userName': this.refs.lgInputUserName.value,
           'password': this.refs.lgInputPassword.value,
           'csrfmiddlewaretoken': Util.getCSRF()
         }
       };
-      xhr.post(`${Config.requestHost}/login`, option).then((data)=>{
-        console.debug('data:', data);
+      xhr.post(`${Config.requestHost}/login`, option)
+      .then((data)=>{
+        if(!data.state || data.state == 'error') {
+          topic.publish('login/error', data.info);
+        }
       }, (error)=>{
-        console.error(error);
+        topic.publish('login/error', lang.xhrErr);;
       });
     }
     
@@ -95,7 +94,7 @@ class Register extends React.Component<any, any> {
   
   registerHandle() {
     if(this.validates.validate()) {
-      topic.publish('login/registerBtnClicked', true);
+      topic.publish('login/registerBtnClicked', null);
     }
     
   }
@@ -115,12 +114,29 @@ class Register extends React.Component<any, any> {
   }
 }
 
+class Error extends React.Component<any, any> {
+  constructor(props, context) {
+    super(props, context);
+  }
+  
+  render() {
+    return (
+      <div className="main_login">
+        <span className="login_err">{ `${lang.error}${this.props.errorMsg}` }</span>
+        <span className="login_back" onClick={ ()=>topic.publish('login/backToContent', null)} >{ lang.backToLogin }</span>
+      </div>
+    );
+  }
+}
+
 export default class Login extends React.Component<any, any> {
   loadingLayer: any;
+  errorMsg: string;
   
   constructor(props, context) {
     super(props, context);
-    this.state = {select: select.login, isLoading: false};
+    this.state = {select: select.login, layerState: layerState.showContent};
+    this.errorMsg = '';
     
     this.loadingLayer = (
       <div className="main_login">
@@ -129,8 +145,10 @@ export default class Login extends React.Component<any, any> {
     );
     
     topic.subscribe('login/itemClicked', (selectItem)=>this.setState({select: selectItem}));
-    topic.subscribe('login/loginBtnClicked', (isLoading)=>this.setState({isLoading}));
-    topic.subscribe('login/registerBtnClicked', (isLoading)=>this.setState({isLoading}));
+    topic.subscribe('login/loginBtnClicked', ()=>this.setState({layerState: layerState.loading}));
+    topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading}));
+    topic.subscribe('login/error', (err)=>{this.setState({layerState: layerState.error});this.errorMsg = err});
+    topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent}));
   }
 
   render() {
@@ -138,7 +156,8 @@ export default class Login extends React.Component<any, any> {
         <div className="login">
             <LoginHeader select = { this.state.select } />
             { 
-               this.state.isLoading ? this.loadingLayer :
+               this.state.layerState == layerState.error ? <Error errorMsg={ this.errorMsg } /> :
+               this.state.layerState == layerState.loading ? this.loadingLayer :
                this.state.select == select.login ? <MainLogin /> : <Register /> 
              }
         </div>

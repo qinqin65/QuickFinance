@@ -3,7 +3,8 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.template import RequestContext
 from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.contrib.auth.models import User
+# from django.views.decorators.csrf import ensure_csrf_cookie
 
 # @ensure_csrf_cookie
 def home(request):
@@ -20,8 +21,20 @@ def home(request):
 
 @require_POST
 def login(request):
-    user = authenticate(username="test", password="test")
-    result = "no user"
-    if user is not None:
-        result = "user exist"
-    return JsonResponse({'result': result})
+    try:
+        userName = request.POST['userName']
+        passWord = request.POST['password']
+    except:
+        return JsonResponse({'state': 'error', 'info': ''})
+    else:
+        user = authenticate(username=userName, password=passWord)
+        if user is None:
+            return JsonResponse({'state': 'error', 'info': ''})
+        else:
+            return JsonResponse({'state': 'success', 'user': user})
+
+@require_POST
+def register(requset):
+
+    user = User.objects.create_user('john', 'lennon@thebeatles.com', 'johnpassword')
+    user.save()

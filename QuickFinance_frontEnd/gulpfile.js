@@ -16,7 +16,7 @@ var copy = function(from, to, filter) {
 }
 
 gulp.task('default', function() {
-    var watcher = gulp.watch('app/*', ['runtsc', 'copytodjango']);
+    var watcher = gulp.watch(['app/*', 'app/nls/*'], ['runtsc', 'copytodjango']);
     watcher.on('change', function(event) {
         console.info('File ' + event.path + ' was ' + event.type + ', running tasks...');
     });
@@ -31,7 +31,17 @@ gulp.task('runtsc', function() {
 });
 
 gulp.task('copytodjango', function () {
-    copy('app.js', '../QuickFinance/quick/static/quick/app.js')
+    // new Promise(function(resolve, reject) {
+    //     exec('tsc', function(err) {
+    //         if (err) {
+    //             console.error(err);
+    //         }
+    //         resolve();
+    //     });
+    // })
+    // .then(function() {
+        copy('app.js', '../QuickFinance/quick/static/quick/app.js')
+    // })
     .then(function() {
         copy('app.js.map', '../QuickFinance/quick/static/quick/app.js.map');
     })

@@ -24,6 +24,8 @@
     register: '注册',
     rememberMe: '记住我',
     passwordAgain: '再次输入密码',
-    register: '注册'
+    error: '错误：',
+    xhrErr: '请求出错，请检查网络链接！',
+    backToLogin: '点击返回'
   }
 });
