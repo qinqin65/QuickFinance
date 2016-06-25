@@ -47,13 +47,13 @@ class MainLogin extends React.Component<any, any> {
         //   HTTP_X_CSRFTOKEN: Util.getCSRF()
         // },
         data: {
-          'userName': this.refs.lgInputUserName,
-          'password': this.refs.lgInputPassword,
+          'userName': this.refs.lgInputUserName.value,
+          'password': this.refs.lgInputPassword.value,
           'csrfmiddlewaretoken': Util.getCSRF()
         }
       };
       xhr.post(`${Config.requestHost}/login`, option).then((data)=>{
-        console.debug('test data');
+        console.debug('data:', data);
       }, (error)=>{
         console.error(error);
       });

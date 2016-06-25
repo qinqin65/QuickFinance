@@ -260,13 +260,13 @@ define("login", ["require", "exports", 'react', 'dojo/i18n!app/nls/langResource.
                     //   HTTP_X_CSRFTOKEN: Util.getCSRF()
                     // },
                     data: {
-                        'userName': this.refs.lgInputUserName,
-                        'password': this.refs.lgInputPassword,
+                        'userName': this.refs.lgInputUserName.value,
+                        'password': this.refs.lgInputPassword.value,
                         'csrfmiddlewaretoken': util_1.Util.getCSRF()
                     }
                 };
                 xhr.post(util_1.Config.requestHost + "/login", option).then(function (data) {
-                    console.debug('test data');
+                    console.debug('data:', data);
                 }, function (error) {
                     console.error(error);
                 });

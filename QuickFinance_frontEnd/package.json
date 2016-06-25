@@ -1,0 +1,19 @@
+{
+  "name": "quickfinance_frontend",
+  "version": "1.0.0",
+  "description": "QuickFinance front end",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qinqin65/QuickFinance/tree/master/QuickFinance_frontEnd"
+  },
+  "main": "app.js",
+  "dependencies": {
+    "copy-dir": "0.0.8"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
