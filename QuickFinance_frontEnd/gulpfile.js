@@ -15,38 +15,48 @@ var copy = function(from, to, filter) {
     });
 }
 
+var runtsc = new Promise(function(resolve, reject) {
+    exec('tsc', function(err) {
+        if (err) {
+            console.error(err);
+        }
+        resolve();
+    });
+});
+
 gulp.task('default', function() {
-    var watcher = gulp.watch(['app/*', 'app/nls/*'], ['runtsc', 'copytodjango']);
+    var watcher = gulp.watch(['app/*', 'app/nls/*', 'ref/css/app.css'], ['copytodjango']);
     watcher.on('change', function(event) {
         console.info('File ' + event.path + ' was ' + event.type + ', running tasks...');
     });
 });
 
-gulp.task('runtsc', function() {
-    exec('tsc', function(err) {
-        if (err) {
-            console.error(err);
-        }
-    });
-});
+// gulp.task('runtsc', function() {
+//     exec('tsc', function(err) {
+//         if (err) {
+//             console.error(err);
+//         }
+//     });
+// });
 
 gulp.task('copytodjango', function () {
-    // new Promise(function(resolve, reject) {
+    // (new Promise(function(resolve, reject) {
     //     exec('tsc', function(err) {
     //         if (err) {
     //             console.error(err);
     //         }
     //         resolve();
     //     });
-    // })
-    // .then(function() {
-        copy('app.js', '../QuickFinance/quick/static/quick/app.js')
-    // })
+    // }))
+    runtsc
     .then(function() {
-        copy('app.js.map', '../QuickFinance/quick/static/quick/app.js.map');
+        return copy('app.js', '../QuickFinance/quick/static/quick/app.js');
     })
     .then(function() {
-        copy('app', '../QuickFinance/quick/static/quick/app');
+        return copy('app.js.map', '../QuickFinance/quick/static/quick/app.js.map');
+    })
+    .then(function() {
+        return copy('ref/css/app.css', '../QuickFinance/quick/static/quick/ref/css/app.css');
     })
     .then(function() {
         return new Promise(function(resolve, reject) {
@@ -71,6 +81,9 @@ gulp.task('copytodjango', function () {
                 }
             });
         });
+    })
+    .then(function() {
+        return copy('app', '../QuickFinance/quick/static/quick/app');
     })
     .catch(function(err) {
         console.error(err);
