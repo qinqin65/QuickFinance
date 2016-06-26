@@ -3,9 +3,9 @@
     margin: 0rem;
 }
 
-span {
+/*span {
     font-style: italic;
-}
+}*/
 
 a {
     text-decoration: none;
@@ -384,4 +384,18 @@ label {
     margin-top: 25%;
     margin-bottom: 25%;
     font-size: 2rem !important;
+}
+
+.login_err {
+    display: block;
+    margin-top: 25%;
+    margin-bottom: 25%;
+    color: red;
+    font-style: italic;
+}
+
+.login_back {
+    color: red;
+    cursor: pointer;
+    margin-left: 50%;
 }
