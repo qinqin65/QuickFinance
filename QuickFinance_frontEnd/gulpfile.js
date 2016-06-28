@@ -6,6 +6,7 @@ var copyDir = require('copy-dir');
 var copy = function(from, to, filter) {
     return new Promise(function(resolve, reject){
         copyDir(from, to, filter, function(err){
+            console.log(from, to);
             if(err){
                 reject(err);
             } else {
@@ -31,23 +32,7 @@ gulp.task('default', function() {
     });
 });
 
-// gulp.task('runtsc', function() {
-//     exec('tsc', function(err) {
-//         if (err) {
-//             console.error(err);
-//         }
-//     });
-// });
-
 gulp.task('copytodjango', function () {
-    // (new Promise(function(resolve, reject) {
-    //     exec('tsc', function(err) {
-    //         if (err) {
-    //             console.error(err);
-    //         }
-    //         resolve();
-    //     });
-    // }))
     runtsc
     .then(function() {
         return copy('app.js', '../QuickFinance/quick/static/quick/app.js');
@@ -89,19 +74,3 @@ gulp.task('copytodjango', function () {
         console.error(err);
     });
 });
-
-// gulp.task('renamevar', function() {
-//     fs.readFile('../QuickFinance/quick/static/quick/app.js', function(err, data) {
-//         if(err) {
-//             console.error(err);
-//         } else {
-//             data = data.toString();
-//             data = data.replace(/app\/nls\/langResource.js/g, 'static/quick/app/nls/langResource.js');
-//             fs.writeFile('../QuickFinance/quick/static/quick/app.js', data, function(err) {
-//                 if(err) {
-//                     console.error(err);
-//                 }
-//             });
-//         }
-//     });
-// });
