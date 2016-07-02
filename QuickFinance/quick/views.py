@@ -30,7 +30,7 @@ def login(request):
     else:
         user = authenticate(username=userName, password=passWord)
         if user is None:
-            return JsonResponse({'state': 'error', 'info': _('user does not exist')})
+            return JsonResponse({'state': 'error', 'info': _('user or password is invalid')})
         else:
             return JsonResponse({'state': 'success', 'user': user})
 

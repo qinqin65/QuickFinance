@@ -147,7 +147,7 @@ export default class Login extends React.Component<any, any> {
     topic.subscribe('login/itemClicked', (selectItem)=>this.setState({select: selectItem}));
     topic.subscribe('login/loginBtnClicked', ()=>this.setState({layerState: layerState.loading}));
     topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading}));
-    topic.subscribe('login/error', (err)=>{this.setState({layerState: layerState.error});this.errorMsg = err});
+    topic.subscribe('login/error', (err)=>{this.errorMsg = err;this.setState({layerState: layerState.error});});
     topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent}));
   }
 
