@@ -1,12 +1,11 @@
 var gulp = require('gulp');
 var exec = require('child_process').exec;
 var fs = require('fs');
-var copyDir = require('copy-dir');
+var fsPath = require('fs-path');
 
-var copy = function(from, to, filter) {
+var copy = function(from, to) {
     return new Promise(function(resolve, reject){
-        copyDir(from, to, filter, function(err){
-            console.log(from, to);
+        fsPath.copy(from, to, function(err) {
             if(err){
                 reject(err);
             } else {
