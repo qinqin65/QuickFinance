@@ -6,7 +6,6 @@ var fsPath = require('fs-path');
 var copy = function(from, to) {
     return new Promise(function(resolve, reject){
         fsPath.copy(from, to, function(err) {
-            console.info(from, to);
             if(err){
                 reject(err);
             } else {
@@ -16,15 +15,6 @@ var copy = function(from, to) {
     });
 }
 
-var runtsc = new Promise(function(resolve, reject) {
-    exec('tsc', function(err) {
-        if (err) {
-            console.error(err);
-        }
-        resolve();
-    });
-});
-
 gulp.task('default', function() {
     var watcher = gulp.watch(['app/*', 'app/nls/*', 'ref/css/app.css'], ['copytodjango']);
     watcher.on('change', function(event) {
@@ -33,7 +23,14 @@ gulp.task('default', function() {
 });
 
 gulp.task('copytodjango', function () {
-    runtsc
+    new Promise(function(resolve, reject) {
+        exec('tsc', function(err) {
+            if (err) {
+                console.error(err);
+            }
+            resolve();
+        });
+    })
     .then(function() {
         return copy('app.js', '../QuickFinance/quick/static/quick/app.js');
     })
