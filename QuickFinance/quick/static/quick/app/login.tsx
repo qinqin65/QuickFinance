@@ -4,6 +4,7 @@ import * as topic from 'dojo/topic';
 import * as xhr from 'dojo/request/xhr';
 import {Validete, validateType} from 'validate';
 import {Config, Util} from 'util';
+import * as stateCode from 'stateCode';
 
 enum select{login, register};
 enum layerState{error, loading, showContent};
@@ -50,7 +51,7 @@ class MainLogin extends React.Component<any, any> {
       };
       xhr.post(`${Config.requestHost}/login`, option)
       .then((data)=>{
-        if(!data.state || data.state == 'error') {
+        if(!data.state || data.state != stateCode.SUCCESS) {
           topic.publish('login/error', data.info);
         }
       }, (error)=>{

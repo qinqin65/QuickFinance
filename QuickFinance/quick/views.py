@@ -5,6 +5,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
 from django.utils.translation import ugettext as _
+from . import stateCode
 # from django.views.decorators.csrf import ensure_csrf_cookie
 
 # @ensure_csrf_cookie
@@ -26,13 +27,13 @@ def login(request):
         userName = request.POST['userName']
         passWord = request.POST['password']
     except:
-        return JsonResponse({'state': 'error', 'info': _('normal error')})
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('normal error')})
     else:
         user = authenticate(username=userName, password=passWord)
         if user is None:
-            return JsonResponse({'state': 'error', 'info': _('user or password is invalid')})
+            return JsonResponse({'state': stateCode.ERROR, 'info': _('user or password is invalid')})
         else:
-            return JsonResponse({'state': 'success', 'user': user})
+            return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
 
 @require_POST
 def register(requset):
