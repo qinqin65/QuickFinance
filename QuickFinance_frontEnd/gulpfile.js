@@ -6,6 +6,7 @@ var fsPath = require('fs-path');
 var copy = function(from, to) {
     return new Promise(function(resolve, reject){
         fsPath.copy(from, to, function(err) {
+            console.info(from, to);
             if(err){
                 reject(err);
             } else {
