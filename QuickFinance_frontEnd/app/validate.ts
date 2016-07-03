@@ -1,7 +1,7 @@
 import * as dom from 'dojo/dom';
 import * as on from 'dojo/on';
 
-export enum validateType{needed, mail, phone};
+export enum validateType{needed, email, phone};
 
 export class Validete {
     private validateItems: Array<any>;
@@ -14,6 +14,11 @@ export class Validete {
         this.validateItems.push({item, type});
     }
     
+    private refuseHandle(node) {
+        node.classList.add('needed');
+        on.once(node, 'click', ()=>node.classList.remove('needed'));
+    }
+    
     private neededvalidate(nodeId): boolean {
         let node: any = dom.byId(nodeId);
         if(node === null) {
@@ -21,10 +26,23 @@ export class Validete {
         } else if(node.value) {
             return true;
         } else {
-            node.classList.add('needed');
-            on.once(node, 'click', ()=>node.classList.remove('needed'));
+            this.refuseHandle(node);
             return false;
         }
+    }
+    
+    private emailValidate(nodeId): boolean {
+        let node: any = dom.byId(nodeId);
+        if(node === null || node.value == '') {
+            return true;
+        } else {
+            let emailReg = new RegExp(/.+@.+\..+/);
+            let result = emailReg.test(node.value);
+            if(!result) {
+                this.refuseHandle(node);
+            }
+            return result;
+        } 
     }
     
     validate(): boolean {
@@ -34,10 +52,18 @@ export class Validete {
             let itemId: string = itemObj.item;
             let type: validateType = itemObj.type;
             switch(type) {
-                case validateType.needed:
-                    let result = this.neededvalidate(itemId);
-                    if(isPassed) {
-                        isPassed = result
+                case validateType.needed: {
+                        let result = this.neededvalidate(itemId);
+                        if(isPassed) {
+                            isPassed = result
+                        }
+                    }
+                    break;
+                case validateType.email: {
+                        let result = this.emailValidate(itemId);
+                        if(isPassed) {
+                            isPassed = result
+                        }
                     }
                     break;
                 default:

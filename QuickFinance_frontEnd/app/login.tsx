@@ -65,14 +65,17 @@ class MainLogin extends React.Component<any, any> {
     return (
       <div className="main_login">
         <label htmlFor="lgInputUserName" className="sr-only">{ lang.userName }</label>
-        <input ref='lgInputUserName' type="text" id="lgInputUserName" className="form-control" required autofocus />
+        <input ref='lgInputUserName' type="text" id="lgInputUserName" className="form-control"  placeholder={ lang.userName } required autofocus />
+        
         <label htmlFor="lgInputPassword" className="sr-only">{ lang.password }</label>
-        <input ref='lgInputPassword' type="password" id="lgInputPassword" className="form-control" placeholder="Password" required />
+        <input ref='lgInputPassword' type="password" id="lgInputPassword" className="form-control" placeholder={ lang.password } required />
+        
         <div className="checkbox">
             <label>
                 <input type="checkbox" value="remember-me" />{ lang.rememberMe }
             </label>
         </div>
+        
         <button className="btn-lg" type="submit" onClick = { this.btLoginHandle.bind(this) }>{ lang.login }</button>
       </div>
     )
@@ -89,6 +92,7 @@ class Register extends React.Component<any, any> {
   
   componentDidMount() {
     this.validates.addValiItems('regInputUserName', validateType.needed);
+    this.validates.addValiItems('regInputEmail', validateType.email);
     this.validates.addValiItems('regInputPassword', validateType.needed);
     this.validates.addValiItems('regInputPasswordAgain', validateType.needed);
   }
@@ -104,11 +108,17 @@ class Register extends React.Component<any, any> {
     return (
       <div className="main_login">
         <label htmlFor="regInputUserName" className="sr-only">{ lang.userName }</label>
-        <input type="text" id="regInputUserName" className="form-control" required="" autofocus="" />
+        <input type="text" id="regInputUserName" className="form-control" placeholder={ lang.userName } required="" autofocus="" />
+        
+        <label htmlFor="regInputEmail" className="sr-only">{ lang.email }</label>
+        <input type="email" id="regInputEmail" className="form-control" placeholder={ lang.email } required="" />
+        
         <label htmlFor="regInputPassword" className="sr-only">{ lang.password }</label>
-        <input type="password" id="regInputPassword" className="form-control" placeholder="Password" required="" />
+        <input type="password" id="regInputPassword" className="form-control" placeholder={ lang.password } required="" />
+        
         <label htmlFor="regInputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
-        <input type="password" id="regInputPasswordAgain" className="form-control" placeholder="Password" required="" />
+        <input type="password" id="regInputPasswordAgain" className="form-control" placeholder={ lang.password } required="" />
+        
         <button className="btn-lg" type="submit" onClick = { this.registerHandle.bind(this) }>{ lang.register }</button>
       </div>
     )
