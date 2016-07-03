@@ -19,13 +19,15 @@
     quickFinanceTip2: '方便您的账务管理',
     ////登录模块
     userName: '用户名',
+    email: '邮箱',
     password: '密码',
     login: '登录',
     register: '注册',
     rememberMe: '记住我',
     passwordAgain: '再次输入密码',
+    backToLogin: '点击返回',
+    ////错误提示
     error: '错误：',
-    xhrErr: '请求出错，请检查网络链接！',
-    backToLogin: '点击返回'
+    xhrErr: '向服务器请求数据时出错！'
   }
 });

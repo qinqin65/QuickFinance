@@ -36,7 +36,14 @@ def login(request):
             return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
 
 @require_POST
-def register(requset):
-
-    user = User.objects.create_user('john', 'lennon@thebeatles.com', 'johnpassword')
-    user.save()
+def register(request):
+    try:
+        userName = request.POST['userName']
+        passWord = request.POST['password']
+        email = request.POST['email']
+        user = User.objects.create_user(userName, email, passWord)
+        user.save()
+    except:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('normal error')})
+    else:
+        return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
