@@ -58,3 +58,4 @@ def register(request):
         return JsonResponse({'state': stateCode.ERROR, 'info': _('normal error')})
     else:
         return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
+

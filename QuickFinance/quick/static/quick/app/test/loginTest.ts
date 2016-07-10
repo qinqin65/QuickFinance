@@ -1,5 +1,5 @@
 import * as xhr from 'dojo/request/xhr';
-import {Config, Util} from 'util';
+import Config from 'config';
 import * as stateCode from 'stateCode';
 import * as login from '../login';
 import * as chai from 'ref/js/chai';
