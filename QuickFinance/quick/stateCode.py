@@ -1,2 +1,2 @@
-ERROR = 0
-SUCCESS = 1
+SUCCESS = 0
+ERROR = 1

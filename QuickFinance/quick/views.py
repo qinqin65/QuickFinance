@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
 from django.utils.translation import ugettext as _
 from . import stateCode
+from .util import debug
 # from django.views.decorators.csrf import ensure_csrf_cookie
 
 # @ensure_csrf_cookie
@@ -18,6 +19,16 @@ def home(request):
         {
             'title':'Home Page',
             # 'year':datetime.now().year,
+        })
+    )
+
+@debug
+def test(request):
+    return render(
+        request,
+        'quick/test.html',
+        context_instance=RequestContext(request,
+        {
         })
     )
 

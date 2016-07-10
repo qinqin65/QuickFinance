@@ -1,0 +1,44 @@
+{% load staticfiles %}
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mocha Tests</title>
+  <link href="{% static 'quick/ref/css/mocha.css' %}" rel="stylesheet" />
+  <script>
+        var dojoConfig = {
+            "dojo-debug-messages": true,
+            "baseUrl": "/static/quick",
+            "async": true,
+            tlmSiblingOfDojo: false,
+            packages: [
+                {
+                    name: "react",
+                    location: "ref/js",
+                    main: "react"
+                },
+                {
+                    name: "react-dom",
+                    location: "ref/js",
+                    main: "react-dom"
+                }
+            ]
+        };
+    </script>
+    <script src="{% static 'quick/ref/js/dojo.js.uncompressed.js' %}"></script>
+    <!--<script src="{% static 'quick/ref/js/chai.js' %}"></script>-->
+    <script src="{% static 'quick/ref/js/mocha.js' %}"></script>
+</head>
+<body>
+  <div id="mocha"></div>
+
+  <script>
+    // mocha.checkLeaks();
+    // mocha.globals(['jQuery']);
+    // mocha.run();
+    
+    require(['app'], function(app) {
+        app.runTest();
+    });
+  </script>
+</body>
+</html>

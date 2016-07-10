@@ -16,7 +16,7 @@ var copy = function(from, to) {
 }
 
 gulp.task('default', function() {
-    var watcher = gulp.watch(['app/*', 'app/nls/*', 'ref/css/app.css'], ['copytodjango']);
+    var watcher = gulp.watch(['app/*', 'app/nls/*', 'app/test/*', 'ref/css/app.css'], ['copytodjango']);
     watcher.on('change', function(event) {
         console.info('File ' + event.path + ' was ' + event.type + ', running tasks...');
     });

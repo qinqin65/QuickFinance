@@ -1,2 +1,2 @@
-export let Error: number = 0;
-export let SUCCESS: number = 1;
+export let SUCCESS: number = 0;
+export let Error: number = 1;
