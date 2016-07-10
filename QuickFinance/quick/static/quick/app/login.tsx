@@ -3,7 +3,7 @@ import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
 import * as xhr from 'dojo/request/xhr';
 import {Validete, validateType} from 'validate';
-import {Config, Util} from 'util';
+import Config from 'config';
 import * as stateCode from 'stateCode';
 
 enum select{login, register};
@@ -35,18 +35,19 @@ class MainLogin extends React.Component<any, any> {
   
   componentDidMount() {
     this.validates.addValiItems('lgInputUserName', validateType.needed);
+    
     this.validates.addValiItems('lgInputPassword', validateType.needed);
+    this.validates.addValiItems('regInputPassword', validateType.passwordLength);
   }
   
   btLoginHandle() {
     if(this.validates.validate()) {
-      topic.publish('login/loginBtnClicked', null);
       let option: any = {
         handleAs: 'json', 
         data: {
           'userName': this.refs.lgInputUserName.value,
           'password': this.refs.lgInputPassword.value,
-          'csrfmiddlewaretoken': Util.getCSRF()
+          'csrfmiddlewaretoken': Config.csrf
         }
       };
       xhr.post(`${Config.requestHost}/login`, option)
@@ -57,8 +58,8 @@ class MainLogin extends React.Component<any, any> {
       }, (error)=>{
         topic.publish('login/error', lang.xhrErr);;
       });
+      topic.publish('login/loginBtnClicked', null);
     }
-    
   }
 
   render() {
@@ -93,28 +94,48 @@ class Register extends React.Component<any, any> {
   componentDidMount() {
     this.validates.addValiItems('regInputUserName', validateType.needed);
     this.validates.addValiItems('regInputEmail', validateType.email);
+    
     this.validates.addValiItems('regInputPassword', validateType.needed);
     this.validates.addValiItems('regInputPasswordAgain', validateType.needed);
+    this.validates.addValiItems('regInputPassword', validateType.passwordLength);
+    this.validates.addValiItems(['regInputPassword', 'regInputPasswordAgain'], validateType.passwordEqual);
+    
   }
   
   registerHandle() {
     if(this.validates.validate()) {
+      let option: any = {
+        handleAs: 'json', 
+        data: {
+          'userName': this.refs.regInputUserName.value,
+          'emial': this.refs.regInputEmail.value,
+          'password': this.refs.regInputPassword.value,
+          'csrfmiddlewaretoken': Config.csrf
+        }
+      };
+      xhr.post(`${Config.requestHost}/register`, option)
+      .then((data)=>{
+        if(!data.state || data.state != stateCode.SUCCESS) {
+          topic.publish('login/error', data.info);
+        }
+      }, (error)=>{
+        topic.publish('login/error', lang.xhrErr);;
+      });
       topic.publish('login/registerBtnClicked', null);
     }
-    
   }
   
   render() {
     return (
       <div className="main_login">
         <label htmlFor="regInputUserName" className="sr-only">{ lang.userName }</label>
-        <input type="text" id="regInputUserName" className="form-control" placeholder={ lang.userName } required="" autofocus="" />
+        <input ref="regInputUserName" type="text" id="regInputUserName" className="form-control" placeholder={ lang.userName } required="" autofocus="" />
         
         <label htmlFor="regInputEmail" className="sr-only">{ lang.email }</label>
-        <input type="email" id="regInputEmail" className="form-control" placeholder={ lang.email } required="" />
+        <input ref="regInputEmail" type="email" id="regInputEmail" className="form-control" placeholder={ lang.email } required="" />
         
         <label htmlFor="regInputPassword" className="sr-only">{ lang.password }</label>
-        <input type="password" id="regInputPassword" className="form-control" placeholder={ lang.password } required="" />
+        <input ref="regInputPassword" type="password" id="regInputPassword" className="form-control" placeholder={ lang.password } required="" />
         
         <label htmlFor="regInputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
         <input type="password" id="regInputPasswordAgain" className="form-control" placeholder={ lang.password } required="" />
