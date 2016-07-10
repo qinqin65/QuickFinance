@@ -108,7 +108,7 @@ class Register extends React.Component<any, any> {
         handleAs: 'json', 
         data: {
           'userName': this.refs.regInputUserName.value,
-          'emial': this.refs.regInputEmail.value,
+          'email': this.refs.regInputEmail.value,
           'password': this.refs.regInputPassword.value,
           'csrfmiddlewaretoken': Config.csrf
         }

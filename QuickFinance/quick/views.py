@@ -5,6 +5,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
 from django.utils.translation import ugettext as _
+from django.core import serializers
 from . import stateCode
 from .util import debug
 # from django.views.decorators.csrf import ensure_csrf_cookie
@@ -44,7 +45,11 @@ def login(request):
         if user is None:
             return JsonResponse({'state': stateCode.ERROR, 'info': _('user or password is invalid')})
         else:
-            return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
+            if user.is_active:
+                login(request, user)
+                return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
+            else:
+                return JsonResponse({'state': stateCode.ERROR, 'info': _('user is not allowed to login')})
 
 @require_POST
 def register(request):
@@ -54,8 +59,9 @@ def register(request):
         email = request.POST['email']
         user = User.objects.create_user(userName, email, passWord)
         user.save()
-    except:
+    except Exception as e:
+        print(e)
         return JsonResponse({'state': stateCode.ERROR, 'info': _('normal error')})
     else:
-        return JsonResponse({'state': stateCode.SUCCESS, 'user': user})
+        return JsonResponse({'state': stateCode.SUCCESS, 'user': serializers.serialize('json', user)})
 
