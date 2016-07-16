@@ -115,18 +115,21 @@ label {
 
 .carousel {
     display: inline-block;
-    float: left;
-    position: relative;
+    position: absolute;
+    left: 4%;
+    top: 7rem;
+    width: 51%;
+    height: 30rem;
 }
 
 .carousel-indicators {
     position: absolute;
-    bottom: 10px;
-    left: 32rem;
+    bottom: 3%;
+    left: 47%;
     z-index: 15;
-    width: 60%;
+    width: 3rem;
+    height: 1rem;
     padding-left: 0;
-    margin-left: -30%;
     text-align: center;
     list-style: none;
 }
@@ -152,15 +155,10 @@ label {
 }
 
 .carousel-inner {
-    margin-left: 7rem;
-    margin-top: 7rem;
-    position: relative;
-    width: 50rem;
     overflow: hidden;
 }
 
 .carousel-inner>.carousel-item.active, .carousel-inner>.carousel-item.next.left, .carousel-inner>.carousel-item.prev.right {
-    width: 50rem;
     -webkit-transform: translate3d(0,0,0);
      transform: translate3d(0,0,0); 
 }
