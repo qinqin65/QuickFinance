@@ -4,6 +4,7 @@
     help: '帮助',
     authorInfo: '快账 - 在线记账的网站 by qinqin65',
     backtoTop: '返回顶部',
+    tip: '提示：',
     ////首页旋转木马
     //第一个
     conductFinance: '理财',
@@ -28,6 +29,7 @@
     backToLogin: '点击返回',
     ////错误提示
     error: '错误：',
-    xhrErr: '向服务器请求数据时出错！'
+    xhrErr: '向服务器请求数据时出错！',
+    xhrRegSuccess: '注册成功'
   }
 });
