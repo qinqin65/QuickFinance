@@ -32,6 +32,15 @@ label {
     cursor: pointer;
 }
 
+.nav-item-user {
+    position: relative;
+    list-style: none;
+    display: inline-block;
+    color: #fff;
+    padding: 1rem;
+    float: right;
+}
+
 .main-nav .active:after {
     position: absolute;
     bottom: 0;

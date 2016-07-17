@@ -5,6 +5,7 @@
     authorInfo: '快账 - 在线记账的网站 by qinqin65',
     backtoTop: '返回顶部',
     tip: '提示：',
+    quit: '退出',
     ////首页旋转木马
     //第一个
     conductFinance: '理财',
