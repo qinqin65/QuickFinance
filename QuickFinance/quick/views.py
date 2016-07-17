@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.template import RequestContext
 from django.views.decorators.http import require_POST
-from django.contrib.auth import authenticate, login as djangoLogin
+from django.contrib.auth import authenticate, login as djangoLogin, logout as djangoLogout
 from django.contrib.auth.models import User
 from django.db.utils import IntegrityError
 from django.utils.translation import ugettext as _
@@ -54,7 +54,7 @@ def login(request):
 
 def logout(request):
     try:
-        logout(request)
+        djangoLogout(request)
     except:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('logout failed')})
     else:
