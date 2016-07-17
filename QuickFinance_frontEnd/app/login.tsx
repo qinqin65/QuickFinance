@@ -54,10 +54,11 @@ class MainLogin extends React.Component<any, any> {
       .then((data)=>{
         if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
           topic.publish('login/error', data.info);
+        } else {
+          user.login(data.user.userName);
         }
-        user.login(data.user.userName);
       }, (error)=>{
-        topic.publish('login/error', lang.xhrErr);;
+        topic.publish('login/error', lang.xhrErr);
       });
       topic.publish('login/loginBtnClicked', null);
     }
@@ -117,10 +118,11 @@ class Register extends React.Component<any, any> {
       .then((data)=>{
         if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
           topic.publish('login/error', data.info);
+        } else {
+          topic.publish('login/error', lang.xhrRegSuccess);
         }
-        topic.publish('login/error', lang.xhrRegSuccess);;
       }, (error)=>{
-        topic.publish('login/error', lang.xhrErr);;
+        topic.publish('login/error', lang.xhrErr);
       });
       topic.publish('login/registerBtnClicked', null);
     }
