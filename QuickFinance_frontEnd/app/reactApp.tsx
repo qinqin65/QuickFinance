@@ -12,6 +12,7 @@ export class App extends React.Component<any, any> {
     super(props, context);
     this.state = {renderApp: app.Login};
     topic.subscribe('user/login', (user)=>this.setState({renderApp: app.mainPage}));
+    topic.subscribe('user/logout', (user)=>this.setState({renderApp: app.Login}));
   }
 
   render() {
