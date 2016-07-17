@@ -1,10 +1,11 @@
 import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import * as xhr from 'dojo/request/xhr';
+import * as xhr from 'xhr';
 import {Validete, validateType} from 'validate';
 import Config from 'config';
 import * as stateCode from 'stateCode';
+import {user} from 'user';
 
 enum select{login, register};
 enum layerState{error, loading, showContent};
@@ -46,15 +47,15 @@ class MainLogin extends React.Component<any, any> {
         handleAs: 'json', 
         data: {
           'userName': this.refs.lgInputUserName.value,
-          'password': this.refs.lgInputPassword.value,
-          'csrfmiddlewaretoken': Config.csrf
+          'password': this.refs.lgInputPassword.value
         }
       };
       xhr.post(`${Config.requestHost}/login`, option)
       .then((data)=>{
-        if(!data.state || data.state != stateCode.SUCCESS) {
+        if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
           topic.publish('login/error', data.info);
         }
+        user.login(data.user.userName);
       }, (error)=>{
         topic.publish('login/error', lang.xhrErr);;
       });
@@ -109,15 +110,15 @@ class Register extends React.Component<any, any> {
         data: {
           'userName': this.refs.regInputUserName.value,
           'email': this.refs.regInputEmail.value,
-          'password': this.refs.regInputPassword.value,
-          'csrfmiddlewaretoken': Config.csrf
+          'password': this.refs.regInputPassword.value
         }
       };
       xhr.post(`${Config.requestHost}/register`, option)
       .then((data)=>{
-        if(!data.state || data.state != stateCode.SUCCESS) {
+        if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
           topic.publish('login/error', data.info);
         }
+        topic.publish('login/error', lang.xhrRegSuccess);;
       }, (error)=>{
         topic.publish('login/error', lang.xhrErr);;
       });
@@ -154,7 +155,7 @@ class Error extends React.Component<any, any> {
   render() {
     return (
       <div className="main_login">
-        <span className="login_err">{ `${lang.error}${this.props.errorMsg}` }</span>
+        <span className="login_err">{ `${lang.tip}${this.props.errorMsg}` }</span>
         <span className="login_back" onClick={ ()=>topic.publish('login/backToContent', null)} >{ lang.backToLogin }</span>
       </div>
     );
