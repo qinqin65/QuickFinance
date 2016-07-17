@@ -52,6 +52,14 @@ def login(request):
             else:
                 return JsonResponse({'state': stateCode.ERROR, 'info': _('user is not allowed to login')})
 
+def logout(request):
+    try:
+        logout(request)
+    except:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('logout failed')})
+    else:
+        return JsonResponse({'state': stateCode.SUCCESS, 'info': _('logout success')})
+
 @require_POST
 def register(request):
     try:
