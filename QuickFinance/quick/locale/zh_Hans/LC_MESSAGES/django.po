@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-07-10 21:14+0800\n"
+"POT-Creation-Date: 2016-07-17 20:25+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -21,14 +21,23 @@ msgstr ""
 msgid "quick finance"
 msgstr "快账-在线记账"
 
-#: views.py:42 views.py:64
-msgid "normal error"
-msgstr "一般错误"
+#: views.py:43
+msgid "login failed"
+msgstr "登录失败"
 
-#: views.py:46
+#: views.py:47
 msgid "user or password is invalid"
 msgstr "用户名或密码错误"
 
-#: views.py:52
+#: views.py:53
 msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
+
+#: views.py:65
+msgid "user already exist"
+msgstr "用户已注册"
+
+#: views.py:67
+msgid "register failed"
+msgstr "注册失败"
+
