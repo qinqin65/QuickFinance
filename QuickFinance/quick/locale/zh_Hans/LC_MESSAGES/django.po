@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-07-17 20:25+0800\n"
+"POT-Creation-Date: 2016-07-17 22:42+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -33,11 +33,20 @@ msgstr "用户名或密码错误"
 msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
 
-#: views.py:65
+#: views.py:59
+#, fuzzy
+#| msgid "login failed"
+msgid "logout failed"
+msgstr "登录失败"
+
+#: views.py:61
+msgid "logout success"
+msgstr "退出成功"
+
+#: views.py:72
 msgid "user already exist"
 msgstr "用户已注册"
 
-#: views.py:67
+#: views.py:74
 msgid "register failed"
 msgstr "注册失败"
-
