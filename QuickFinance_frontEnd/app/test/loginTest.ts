@@ -23,7 +23,7 @@ export let describes = function() {
         });
     });
     
-    describe("MainLogin_btRegisterHandle", function() {
+    describe.skip("MainLogin_btRegisterHandle", function() {
         it("user name should be identical", function() {
             let timeStamp = new Date().getTime();
             let option: any = {

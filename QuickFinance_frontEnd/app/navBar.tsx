@@ -38,19 +38,7 @@ class User extends React.Component<any, any> {
   }
   
   quitHandler() {
-    let option: any = {
-      handleAs: 'json'
-    };
-    xhr.get(`${Config.requestHost}/logout`, option)
-    .then((data)=>{
-      if(!data.state || data.state != stateCode.SUCCESS) {
-        alert(data.info);
-      } else {
-        user.logout();
-      }
-    }, (error)=>{
-      
-    });
+    user.logout();
     return false;
   }
   

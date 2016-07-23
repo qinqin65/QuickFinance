@@ -1,10 +1,8 @@
 import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import * as xhr from 'xhr';
+import * as cookie from 'dojo/cookie';
 import {Validete, validateType} from 'validate';
-import Config from 'config';
-import * as stateCode from 'stateCode';
 import {user} from 'user';
 
 enum select{login, register};
@@ -43,23 +41,7 @@ class MainLogin extends React.Component<any, any> {
   
   btLoginHandle() {
     if(this.validates.validate()) {
-      let option: any = {
-        handleAs: 'json', 
-        data: {
-          'userName': this.refs.lgInputUserName.value,
-          'password': this.refs.lgInputPassword.value
-        }
-      };
-      xhr.post(`${Config.requestHost}/login`, option)
-      .then((data)=>{
-        if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
-          topic.publish('login/error', data.info);
-        } else {
-          user.login(data.user.userName);
-        }
-      }, (error)=>{
-        topic.publish('login/error', lang.xhrErr);
-      });
+      user.login(this.refs.lgInputUserName.value, this.refs.lgInputPassword.value, this.refs.lgchkRememberme.checked);
       topic.publish('login/loginBtnClicked', null);
     }
   }
@@ -75,7 +57,7 @@ class MainLogin extends React.Component<any, any> {
         
         <div className="checkbox">
             <label>
-                <input type="checkbox" value="remember-me" />{ lang.rememberMe }
+                <input ref="lgchkRememberme" type="checkbox" value="remember-me" />{ lang.rememberMe }
             </label>
         </div>
         
@@ -106,24 +88,7 @@ class Register extends React.Component<any, any> {
   
   registerHandle() {
     if(this.validates.validate()) {
-      let option: any = {
-        handleAs: 'json', 
-        data: {
-          'userName': this.refs.regInputUserName.value,
-          'email': this.refs.regInputEmail.value,
-          'password': this.refs.regInputPassword.value
-        }
-      };
-      xhr.post(`${Config.requestHost}/register`, option)
-      .then((data)=>{
-        if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
-          topic.publish('login/error', data.info);
-        } else {
-          topic.publish('login/error', lang.xhrRegSuccess);
-        }
-      }, (error)=>{
-        topic.publish('login/error', lang.xhrErr);
-      });
+      user.register(this.refs.regInputUserName.value, this.refs.regInputEmail.value, this.refs.regInputPassword.value);
       topic.publish('login/registerBtnClicked', null);
     }
   }
@@ -170,6 +135,9 @@ export default class Login extends React.Component<any, any> {
   
   constructor(props, context) {
     super(props, context);
+    
+    this.tryRemembermeLogin();
+    
     this.state = {select: select.login, layerState: layerState.showContent};
     this.errorMsg = '';
     
@@ -184,6 +152,14 @@ export default class Login extends React.Component<any, any> {
     topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading}));
     topic.subscribe('login/error', (err)=>{this.errorMsg = err;this.setState({layerState: layerState.error});});
     topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent}));
+  }
+  
+  tryRemembermeLogin() {
+    let userName = cookie('userName');
+    let userPw = cookie('userPw');
+    if(userName && userPw) {
+        user.login(userName, userPw);
+    }
   }
 
   render() {
