@@ -30,6 +30,8 @@ class User {
         xhr.post(`${Config.requestHost}/login`, option)
         .then((data)=>{
             if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
+                cookie('userName', '');
+                cookie('userPw', '');
                 topic.publish('login/error', data.info);
             } else {
                 if(isRemenmber) {
