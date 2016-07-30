@@ -31,6 +31,8 @@
     ////错误提示
     error: '错误：',
     xhrErr: '向服务器请求数据时出错！',
-    xhrRegSuccess: '注册成功'
+    xhrRegSuccess: '注册成功',
+    //记账主页
+    account: '账户'
   }
 });
