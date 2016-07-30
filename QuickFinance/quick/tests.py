@@ -5,12 +5,14 @@ when you run "manage.py test".
 Replace this with more appropriate tests for your application.
 """
 
+import time
 import django
 from django.test import TestCase
+from .util import createUserAndInit
 
 # TODO: Configure your database in settings.py and sync before running tests.
 
-class SimpleTest(TestCase):
+class QuickTest(TestCase):
     """Tests for the application views."""
 
     if django.VERSION[:2] >= (1, 7):
@@ -19,8 +21,10 @@ class SimpleTest(TestCase):
         def setUpClass(cls):
             django.setup()
 
-    def test_basic_addition(self):
-        """
-        Tests that 1 + 1 always equals 2.
-        """
-        self.assertEqual(1 + 1, 2)
+    def createUserAndInitTest(self):
+        timeStamp = int(time.time())
+        userName = 'test' + str(timeStamp)
+        password = '123456'
+        email = None
+        createUserAndInit(userName, email, password)
+        # self.assertEqual(1 + 1, 2)
