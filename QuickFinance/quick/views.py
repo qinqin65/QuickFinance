@@ -3,25 +3,19 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.template import RequestContext
 from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login as djangoLogin, logout as djangoLogout
-from django.contrib.auth.models import User
 from django.db.utils import IntegrityError
 from django.utils.translation import ugettext as _
 # from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug
+from .util import debug, createUserAndInit
 
 @ensure_csrf_cookie
 def home(request):
-    #assert isinstance(request, HttpRequest)
     return render(
         request,
         'quick/index.html',
-        context_instance = RequestContext(request,
-        {
-            'title':'Home Page',
-            # 'year':datetime.now().year,
-        })
+        context_instance = RequestContext(request,{})
     )
 
 @debug
@@ -38,11 +32,11 @@ def test(request):
 def login(request):
     try:
         userName = request.POST['userName']
-        passWord = request.POST['password']
+        password = request.POST['password']
     except:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('login failed')})
     else:
-        user = authenticate(username=userName, password=passWord)
+        user = authenticate(username=userName, password=password)
         if user is None:
             return JsonResponse({'state': stateCode.ERROR, 'info': _('user or password is invalid')})
         else:
@@ -64,10 +58,11 @@ def logout(request):
 def register(request):
     try:
         userName = request.POST['userName']
-        passWord = request.POST['password']
+        password = request.POST['password']
         email = request.POST['email']
-        user = User.objects.create_user(userName, email, passWord)
-        user.save()
+
+        user = createUserAndInit(userName, email, password)
+
     except IntegrityError as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('user already exist')})
     except Exception as e:
