@@ -2,6 +2,7 @@
 import * as topic from 'dojo/topic';
 import {MainShow} from 'mainShow';
 import Login from 'login';
+import Finance from 'financeApp';
 
 enum app{Login, mainPage};
 
@@ -19,10 +20,8 @@ export class App extends React.Component<any, any> {
     return (
       <div>
         {
-          this.state.renderApp == app.Login ? loginApp() : <div></div>
-          
+          this.state.renderApp == app.Login ? loginApp() : <Finance />
         }
-        
       </div>
     );
   }
