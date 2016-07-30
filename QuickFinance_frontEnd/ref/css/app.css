@@ -406,3 +406,44 @@ label {
     cursor: pointer;
     margin-left: 50%;
 }
+
+/*记账首页*/
+.financeapp-panel-container {
+    width: 13.666667%;
+    position: fixed;
+    top: 3.3rem;
+    bottom: 0;
+    left: 0;
+    display: block;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-color: #f5f5f5;
+    border-right: 1px solid #eee;
+}
+
+.financeapp-panel-ul {
+    padding: 0px;
+}
+
+.financeapp-panel-items {
+    color: #337ab7;
+    cursor: pointer;
+    position: relative;
+    display: block;
+    padding: 0.5rem 1rem;
+    list-style: none;
+}
+
+.financeapp-panel-items-active {
+    color: white;
+    cursor: pointer;
+    position: relative;
+    display: block;
+    padding: 0.5rem 1rem;
+    list-style: none;
+    background-color: #428bca;
+}
+
+.financeapp-panel-items:hover {
+    background-color: #eee;
+}
