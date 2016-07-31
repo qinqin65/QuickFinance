@@ -130,8 +130,9 @@ class Error extends React.Component<any, any> {
 }
 
 export default class Login extends React.Component<any, any> {
-  loadingLayer: any;
-  errorMsg: string;
+  private loadingLayer: any;
+  private errorMsg: string;
+  private topicHandler: Array<any>
   
   constructor(props, context) {
     super(props, context);
@@ -140,6 +141,7 @@ export default class Login extends React.Component<any, any> {
     
     this.state = {select: select.login, layerState: layerState.showContent};
     this.errorMsg = '';
+    this.topicHandler = [];
     
     this.loadingLayer = (
       <div className="main_login">
@@ -147,11 +149,11 @@ export default class Login extends React.Component<any, any> {
       </div>
     );
     
-    topic.subscribe('login/itemClicked', (selectItem)=>this.setState({select: selectItem}));
-    topic.subscribe('login/loginBtnClicked', ()=>this.setState({layerState: layerState.loading}));
-    topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading}));
-    topic.subscribe('login/error', (err)=>{this.errorMsg = err;this.setState({layerState: layerState.error});});
-    topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent}));
+    this.topicHandler.push(topic.subscribe('login/itemClicked', (selectItem)=>this.setState({select: selectItem})));
+    this.topicHandler.push(topic.subscribe('login/loginBtnClicked', ()=>this.setState({layerState: layerState.loading})));
+    this.topicHandler.push(topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading})));
+    this.topicHandler.push(topic.subscribe('login/error', (err)=>{this.errorMsg = err;this.setState({layerState: layerState.error});}));
+    this.topicHandler.push(topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent})));
   }
   
   tryRemembermeLogin() {
@@ -160,6 +162,10 @@ export default class Login extends React.Component<any, any> {
     if(userName && userPw) {
         user.login(userName, userPw);
     }
+  }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
   render() {

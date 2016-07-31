@@ -52,14 +52,20 @@ class User extends React.Component<any, any> {
 }
 
 export class Nav extends React.Component<any, any> {
-  userName: string;
+  private userName: string;
+  private topicHandler: Array<any>
   
   constructor(props, context) {
     super(props, context);
     this.state = {select: select.home, isLogin: false};
-    topic.subscribe('nav/itemClicked', (selectItem)=>this.setState({select: selectItem}));
-    topic.subscribe('user/login', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})});
-    topic.subscribe('user/logout', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})});
+    this.topicHandler = [];
+    this.topicHandler.push(topic.subscribe('nav/itemClicked', (selectItem)=>this.setState({select: selectItem})));
+    this.topicHandler.push(topic.subscribe('user/login', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));
+    this.topicHandler.push(topic.subscribe('user/logout', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));
+  }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
   render() {

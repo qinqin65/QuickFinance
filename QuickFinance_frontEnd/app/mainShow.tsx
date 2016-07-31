@@ -1,6 +1,5 @@
 ﻿import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
-// import * as topic from 'dojo/topic';
 import Carousel from 'carousel'
 
 export enum select{showItemConduct, showItemKeepAccount, showItemQuick}
@@ -35,7 +34,6 @@ class Indicator extends React.Component<any, any> {
   
   render() {
     return (
-        // <li data-target = { this.props.target } data-slide-to = { this.props.slideNum } className = { this.props.isSelect ? "active" : "" } onClick = { ()=>topic.publish('mainShow/idicatorClicked', this.props.itemName) }></li>
         <li data-target = { this.props.target } data-slide-to = { this.props.slideNum } className = { this.props.isSelect ? "active" : "" } ></li>
     );
   }

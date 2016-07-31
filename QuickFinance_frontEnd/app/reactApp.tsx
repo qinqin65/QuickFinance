@@ -13,14 +13,16 @@ class TipService extends React.Component<any, any> {
   private tipTIme: number
   private isTipping: boolean
   private tipContent: string
+  private topicHandler: Array<any>
   
   constructor(props, context) {
     super(props, context);
     this.tipTIme = 2000;
     this.isTipping = false;
     this.state = {showTip: false};
+    this.topicHandler = [];
     
-    topic.subscribe('tipService/warnning', this.showTip.bind(this));
+    this.topicHandler.push(topic.subscribe('tipService/warnning', this.showTip.bind(this)));
   }
   
   showTip(tipContent: string) {
@@ -49,6 +51,10 @@ class TipService extends React.Component<any, any> {
       }, this.tipTIme);
     }, this.tipTIme * 2);
   }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
+  }
 
   render() {
     return (
@@ -66,11 +72,19 @@ class TipService extends React.Component<any, any> {
 }
 
 export class App extends React.Component<any, any> {
+  private topicHandler: Array<any>
+  
   constructor(props, context) {
     super(props, context);
     this.state = {renderApp: app.Login};
-    topic.subscribe('user/login', (user)=>this.setState({renderApp: app.mainPage}));
-    topic.subscribe('user/logout', (user)=>this.setState({renderApp: app.Login}));
+    this.topicHandler = [];
+    
+    this.topicHandler.push(topic.subscribe('user/login', (user)=>this.setState({renderApp: app.mainPage})));
+    this.topicHandler.push(topic.subscribe('user/logout', (user)=>this.setState({renderApp: app.Login})));
+  }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
   render() {
