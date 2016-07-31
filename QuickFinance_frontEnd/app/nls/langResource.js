@@ -36,6 +36,7 @@
     AccountBook: '账本',
     account: '账户',
     ////消息提示
-    warnnig: '警告'
+    tipWarning: '警告',
+    tipError: '错误'
   }
 });
