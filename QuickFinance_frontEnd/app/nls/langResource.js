@@ -31,6 +31,7 @@
     ////错误提示
     error: '错误：',
     xhrErr: '向服务器请求数据时出错！',
+    xhrDataError: '服务器返回的数据不正确',
     xhrRegSuccess: '注册成功',
     ////记账主页
     AccountBook: '账本',
