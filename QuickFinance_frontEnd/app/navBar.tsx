@@ -1,7 +1,6 @@
 ﻿import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import * as xhr from 'xhr';
 import Config from 'config';
 import * as stateCode from 'stateCode';
 import {user} from 'user';
