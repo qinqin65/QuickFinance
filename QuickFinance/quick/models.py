@@ -31,3 +31,7 @@ class Outcome(models.Model):
     date = models.DateTimeField()
     value = models.IntegerField()
     remark = models.TextField()
+
+class UserSetting(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    defualtAccountBook = models.ForeignKey(AccountBook, on_delete=models.CASCADE)
