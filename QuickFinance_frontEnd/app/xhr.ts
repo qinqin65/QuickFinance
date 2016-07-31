@@ -1,9 +1,9 @@
 import * as xhr from 'dojo/request/xhr';
-import Config from 'config';
+import * as cookie from 'dojo/cookie';
 
 export let post = function(url: string, option: any) {
     if(option.data && typeof option.data == 'object') {
-        option.data.csrfmiddlewaretoken = Config.csrf;
+        option.data.csrfmiddlewaretoken = cookie('csrftoken');
     }
     return xhr.post(url, option);
 }
