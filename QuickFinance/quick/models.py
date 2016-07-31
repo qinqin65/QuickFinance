@@ -33,5 +33,5 @@ class Outcome(models.Model):
     remark = models.TextField()
 
 class UserSetting(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    defualtAccountBook = models.ForeignKey(AccountBook, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    defaultAccountBook = models.OneToOneField(AccountBook, on_delete=models.CASCADE)

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-07-30 16:44+0800\n"
+"POT-Creation-Date: 2016-07-31 15:00+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -21,11 +21,15 @@ msgstr ""
 msgid "quick finance"
 msgstr "快账-在线记账"
 
-#: util.py:14
+#: util.py:19
+msgid "user does not login"
+msgstr "用户未登录"
+
+#: util.py:27
 msgid "defaultAccountBook"
 msgstr "默认账本"
 
-#: util.py:17
+#: util.py:30
 msgid "wallet"
 msgstr "钱包"
 
@@ -42,10 +46,8 @@ msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
 
 #: views.py:53
-#, fuzzy
-#| msgid "login failed"
 msgid "logout failed"
-msgstr "登录失败"
+msgstr "退出失败"
 
 #: views.py:55
 msgid "logout success"
@@ -58,3 +60,7 @@ msgstr "用户已注册"
 #: views.py:69
 msgid "register failed"
 msgstr "注册失败"
+
+#: views.py:79
+msgid "error occured when processing account book"
+msgstr "处理张本时出错"

@@ -5,10 +5,10 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login as djangoLogin, logout as djangoLogout
 from django.db.utils import IntegrityError
 from django.utils.translation import ugettext as _
-# from django.core import serializers
+from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, createUserAndInit
+from .util import debug, login_required, createUserAndInit, getAccountBook
 
 @ensure_csrf_cookie
 def home(request):
@@ -70,3 +70,15 @@ def register(request):
     else:
         return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
 
+@login_required
+@require_POST
+def requestAccountBookData(request):
+    try:
+        requestAccountBook = request.POST['accountBook']
+        accountBook = getAccountBook(request.user, requestAccountBook)
+        jsonResult = {'state': stateCode.SUCCESS}
+        jsonResult.update(accountBook)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('error occured when processing account book')})
+    else:
+        return JsonResponse(jsonResult)
