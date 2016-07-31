@@ -73,19 +73,31 @@ class AccountBook extends React.Component<any, any> {
 }
 
 class Account extends React.Component<any, any> {
+  private topicHandler: Array<any>
   
   constructor(props, context) {
     super(props, context);
+    this.state = {accountDatas: []};
+    this.topicHandler = [];
+    this.topicHandler.push(topic.subscribe('financeapp/accountBookData', this.updateAccountData.bind(this)));
+  }
+  
+  updateAccountData(data) {
+    this.setState({accountDatas: data.accounts});
+  }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
   
   render() {
       return (
         <ul className="financeapp-panel-ul">
-            <li className="financeapp-panel-items-active">{ lang.account }</li>
-            <li className="financeapp-panel-items">Reports</li>
-            <li className="financeapp-panel-items">Analytics</li>
-            <li className="financeapp-panel-items">Export</li>
-          </ul>
+          <li className="financeapp-panel-items-active">{ lang.account }</li>
+          {
+            this.state.accountDatas.map((accountData)=><li key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.accountTotal }</span></li>)
+          }
+        </ul>
       )
   }
 }
