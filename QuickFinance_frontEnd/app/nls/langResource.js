@@ -32,7 +32,10 @@
     error: '错误：',
     xhrErr: '向服务器请求数据时出错！',
     xhrRegSuccess: '注册成功',
-    //记账主页
-    account: '账户'
+    ////记账主页
+    AccountBook: '账本',
+    account: '账户',
+    ////消息提示
+    warnnig: '警告'
   }
 });

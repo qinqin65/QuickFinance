@@ -57,7 +57,7 @@ class User {
         xhr.get(`${Config.requestHost}/logout`, option)
         .then((data)=>{
             if(!data.state || data.state != stateCode.SUCCESS) {
-                alert(data.info);
+                topic.publish('tipService/warnning', data.info);
             } else {
                 this.isLogin = false;
                 this.userName = '';
