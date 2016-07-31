@@ -16,8 +16,8 @@ class LoginHeader extends React.Component<any, any> {
   render() {
     return (
         <div className="login_header">
-            <a className = { this.props.select == select.login ? 'switch_btn_focus' : 'switch_btn' } hidefocus="true" href="javascript:void(0);" onClick = { ()=>topic.publish('login/itemClicked', select.login) }>{ lang.login }</a>
-            <a className = { this.props.select == select.register ? 'switch_btn_focus' : 'switch_btn' } hidefocus="true" href="javascript:void(0);" onClick = { ()=>topic.publish('login/itemClicked', select.register) }>{ lang.register }</a>
+            <a className = { this.props.select == select.login ? 'switch_btn_focus' : 'switch_btn' } href="javascript:void(0);" onClick = { ()=>topic.publish('login/itemClicked', select.login) }>{ lang.login }</a>
+            <a className = { this.props.select == select.register ? 'switch_btn_focus' : 'switch_btn' } href="javascript:void(0);" onClick = { ()=>topic.publish('login/itemClicked', select.register) }>{ lang.register }</a>
             <div className="switch_bottom" id="switch_bottom" style={{left: '0px', width: '50%', marginLeft: this.props.select == select.login ? '0' : '50%', position: 'absolute'}}></div>
         </div>
     )
@@ -50,7 +50,7 @@ class MainLogin extends React.Component<any, any> {
     return (
       <div className="main_login">
         <label htmlFor="lgInputUserName" className="sr-only">{ lang.userName }</label>
-        <input ref='lgInputUserName' type="text" id="lgInputUserName" className="form-control"  placeholder={ lang.userName } required autofocus />
+        <input ref='lgInputUserName' type="text" id="lgInputUserName" className="form-control"  placeholder={ lang.userName } required />
         
         <label htmlFor="lgInputPassword" className="sr-only">{ lang.password }</label>
         <input ref='lgInputPassword' type="password" id="lgInputPassword" className="form-control" placeholder={ lang.password } required />
@@ -97,7 +97,7 @@ class Register extends React.Component<any, any> {
     return (
       <div className="main_login">
         <label htmlFor="regInputUserName" className="sr-only">{ lang.userName }</label>
-        <input ref="regInputUserName" type="text" id="regInputUserName" className="form-control" placeholder={ lang.userName } required="" autofocus="" />
+        <input ref="regInputUserName" type="text" id="regInputUserName" className="form-control" placeholder={ lang.userName } required="" />
         
         <label htmlFor="regInputEmail" className="sr-only">{ lang.email }</label>
         <input ref="regInputEmail" type="email" id="regInputEmail" className="form-control" placeholder={ lang.email } required="" />
