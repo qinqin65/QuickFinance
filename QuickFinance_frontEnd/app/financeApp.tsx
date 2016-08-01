@@ -7,7 +7,6 @@ import * as xhr from 'xhr';
 import {user} from 'user';
 
 class LeftPanel extends React.Component<any, any> {
-  
   constructor(props, context) {
     super(props, context);
   }
@@ -103,7 +102,6 @@ class Account extends React.Component<any, any> {
 }
 
 export default class Finance extends React.Component<any, any> {
-  
   constructor(props, context) {
     super(props, context);
   }
