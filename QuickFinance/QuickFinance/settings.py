@@ -20,7 +20,7 @@ MANAGERS = ADMINS
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'QuikFinance',
+        'NAME': 'quickfinance',
         'USER': 'django',
         'PASSWORD': '067uZWVyzd1dBLROZdgS',
         'HOST': 'localhost',
