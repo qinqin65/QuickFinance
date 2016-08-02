@@ -14,7 +14,7 @@ class Account(models.Model):
     remark = models.TextField()
 
 class AccountType(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
     name = models.CharField(max_length=20)
     remark = models.TextField()
 
@@ -28,7 +28,7 @@ class Income(models.Model):
     type = models.ForeignKey(AccountType, on_delete=models.CASCADE)
     date = models.DateTimeField()
     value = models.IntegerField()
-    currency = models.ForeignKey(Currency, on_delete=models.DO_NOTHING)
+    currency = models.ForeignKey(Currency, null=True, on_delete=models.SET_NULL)
     remark = models.TextField()
 
 class Outcome(models.Model):
@@ -36,10 +36,11 @@ class Outcome(models.Model):
     type = models.ForeignKey(AccountType, on_delete=models.CASCADE)
     date = models.DateTimeField()
     value = models.IntegerField()
-    currency = models.ForeignKey(Currency, on_delete=models.DO_NOTHING)
+    currency = models.ForeignKey(Currency, null=True, on_delete=models.SET_NULL)
     remark = models.TextField()
 
 class UserSetting(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    defaultAccountBook = models.OneToOneField(AccountBook, on_delete=models.DO_NOTHING)
-    defaultCurrency = models.OneToOneField(AccountBook, on_delete=models.DO_NOTHING)
+    totalProperty = models.IntegerField(default=0)
+    defaultAccountBook = models.OneToOneField(AccountBook, null=True, on_delete=models.SET_NULL)
+    defaultCurrency = models.OneToOneField(Currency, null=True, on_delete=models.SET_NULL)

@@ -40,7 +40,7 @@ def getAccountBook(user, requestAccountBook):
     result = {'accountBooks': [], 'accounts': [], 'currentAccountBook': None}
     accountBooks = AccountBook.objects.filter(user=user)
     userSetting = UserSetting.objects.get(user=user)
-    currentAccountBook = None
+
     if(requestAccountBook):
         currentAccountBook = AccountBook.objects.get(user=user, accountBookName=requestAccountBook)
     else:
