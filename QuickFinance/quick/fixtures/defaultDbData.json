@@ -1,0 +1,207 @@
+[
+  {
+    "model": "quick.AccountType",
+    "pk": 1,
+    "fields": {
+      "name": "三餐"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 2,
+    "fields": {
+      "name": "水果零食"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 3,
+    "fields": {
+      "name": "服饰"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 4,
+    "fields": {
+      "name": "房租"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 5,
+    "fields": {
+      "name": "日常开销"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 6,
+    "fields": {
+      "name": "水电煤气"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 7,
+    "fields": {
+      "name": "美容美发"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 8,
+    "fields": {
+      "name": "行车交通"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 9,
+    "fields": {
+      "name": "话费"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 10,
+    "fields": {
+      "name": "网费"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 11,
+    "fields": {
+      "name": "休闲娱乐"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 12,
+    "fields": {
+      "name": "文化教育"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 13,
+    "fields": {
+      "name": "人情往来"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 14,
+    "fields": {
+      "name": "医疗医药"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 15,
+    "fields": {
+      "name": "家具物品"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 16,
+    "fields": {
+      "name": "意外丢失"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 17,
+    "fields": {
+      "name": "坏账损失"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 18,
+    "fields": {
+      "name": "投资亏损"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 19,
+    "fields": {
+      "name": "赔偿罚款"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 20,
+    "fields": {
+      "name": "保险支出"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 21,
+    "fields": {
+      "name": "打印复印"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 22,
+    "fields": {
+      "name": "工资"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 23,
+    "fields": {
+      "name": "利息"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 24,
+    "fields": {
+      "name": "礼金"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 25,
+    "fields": {
+      "name": "投资收益"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 26,
+    "fields": {
+      "name": "意外所得"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 27,
+    "fields": {
+      "name": "转帐"
+    }
+  },
+  {
+    "model": "quick.AccountType",
+    "pk": 28,
+    "fields": {
+      "name": "其它"
+    }
+  },
+  {
+    "model": "quick.Currency",
+    "pk": 1,
+    "fields": {
+      "code": "CNY",
+      "symbol": "￥",
+      "name_zh_cn": "人民币"
+    }
+  }
+]
