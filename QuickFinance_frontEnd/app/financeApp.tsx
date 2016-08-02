@@ -94,7 +94,7 @@ class Account extends React.Component<any, any> {
         <ul className="financeapp-panel-ul">
           <li className="financeapp-panel-items-active">{ lang.account }</li>
           {
-            this.state.accountDatas.map((accountData)=><li key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.accountTotal }</span></li>)
+            this.state.accountDatas.map((accountData)=><li key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
           }
         </ul>
       )

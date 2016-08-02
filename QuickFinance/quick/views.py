@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook
+from .util import debug, login_required, createUserAndInit, getAccountBook, Currency
 
 @ensure_csrf_cookie
 def home(request):

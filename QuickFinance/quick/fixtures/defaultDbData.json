@@ -203,5 +203,14 @@
       "symbol": "￥",
       "name_zh_cn": "人民币"
     }
+  },
+  {
+    "model": "quick.Currency",
+    "pk": 2,
+    "fields": {
+      "code": "USD",
+      "symbol": "$",
+      "name_zh_cn": "美元"
+    }
   }
 ]
