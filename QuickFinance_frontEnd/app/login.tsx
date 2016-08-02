@@ -1,7 +1,6 @@
 import * as React from 'react';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import * as cookie from 'dojo/cookie';
 import {Validete, validateType} from 'validate';
 import {user} from 'user';
 
@@ -137,8 +136,6 @@ export default class Login extends React.Component<any, any> {
   constructor(props, context) {
     super(props, context);
     
-    this.tryRemembermeLogin();
-    
     this.state = {select: select.login, layerState: layerState.showContent};
     this.errorMsg = '';
     this.topicHandler = [];
@@ -154,14 +151,6 @@ export default class Login extends React.Component<any, any> {
     this.topicHandler.push(topic.subscribe('login/registerBtnClicked', ()=>this.setState({layerState: layerState.loading})));
     this.topicHandler.push(topic.subscribe('login/error', (err)=>{this.errorMsg = err;this.setState({layerState: layerState.error});}));
     this.topicHandler.push(topic.subscribe('login/backToContent', ()=>this.setState({layerState: layerState.showContent})));
-  }
-  
-  tryRemembermeLogin() {
-    let userName = cookie('userName');
-    let userPw = cookie('userPw');
-    if(userName && userPw) {
-        user.login(userName, userPw);
-    }
   }
   
   componentWillUnmount() {

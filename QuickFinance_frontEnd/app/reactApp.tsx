@@ -80,7 +80,7 @@ export class App extends React.Component<any, any> {
   
   constructor(props, context) {
     super(props, context);
-    this.state = {renderApp: app.Login};
+    this.state = {renderApp: this.props.isLoggedin ? app.mainPage : app.Login};
     this.topicHandler = [];
     
     this.topicHandler.push(topic.subscribe('user/login', (user)=>this.setState({renderApp: app.mainPage})));
