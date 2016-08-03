@@ -36,7 +36,11 @@
     <footer id="pageFooter" class="page-footer"></footer>
     <script>
         require(['app', 'dojo/domReady!'], function(app) {
-            app.renderApp();
+            {% if user.is_authenticated %}
+              app.renderApp(true, '{{ user.username }}');
+            {% else %}
+              app.renderApp();
+            {% endif %}
         });
     </script>
 </body>

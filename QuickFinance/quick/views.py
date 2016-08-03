@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook
+from .util import debug, login_required, createUserAndInit, getAccountBook, Currency
 
 @ensure_csrf_cookie
 def home(request):
@@ -23,9 +23,7 @@ def test(request):
     return render(
         request,
         'quick/test.html',
-        context_instance=RequestContext(request,
-        {
-        })
+        context_instance=RequestContext(request, {})
     )
 
 @require_POST
@@ -33,6 +31,7 @@ def login(request):
     try:
         userName = request.POST['userName']
         password = request.POST['password']
+        isRemenmber = request.POST['isRemenmber']
     except:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('login failed')})
     else:
@@ -42,6 +41,9 @@ def login(request):
         else:
             if user.is_active:
                 djangoLogin(request, user)
+                if isRemenmber == 'true':
+                    #remember for a month 60 * 60 * 24 * 30
+                    request.session.set_expiry(2592000)
                 return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
             else:
                 return JsonResponse({'state': stateCode.ERROR, 'info': _('user is not allowed to login')})
@@ -49,6 +51,7 @@ def login(request):
 def logout(request):
     try:
         djangoLogout(request)
+        request.session.clear()
     except:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('logout failed')})
     else:

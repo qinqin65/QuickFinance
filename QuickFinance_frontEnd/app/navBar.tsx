@@ -56,8 +56,14 @@ export class Nav extends React.Component<any, any> {
   
   constructor(props, context) {
     super(props, context);
-    this.state = {select: select.home, isLogin: false};
+    this.userName = this.props.loginUser;
+    this.state = {select: select.home, isLogin: this.props.isLoggedin || false};
     this.topicHandler = [];
+    
+    if(this.props.isLoggedin) {
+      user.remembermeLogin(this.userName);
+    }
+    
     this.topicHandler.push(topic.subscribe('nav/itemClicked', (selectItem)=>this.setState({select: selectItem})));
     this.topicHandler.push(topic.subscribe('user/login', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));
     this.topicHandler.push(topic.subscribe('user/logout', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));

@@ -1,6 +1,5 @@
 import * as topic from 'dojo/topic';
 import * as xhr from 'xhr';
-import * as cookie from 'dojo/cookie';
 import Config from 'config';
 import * as stateCode from 'stateCode';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
@@ -15,7 +14,7 @@ class User {
         this.isLoginRequst = false;
     }
     
-    login(userName: string, password: string, isRemenmber?: boolean) {
+    login(userName: string, password: string, isRemenmber: boolean) {
         if(this.isLoginRequst) {
             return;
         }
@@ -24,20 +23,15 @@ class User {
             handleAs: 'json', 
             data: {
                 userName,
-                password
+                password,
+                isRemenmber
             }
         };
         xhr.post(`${Config.requestHost}/login`, option)
         .then((data)=>{
             if(!data.state || data.state != stateCode.SUCCESS || !data.user) {
-                cookie('userName', '');
-                cookie('userPw', '');
                 topic.publish('login/error', data.info);
             } else {
-                if(isRemenmber) {
-                    cookie('userName', userName);
-                    cookie('userPw', password);
-                }
                 this.isLogin = true;
                 this.userName = userName;
                 topic.publish('user/login', this);
@@ -48,6 +42,11 @@ class User {
         .then(()=>this.isLoginRequst = false);
         
         this.isLoginRequst = true;
+    }
+    
+    remembermeLogin(userName: string) {
+        this.isLogin = true;
+        this.userName = userName;
     }
     
     logout() {
@@ -61,9 +60,6 @@ class User {
             } else {
                 this.isLogin = false;
                 this.userName = '';
-                
-                cookie('userName', '');
-                cookie('userPw', '');
                 
                 topic.publish('user/logout', this);
             }

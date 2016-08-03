@@ -1,7 +1,7 @@
 from QuickFinance import settings
 from django.contrib.auth.models import User
-from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting
-from django.utils.translation import ugettext as _
+from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency
+from django.utils.translation import ugettext as _, get_language
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from functools import wraps
 from . import stateCode
@@ -21,6 +21,8 @@ def login_required(func):
     return _wrapped_func
 
 def createUserAndInit(userName, email, password):
+    currency = CurrencyHandler()
+
     user = User.objects.create_user(userName, email, password)
     user.save()
 
@@ -29,22 +31,24 @@ def createUserAndInit(userName, email, password):
 
     userSetting = UserSetting(user=user)
     userSetting.defaultAccountBook = accountBook
+    userSetting.defaultCurrency = currency.currency
     userSetting.save()
 
-    account = Account(accountBook=accountBook, accountName=_('wallet'))
+    account = Account(accountBook=accountBook, accountName=_('wallet'), currency=currency.currency)
     account.save()
 
     return user
 
 def getAccountBook(user, requestAccountBook):
-    result = {'accountBooks': [], 'accounts': [], 'currentAccountBook': None}
     accountBooks = AccountBook.objects.filter(user=user)
     userSetting = UserSetting.objects.get(user=user)
-    currentAccountBook = None
+
     if(requestAccountBook):
         currentAccountBook = AccountBook.objects.get(user=user, accountBookName=requestAccountBook)
     else:
         currentAccountBook = AccountBook.objects.get(user=user, pk=userSetting.defaultAccountBook.pk)
+
+    result = {'accountBooks': [], 'accounts': [{'accountName': _('total property'), 'accountTotal': userSetting.totalProperty, 'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol}], 'currentAccountBook': None}
 
     for book in accountBooks:
         result['accountBooks'].append(book.accountBookName)
@@ -52,7 +56,15 @@ def getAccountBook(user, requestAccountBook):
     if(currentAccountBook):
         accounts = Account.objects.filter(accountBook=currentAccountBook)
         for account in accounts:
-            result['accounts'].append({'accountName': account.accountName, 'accountTotal': account.total})
+            result['accounts'].append({'accountName': account.accountName, 'accountTotal': account.total, 'symbol': '?' if account.currency is None else account.currency.symbol})
         result['currentAccountBook'] = currentAccountBook.accountBookName
 
     return result
+
+class CurrencyHandler():
+    currencyMap = {'zh-hans': 'CNY', 'en': 'USD'}
+    def __init__(self):
+        lanCode = get_language()
+        if lanCode not in self.currencyMap:
+            return
+        self.currency = Currency.objects.get(code=self.currencyMap[lanCode])

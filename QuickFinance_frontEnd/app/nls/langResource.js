@@ -36,8 +36,12 @@
     ////记账主页
     AccountBook: '账本',
     account: '账户',
+    accountToolTitle: '账务管理',
     ////消息提示
     tipWarning: '警告',
-    tipError: '错误'
+    tipError: '错误',
+    ////记账工具栏
+    income: '记收入',
+    outcome: '记支出'
   }
 });
