@@ -68,6 +68,12 @@ label {
     width: 100%;
 }
 
+@media screen and (max-width: 1366px) {
+    .page-footer {
+        padding: 1rem 0;
+    }
+}
+
 /*首页旋转木马*/
 @media not all, (-webkit-transform-3d) {
     .carousel-inner>.carousel-item.active.left, .carousel-inner>.carousel-item.prev {
@@ -89,13 +95,20 @@ label {
     .carousel-inner>.carousel-item.active, .carousel-inner>.carousel-item.next.left, .carousel-inner>.carousel-item.prev.right {
         left: 0;
         -webkit-transform: translate3d(0,0,0);
-        transform: translate3d(0,0,0); 
+        transform: translate3d(0,0,0);
     }
 }
 
 .carousel .carousel-item {
   height: 30rem;
   background-color: #777;
+}
+
+@media screen and (max-width: 1366px) {
+    .carousel .carousel-item {
+      height: 23rem;
+      background-color: #777;
+    }
 }
 
 .carousel-inner>.active {
@@ -143,6 +156,12 @@ label {
     list-style: none;
 }
 
+@media screen and (max-width: 1366px) {
+    .carousel-indicators {
+        bottom: 27%;
+    }
+}
+
 .carousel-indicators li {
     display: inline-block;
     width: 10px;
@@ -169,7 +188,7 @@ label {
 
 .carousel-inner>.carousel-item.active, .carousel-inner>.carousel-item.next.left, .carousel-inner>.carousel-item.prev.right {
     -webkit-transform: translate3d(0,0,0);
-     transform: translate3d(0,0,0); 
+     transform: translate3d(0,0,0);
 }
 
 .carousel-inner>.active, .carousel-inner>.next, .carousel-inner>.prev {
@@ -225,6 +244,12 @@ label {
     border: 2px solid #eee;
     position: relative;
     background-color: #f6f6f6;
+}
+
+@media screen and (max-width: 1366px) {
+    .login {
+        margin-top: 4rem;
+    }
 }
 
 .login_header {
