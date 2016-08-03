@@ -63,8 +63,9 @@ def getAccountBook(user, requestAccountBook):
 
 class CurrencyHandler():
     currencyMap = {'zh-hans': 'CNY', 'en': 'USD'}
+    defaultCurrencyMap = 'zh-hans'
     def __init__(self):
         lanCode = get_language()
         if lanCode not in self.currencyMap:
-            return
+            lanCode = self.defaultCurrencyMap
         self.currency = Currency.objects.get(code=self.currencyMap[lanCode])
