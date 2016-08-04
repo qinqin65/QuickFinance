@@ -6,8 +6,14 @@
 *.user
 *.userosscache
 *.sln.docstates
-app.js
-app.js.map
+*/app.js
+*/app.js.map
+QuickFinance/quick/static/quick/app/
+QuickFinance/quick/static/quick/ref/css/app.css
+QuickFinance/.idea/
+QuickFinance/QuickFinance/__pycache__/
+QuickFinance/quick/__pycache__/
+QuickFinance/quick/migrations/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
