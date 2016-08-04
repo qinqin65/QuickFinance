@@ -13,14 +13,14 @@
 ## 如何启动项目
 1.下载项目到本地。  
 2.安装项目依赖的组件：python3、django、psycopg2（访问postgre数据库用到的python数据库接口）、nodejs、typescript、gulp、postgre数据库。  
-3.配置数据库：新建用户django并设置好密码（密码要与django的quickfinance。   app的setting文件里的数据库密码一致）、新建数据库quickfinance（ower为django）。  
+3.配置数据库：新建用户django并设置好密码（密码要与django的quickfinance app的setting文件里的数据库密码一致）、新建数据库quickfinance（ower为django）。  
 4.cd到QuickFinance_frontEnd目录，运行npm install（安装前端开发需要的包）、运行gulp copytodjango命令（将前端文件复制到django app的static文件夹下）。  
-5.cd到QuickFinance目录，运行python manage.py makemigrations quick命令后再运行python manage.py。   migrate命令（创建项目需要的数据表）、运行python manage.py loaddata  defaultDbData.json（插入默认数据到数据库）。  
+5.cd到QuickFinance目录，运行python manage.py makemigrations quick命令后再运行python manage.py migrate命令（创建项目需要的数据表）、运行python manage.py loaddata  defaultDbData.json（插入默认数据到数据库）。  
 6.运行python manage.py runserver启动项目。  
 
 ## 注意事项
 1.记得修改seting文件里设置的数据库密码和secret key，文件路径是QuickFinance/QuickFinance/settings.py。  
-2.在windows上开发可以用visual studio 2015 community，安装好python。   ide插件，就可以非常方便的开发和调试python程序了，另外它对typescript和react支持非常友好。  
+2.在windows上开发可以用visual studio 2015 community，安装好python。  ide插件，就可以非常方便的开发和调试python程序了，另外它对typescript和react支持非常友好。  
 
 ## 关于
 本项目出于学习研究目的,欢迎大家讨论。代码如有错误，还请不吝指教
