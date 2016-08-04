@@ -42,8 +42,11 @@ def login(request):
             if user.is_active:
                 djangoLogin(request, user)
                 if isRemenmber == 'true':
-                    #remember for a month 60 * 60 * 24 * 30
+                    # remember for a month 60 * 60 * 24 * 30
                     request.session.set_expiry(2592000)
+                else:
+                    # valid for 30 minutes
+                    request.session.set_expiry(1800)
                 return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
             else:
                 return JsonResponse({'state': stateCode.ERROR, 'info': _('user is not allowed to login')})
