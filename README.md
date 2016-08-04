@@ -20,7 +20,9 @@
 
 ## 注意事项
 1.记得修改seting文件里设置的数据库密码和secret key，文件路径是QuickFinance/QuickFinance/settings.py。  
-2.在windows上开发可以用visual studio 2015 community，安装好python ide插件，就可以非常方便的开发和调试python程序了，另外它对typescript和react支持非常友好。  
+2.在windows上开发可以用visual studio 2015 community，安装好python ide插件，就可以非常方便的开发和调试python程序了，另外它对typescript和react支持非常友好。 
+3.QuickFinance是后端子项目、QuickFinance_frontEnd是前端子项目，可以分开用各ide打开。QuickFinance用python ide打开开发，QuickFinance_frontEnd是前端项目，一般vs code打开开发（在windows上也可以visual studio 2015 community）。  
+4.开发前端子项目时，在前端子项目的文件夹下开命令行运行gulp命令后，gulp就会监视文件变化，并把用到的前端文件复制到django app里，不用手动复制和重启，省去一些麻烦的工作。  
 
 ## 关于
 本项目出于学习研究目的,欢迎大家讨论。代码如有错误，还请不吝指教
