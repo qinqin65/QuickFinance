@@ -6,8 +6,10 @@
 *.user
 *.userosscache
 *.sln.docstates
-*/app.js
-*/app.js.map
+QuickFinance_frontEnd/app.js
+QuickFinance_frontEnd/app.js.map
+QuickFinance/quick/static/quick/app.js
+QuickFinance/quick/static/quick/app.js.map
 QuickFinance/quick/static/quick/app/
 QuickFinance/quick/static/quick/ref/css/app.css
 QuickFinance/.idea/
