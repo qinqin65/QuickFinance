@@ -6,7 +6,7 @@ import Finance from 'financeApp';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 
 enum app{Login, mainPage};
-enum tipType{warning, error};
+enum tipType{info, warning, error};
 
 const loginApp = (props?)=><div><MainShow /><Login /></div>
 
@@ -25,6 +25,7 @@ class TipService extends React.Component<any, any> {
     this.state = {showTip: false};
     this.topicHandler = [];
     
+    this.topicHandler.push(topic.subscribe('tipService/info', (tip)=>{ this.tipType = tipType.info;this.showTip(tip); }));
     this.topicHandler.push(topic.subscribe('tipService/warning', (tip)=>{ this.tipType = tipType.warning;this.showTip(tip); }));
     this.topicHandler.push(topic.subscribe('tipService/error', (tip)=>{ this.tipType = tipType.error;this.showTip(tip); }));
   }
@@ -65,7 +66,11 @@ class TipService extends React.Component<any, any> {
       <div className={ this.state.showTip ? "tipServiceContainer" : "" }>
         {
           this.state.showTip ? (
-            <div ref="tipService" className= { this.tipType === tipType.warning ? "tipService-warning" : "tipService-error" }>
+            <div ref="tipService" className= 
+              {
+                this.tipType === tipType.info ?  "tipService-info" :
+                this.tipType === tipType.warning ? "tipService-warning" : "tipService-error"
+              }>
               <strong>{ this.tipType === tipType.warning ? lang.tipWarning : lang.tipError }</strong> { this.tipContent }
             </div>
           ) : null
