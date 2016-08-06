@@ -40,7 +40,6 @@ export class AccountBook extends React.Component<any, any> {
   
   selectHandler(event) {
     this.requestAccountBookData(event.target.value);
-    //this.setState({selectValue: event.target.value});
   }
   
   render() {
