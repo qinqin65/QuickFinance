@@ -201,7 +201,8 @@
     "fields": {
       "code": "CNY",
       "symbol": "￥",
-      "name_zh_cn": "人民币"
+      "name_zh_cn": "人民币",
+      "name_en": "china yuan"
     }
   },
   {
@@ -210,7 +211,8 @@
     "fields": {
       "code": "USD",
       "symbol": "$",
-      "name_zh_cn": "美元"
+      "name_zh_cn": "美元",
+      "name_en": "us dollar"
     }
   }
 ]

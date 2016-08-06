@@ -10,6 +10,7 @@ class Currency(models.Model):
     code = models.CharField(max_length=20, unique=True)
     symbol = models.CharField(max_length=20)
     name_zh_cn = models.CharField(max_length=20)
+    name_en = models.CharField(max_length=20)
 
 class Account(models.Model):
     accountBook = models.ForeignKey(AccountBook, on_delete=models.CASCADE)
@@ -44,4 +45,5 @@ class UserSetting(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     totalProperty = models.IntegerField(default=0)
     defaultAccountBook = models.ForeignKey(AccountBook, null=True, on_delete=models.SET_NULL)
+    defaultAccount = models.ForeignKey(Account, null=True, on_delete=models.SET_NULL)
     defaultCurrency = models.ForeignKey(Currency, null=True, on_delete=models.SET_NULL)
