@@ -5,50 +5,33 @@ import Config from 'config';
 import * as stateCode from 'stateCode';
 import * as xhr from 'xhr';
 import {user} from 'user';
+import {accountInfoStore} from 'store';
 
 export class AccountBook extends React.Component<any, any> {
+  private topicHandler: Array<any>
+  
   constructor(props, context) {
     super(props, context);
-    this.state = {accountBooks: [], selectValue: ''};
-    this.requestAccountBookData('');
-  }
-  
-  requestAccountBookData(accountBook: string) {
-    let option: any = {
-        handleAs: 'json',
-        data: {
-            accountBook
-        }
-    };
-    xhr.post(`${Config.requestHost}/requestAccountBookData`, option)
-    .then((data)=>{
-        if(data.state === stateCode.SUCCESS) {
-          this.setState({accountBooks: data.accountBooks, selectValue: data.currentAccountBook});
-          topic.publish('financeapp/accountBookData', data);
-        } else if(data.state === stateCode.Error) {
-          topic.publish('tipService/warning', data.info);
-        } else if(data.state === stateCode.NOTLOGGIN) {
-          topic.publish('tipService/warning', data.info);
-          user.logout();
-        } else {
-          topic.publish('tipService/warning', lang.xhrDataError);
-        }
-    }, (error)=>{
-        topic.publish('tipService/error', lang.xhrErr);
-    })
+    this.topicHandler = [];
+    this.topicHandler.push(topic.subscribe('financeapp/accountBookData', ()=>this.forceUpdate()));
   }
   
   selectHandler(event) {
-    this.requestAccountBookData(event.target.value);
+    accountInfoStore.accountBook = event.target.value;
+    accountInfoStore.requestStore();
+  }
+  
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
   
   render() {
       return (
         <ul className="financeapp-panel-ul">
             <li className="financeapp-panel-items-active">{ lang.AccountBook }</li>
-            <select className="financeapp-panel-item-select" onChange={ this.selectHandler.bind(this) } value={ this.state.selectValue }>
+            <select className="financeapp-panel-item-select" onChange={ this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
               {
-                this.state.accountBooks.map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
+                accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
               }
             </select>
         </ul>
@@ -79,7 +62,7 @@ export class Account extends React.Component<any, any> {
         <ul className="financeapp-panel-ul">
           <li className="financeapp-panel-items-active">{ lang.account }</li>
           {
-            this.state.accountDatas.map((accountData)=><li key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
+            this.state.accountDatas.map((accountData)=><li onClick={ ()=>accountInfoStore.currentAccount = accountData.accountName } key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
           }
         </ul>
       )
