@@ -6,4 +6,7 @@ urlpatterns = [
     url(r'logout', views.logout, name='logout'),
     url(r'register', views.register, name='register'),
     url(r'requestAccountBookData', views.requestAccountBookData, name='requestAccountBookData'),
+    url(r'currencySelectStore', views.currencySelectStore, name='currencySelectStore'),
+    url(r'accountTypeSelectStore', views.accountTypeSelectStore, name='accountTypeSelectStore'),
+    url(r'accounting', views.accounting, name='accounting'),
 ]

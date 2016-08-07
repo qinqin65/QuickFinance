@@ -71,7 +71,11 @@ class TipService extends React.Component<any, any> {
                 this.tipType === tipType.info ?  "tipService-info" :
                 this.tipType === tipType.warning ? "tipService-warning" : "tipService-error"
               }>
-              <strong>{ this.tipType === tipType.warning ? lang.tipWarning : lang.tipError }</strong> { this.tipContent }
+              <strong>
+                { 
+                  this.tipType === tipType.info ?  lang.tipInfo :
+                  this.tipType === tipType.warning ? lang.tipWarning : lang.tipError 
+                }</strong> { this.tipContent }
             </div>
           ) : null
         }

@@ -214,5 +214,23 @@
       "name_zh_cn": "美元",
       "name_en": "us dollar"
     }
+  },
+  {
+    "model": "quick.CurrencyRate",
+    "pk": 1,
+    "fields": {
+      "currency": 1,
+      "toCurrency": 2,
+      "rate": 0.1503
+    }
+  },
+  {
+    "model": "quick.CurrencyRate",
+    "pk": 2,
+    "fields": {
+      "currency": 2,
+      "toCurrency": 1,
+      "rate": 6.6530
+    }
   }
 ]

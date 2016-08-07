@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-08-02 19:34+0800\n"
+"POT-Creation-Date: 2016-08-07 15:34+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -21,7 +21,7 @@ msgstr ""
 msgid "quick finance"
 msgstr "快账-在线记账"
 
-#: util.py:19
+#: util.py:22
 msgid "user does not login"
 msgstr "用户未登录"
 
@@ -29,11 +29,11 @@ msgstr "用户未登录"
 msgid "defaultAccountBook"
 msgstr "默认账本"
 
-#: util.py:35
+#: util.py:30
 msgid "wallet"
 msgstr "钱包"
 
-#: util.py:49
+#: util.py:54 util.py:93
 msgid "total property"
 msgstr "全部账户"
 
@@ -45,26 +45,38 @@ msgstr "登录失败"
 msgid "user or password is invalid"
 msgstr "用户名或密码错误"
 
-#: views.py:49
+#: views.py:52
 msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
 
-#: views.py:56
+#: views.py:59
 msgid "logout failed"
 msgstr "退出失败"
 
-#: views.py:58
+#: views.py:61
 msgid "logout success"
 msgstr "退出成功"
 
-#: views.py:71
+#: views.py:73
 msgid "user already exist"
 msgstr "用户已注册"
 
-#: views.py:73
+#: views.py:75
 msgid "register failed"
 msgstr "注册失败"
 
-#: views.py:86
+#: views.py:88
 msgid "error occured when processing account book"
-msgstr "处理张本时出错"
+msgstr "处理帐本时出错"
+
+#: views.py:99
+msgid "error occured when get currency select store"
+msgstr "获取币种时出错"
+
+#: views.py:110
+msgid "error occured when get account type store"
+msgstr "获取收支类别时出错"
+
+#: views.py:137
+msgid "accounting failed"
+msgstr "记账失败"

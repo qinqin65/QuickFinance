@@ -38,10 +38,20 @@
     account: '账户',
     accountToolTitle: '账务管理',
     ////消息提示
+    tipInfo: '提示',
     tipWarning: '警告',
     tipError: '错误',
     ////记账工具栏
     income: '记收入',
-    outcome: '记支出'
+    outcome: '记支出',
+    accountValue: '记账金额',
+    currency: '币种',
+    accountType: '收支类别',
+    accountDate: '记账日期',
+    accountRemark: '记账说明',
+    ////按钮
+    comfirm: '确定',
+    cancel: '取消',
+    saveSuccess: '保存成功'
   }
 });

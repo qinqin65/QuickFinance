@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook, Currency
+from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting
 
 @ensure_csrf_cookie
 def home(request):
@@ -86,5 +86,50 @@ def requestAccountBookData(request):
         jsonResult.update(accountBook)
     except Exception as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('error occured when processing account book')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+def currencySelectStore(request):
+    try:
+        currencies = currency.allCurrency
+        jsonResult = {'state': stateCode.SUCCESS}
+        jsonResult['selectStore'] = list(currencies)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('error occured when get currency select store')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+def accountTypeSelectStore(request):
+    try:
+        accountType = getAccountType(request.user)
+        jsonResult = {'state': stateCode.SUCCESS}
+        jsonResult['selectStore'] = list(accountType)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('error occured when get account type store')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+@require_POST
+def accounting(request):
+    try:
+        value = request.POST['value']
+        currency = request.POST['currency']
+        type = request.POST['type']
+        date = request.POST['date']
+        remark = request.POST['remark']
+        accountType = request.POST['accountType']
+        accountBook = request.POST['accountBook']
+        account = request.POST['account']
+
+        accounting = Accounting(request.user)
+        accounting.accounting(value,currency,type,date,remark,accountType,accountBook,account)
+        accountBookData = getAccountBook(request.user, accountBook)
+        jsonResult = {'state': stateCode.SUCCESS}
+        jsonResult.update(accountBookData)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('accounting failed')})
     else:
         return JsonResponse(jsonResult)

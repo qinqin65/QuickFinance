@@ -64,12 +64,14 @@ class AccountInfoStore extends BaseStore {
     accountBook: string
     currentAccountBook: string
     currentAccount: string
+    accountStore: Array<any>
     
     constructor() {
         super();
         this.accountBook = '';
         this.currentAccountBook = '';
         this.currentAccount = '';
+        this.accountStore = [];
     }
     
     requestStore() {
@@ -81,10 +83,11 @@ class AccountInfoStore extends BaseStore {
         };
         xhr.post(`${Config.requestHost}/requestAccountBookData`, option)
         .then((data)=>{
-            if(data.state === stateCode.SUCCESS  && dojo.isArray(data.accountBooks)) {
+            if(data.state === stateCode.SUCCESS  && dojo.isArray(data.accountBooks) && dojo.isArray(data.accounts)) {
                 this.store = data.accountBooks;
                 this.currentAccountBook = data.currentAccountBook;
-                topic.publish('financeapp/accountBookData', data);
+                this.accountStore = data.accounts;
+                topic.publish('financeapp/accountBookData', this);
             } else if(data.state === stateCode.Error) {
                 topic.publish('tipService/warning', data.info);
             } else if(data.state === stateCode.NOTLOGGIN) {
@@ -99,6 +102,21 @@ class AccountInfoStore extends BaseStore {
         .then(()=>this.isRequesting = false);
         
         this.isRequesting = true;
+    }
+    
+    getAccountStore():Array<any> {
+        if(this.accountStore.length === 0 && !this.isRequesting) {
+            this.requestStore();
+        }
+        return this.accountStore;
+    }
+    
+    setStore(data) {
+        if(dojo.isArray(data.accountBooks) && dojo.isArray(data.accounts)) {
+            this.store = data.accountBooks;
+            this.accountStore = data.accounts;
+            topic.publish('financeapp/accountBookData', this);
+        }
     }
 }
 
