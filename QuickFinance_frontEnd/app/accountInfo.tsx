@@ -46,11 +46,7 @@ export class Account extends React.Component<any, any> {
     super(props, context);
     this.state = {accountDatas: []};
     this.topicHandler = [];
-    this.topicHandler.push(topic.subscribe('financeapp/accountBookData', this.updateAccountData.bind(this)));
-  }
-  
-  updateAccountData(data) {
-    this.setState({accountDatas: data.accounts});
+    this.topicHandler.push(topic.subscribe('financeapp/accountBookData', ()=>this.forceUpdate()));
   }
   
   componentWillUnmount() {
@@ -62,7 +58,7 @@ export class Account extends React.Component<any, any> {
         <ul className="financeapp-panel-ul">
           <li className="financeapp-panel-items-active">{ lang.account }</li>
           {
-            this.state.accountDatas.map((accountData)=><li onClick={ ()=>accountInfoStore.currentAccount = accountData.accountName } key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
+            accountInfoStore.getAccountStore().map((accountData)=><li onClick={ ()=>accountInfoStore.currentAccount = accountData.accountName } key={ accountData.accountName } className="financeapp-panel-items"><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
           }
         </ul>
       )
