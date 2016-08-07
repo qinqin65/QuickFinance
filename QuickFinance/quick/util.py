@@ -109,8 +109,8 @@ class Accounting():
         self.accountTotalSync()
 
     def accountSync(self):
-        incomeCurrencies = Income.objects.distinct('currency').values_list('currency', flat=True)
-        outcomeCurrencies = Outcome.objects.distinct('currency').values_list('currency', flat=True)
+        incomeCurrencies = Income.objects.filter(account=self.account).distinct('currency').values_list('currency', flat=True)
+        outcomeCurrencies = Outcome.objects.filter(account=self.account).distinct('currency').values_list('currency', flat=True)
         total = 0
         for currencyId in incomeCurrencies:
             currency = Currency.objects.get(pk=currencyId)
