@@ -86,7 +86,7 @@ class Accounting():
         else:
             return Account.objects.get(accountBook=self.accountBook, pk=self.userSetting.defaultAccount.pk)
 
-    def accounting(self, value, currency, type, date, remark, accountType, accountBook, account):
+    def accounting(self, value, currency, type, date, remark, accountingType, accountBook, account):
         if accountBook != self.accountBook.accountBookName:
             self.accountBook = self.getAccountBook(accountBook)
 
@@ -96,7 +96,7 @@ class Accounting():
         elif account != self.account.accountName:
             self.account = self.getAccount(account)
 
-        accountType = AccountType.objects.get(Q(user=None) | Q(user=self.user), name=accountType)
+        accountType = AccountType.objects.get(Q(user=None) | Q(user=self.user), name=accountingType)
         currentCurrency = Currency.objects.get(code=currency)
         if type == stateCode.INCOME:
             income = Income(account=self.account, type=accountType, date=date, value=value, currency=currentCurrency, remark=remark)
