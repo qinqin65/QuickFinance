@@ -12,19 +12,11 @@ from .util import debug, login_required, createUserAndInit, getAccountBook, curr
 
 @ensure_csrf_cookie
 def home(request):
-    return render(
-        request,
-        'quick/index.html',
-        context_instance = RequestContext(request,{})
-    )
+    return render(request, 'quick/index.html', {})
 
 @debug
 def test(request):
-    return render(
-        request,
-        'quick/test.html',
-        context_instance=RequestContext(request, {})
-    )
+    return render(request, 'quick/test.html', {})
 
 @require_POST
 def login(request):
