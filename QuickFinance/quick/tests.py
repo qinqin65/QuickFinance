@@ -6,19 +6,84 @@ Replace this with more appropriate tests for your application.
 """
 
 import time
-import django
+from django.utils import timezone
 from django.test import TestCase
-
-from .util import createUserAndInit
+from django.contrib.auth.models import User
+from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
+from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook
+from . import stateCode
 
 # TODO: Configure your database in settings.py and sync before running tests.
 
 class QuickTest(TestCase):
+    fixtures = ['defaultDbData.json']
 
-    def createUserAndInitTest(self):
+    def setUp(self):
+        pass
+
+    @staticmethod
+    def genUserInfo():
         timeStamp = int(time.time())
         userName = 'test' + str(timeStamp)
         password = '123456'
         email = None
+
+        return userName, password, email
+
+    def test_initAccount(self):
+        userName, password, email = self.genUserInfo()
+        user = User.objects.create_user(userName, email, password)
+        user.save()
+
+        initAccount(user)
+
+        accountBook = AccountBook.objects.filter(user=user).first()
+        account = Account.objects.filter(accountBook=accountBook).first()
+        userSetting = UserSetting.objects.get(user=user)
+
+        self.assertEqual(userSetting.defaultAccountBook, accountBook, 'user default accountboot should inited correctly')
+        self.assertEqual(userSetting.defaultAccount, account, 'user default account should inited correctly')
+
+    def test_createUserAndInit(self):
+        userName, password, email = self.genUserInfo()
         user = createUserAndInit(userName, email, password)
         self.assertEqual(userName, user.username, 'the name of created user must match the userName which is auto genereted by time string')
+
+    def test_getAccountType(self):
+        userName, password, email = self.genUserInfo()
+        user = createUserAndInit(userName, email, password)
+        accountType = getAccountType(user)
+
+        self.assertEqual(len(accountType), 28, 'default count of account type is 28')
+
+    def test_getAccountBook(self):
+        userName, password, email = self.genUserInfo()
+        user = createUserAndInit(userName, email, password)
+        accountBook = user.usersetting.defaultAccountBook.accountBookName
+
+        result = getAccountBook(user, accountBook)
+
+        self.assertTrue(isinstance(result['accountBooks'], list), 'accountBooks must be a list')
+        self.assertTrue(isinstance(result['accounts'], list), 'accounts must be a list')
+
+    def test_Accounting(self):
+        userName, password, email = self.genUserInfo()
+        user = createUserAndInit(userName, email, password)
+
+        value = 20
+        currency = 'CNY'
+        type = stateCode.INCOME
+        date = timezone.now()
+        remark = 'test'
+        accountType = getAccountType(user)[0]
+        accountBook = user.usersetting.defaultAccountBook.accountBookName
+        accountName = user.usersetting.defaultAccount.accountName
+
+        accounting = Accounting(user)
+        accounting.accounting(value, currency, type, date, remark, accountType, accountBook, accountName)
+        income = Income.objects.get(account=user.usersetting.defaultAccount, date=date)
+        account = Account.objects.get(accountBook=user.usersetting.defaultAccountBook)
+
+        self.assertEqual(income.value, 20, 'it should be 20 after accounting income for 20')
+        self.assertEqual(user.usersetting.totalProperty, 20, 'user total property should be 20 after accounting income for 20')
+        self.assertEqual(account.total, 20, 'account total should be 20 after accounting income for 20')
