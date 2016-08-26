@@ -37,6 +37,7 @@
     AccountBook: '账本',
     account: '账户',
     accountToolTitle: '账务管理',
+    financePreview: '账务一览',
     ////消息提示
     tipInfo: '提示',
     tipWarning: '警告',

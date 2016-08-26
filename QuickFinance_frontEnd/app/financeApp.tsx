@@ -9,7 +9,7 @@ import * as topic from 'dojo/topic';
 export default class Finance extends React.Component<any, any> {
   private topicHandler: Array<any>
   private accountToolData: any
-  
+
   constructor(props, context) {
     super(props, context);
     this.state = {accountPanel: accountPanel.accountTool, accountToolPanelTitle: lang.accountToolTitle};
@@ -36,11 +36,11 @@ export default class Finance extends React.Component<any, any> {
       }
     }));
   }
-  
+
   componentWillUnmount() {
     this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
-  
+
   render() {
       return (
         <div>
@@ -54,6 +54,8 @@ export default class Finance extends React.Component<any, any> {
                 this.state.accountPanel === accountPanel.accountTool ? <AccountTool /> :
                 this.state.accountPanel === accountPanel.accounting ? <Accounting accountType={ this.accountToolData.accountType }/> : null
               }
+            </BlockPanel>
+            <BlockPanel title={ lang.financePreview }>
             </BlockPanel>
           </div>
         </div>
