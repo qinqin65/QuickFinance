@@ -18711,6 +18711,6009 @@ dojo.cookie.isSupported = function(){
 return dojo.cookie;
 });
 },
+'dojox/main':function(){
+define(["dojo/_base/kernel"], function(dojo) {
+	// module:
+	//		dojox/main
+
+	/*=====
+	return {
+		// summary:
+		//		The dojox package main module; dojox package is somewhat unusual in that the main module currently just provides an empty object.
+		//		Apps should require modules from the dojox packages directly, rather than loading this module.
+	};
+	=====*/
+
+	return dojo.dojox;
+});
+},
+'dojox/gfx/_base':function(){
+define(["dojo/_base/kernel", "dojo/_base/lang", "dojo/_base/Color", "dojo/_base/sniff", "dojo/_base/window",
+	    "dojo/_base/array","dojo/dom", "dojo/dom-construct","dojo/dom-geometry"],
+function(kernel, lang, Color, has, win, arr, dom, domConstruct, domGeom){
+	// module:
+	//		dojox/gfx
+	// summary:
+	//		This module contains common core Graphics API used by different graphics renderers.
+
+	var g = lang.getObject("dojox.gfx", true),
+		b = g._base = {};
+
+	// candidates for dojox.style (work on VML and SVG nodes)
+	g._hasClass = function(/*DomNode*/node, /*String*/classStr){
+		// summary:
+		//		Returns whether or not the specified classes are a portion of the
+		//		class list currently applied to the node.
+
+		// return (new RegExp('(^|\\s+)'+classStr+'(\\s+|$)')).test(node.className)	// Boolean
+		var cls = node.getAttribute("className");
+		return cls && (" " + cls + " ").indexOf(" " + classStr + " ") >= 0;  // Boolean
+	};
+	g._addClass = function(/*DomNode*/node, /*String*/classStr){
+		// summary:
+		//		Adds the specified classes to the end of the class list on the
+		//		passed node.
+		var cls = node.getAttribute("className") || "";
+		if(!cls || (" " + cls + " ").indexOf(" " + classStr + " ") < 0){
+			node.setAttribute("className", cls + (cls ? " " : "") + classStr);
+		}
+	};
+	g._removeClass = function(/*DomNode*/node, /*String*/classStr){
+		// summary:
+		//		Removes classes from node.
+		var cls = node.getAttribute("className");
+		if(cls){
+			node.setAttribute(
+				"className",
+				cls.replace(new RegExp('(^|\\s+)' + classStr + '(\\s+|$)'), "$1$2")
+			);
+		}
+	};
+
+	// candidate for dojox.html.metrics (dynamic font resize handler is not implemented here)
+
+	//		derived from Morris John's emResized measurer
+	b._getFontMeasurements = function(){
+		// summary:
+		//		Returns an object that has pixel equivilents of standard font
+		//		size values.
+		var heights = {
+			'1em': 0, '1ex': 0, '100%': 0, '12pt': 0, '16px': 0, 'xx-small': 0,
+			'x-small': 0, 'small': 0, 'medium': 0, 'large': 0, 'x-large': 0,
+			'xx-large': 0
+		};
+		var p, oldStyle;
+		if(has("ie")){
+			//	We do a font-size fix if and only if one isn't applied already.
+			// NOTE: If someone set the fontSize on the HTML Element, this will kill it.
+			oldStyle = win.doc.documentElement.style.fontSize || "";
+			if(!oldStyle){
+				win.doc.documentElement.style.fontSize="100%";
+			}
+		}
+
+		//		set up the measuring node.
+		var div = domConstruct.create("div", {style: {
+				position: "absolute",
+				left: "0",
+				top: "-100px",
+				width: "30px",
+				height: "1000em",
+				borderWidth: "0",
+				margin: "0",
+				padding: "0",
+				outline: "none",
+				lineHeight: "1",
+				overflow: "hidden"
+			}}, win.body());
+
+		//		do the measurements.
+		for(p in heights){
+			div.style.fontSize = p;
+			heights[p] = Math.round(div.offsetHeight * 12/16) * 16/12 / 1000;
+		}
+
+		if(has("ie")){
+			// Restore the font to its old style.
+			win.doc.documentElement.style.fontSize = oldStyle;
+		}
+		win.body().removeChild(div);
+		return heights; //object
+	};
+
+	var fontMeasurements = null;
+
+	b._getCachedFontMeasurements = function(recalculate){
+		if(recalculate || !fontMeasurements){
+			fontMeasurements = b._getFontMeasurements();
+		}
+		return fontMeasurements;
+	};
+
+	// candidate for dojox.html.metrics
+
+	var measuringNode = null, empty = {};
+	b._getTextBox = function(	/*String*/ text,
+								/*Object*/ style,
+								/*String?*/ className){
+		var m, s, al = arguments.length;
+		var i, box;
+		if(!measuringNode){
+			measuringNode = domConstruct.create("div", {style: {
+				position: "absolute",
+				top: "-10000px",
+				left: "0",
+				visibility: "hidden"
+			}}, win.body());
+		}
+		m = measuringNode;
+		// reset styles
+		m.className = "";
+		s = m.style;
+		s.borderWidth = "0";
+		s.margin = "0";
+		s.padding = "0";
+		s.outline = "0";
+		// set new style
+		if(al > 1 && style){
+			for(i in style){
+				if(i in empty){ continue; }
+				s[i] = style[i];
+			}
+		}
+		// set classes
+		if(al > 2 && className){
+			m.className = className;
+		}
+		// take a measure
+		m.innerHTML = text;
+
+		if(m.getBoundingClientRect){
+			var bcr = m.getBoundingClientRect();
+			box = {l: bcr.left, t: bcr.top, w: bcr.width || (bcr.right - bcr.left), h: bcr.height || (bcr.bottom - bcr.top)};
+		}else{
+			box = domGeom.getMarginBox(m);
+		}
+		m.innerHTML = "";
+		return box;
+	};
+
+	b._computeTextLocation = function(/*g.defaultTextShape*/textShape, /*Number*/width, /*Number*/height, /*Boolean*/fixHeight) {
+		var loc = {}, align = textShape.align;
+		switch (align) {
+			case 'end':
+				loc.x = textShape.x - width;
+				break;
+			case 'middle':
+				loc.x = textShape.x - width / 2;
+				break;
+			default:
+				loc.x = textShape.x;
+				break;
+		}
+		var c = fixHeight ? 0.75 : 1;
+		loc.y = textShape.y - height*c; // **rough** approximation of the ascent...
+		return loc;
+	};
+	b._computeTextBoundingBox = function(/*shape.Text*/s){
+		// summary:
+		//		Compute the bbox of the given shape.Text instance. Note that this method returns an
+		//		approximation of the bbox, and should be used when the underlying renderer cannot provide precise metrics.
+		if(!g._base._isRendered(s)){
+			return {x:0, y:0, width:0, height:0};
+		}
+		var loc, textShape = s.getShape(),
+			font = s.getFont() || g.defaultFont,
+			w = s.getTextWidth(),
+			h = g.normalizedLength(font.size);
+		loc = b._computeTextLocation(textShape, w, h, true);
+		return {
+			x: loc.x,
+			y: loc.y,
+			width: w,
+			height: h
+		};
+	};
+	b._isRendered = function(/*Shape*/s){
+		var p = s.parent;
+		while(p && p.getParent){
+			p = p.parent;
+		}
+		return p !== null;
+	};
+
+	// candidate for dojo.dom
+
+	var uniqueId = 0;
+	b._getUniqueId = function(){
+		// summary:
+		//		returns a unique string for use with any DOM element
+		var id;
+		do{
+			id = kernel._scopeName + "xUnique" + (++uniqueId);
+		}while(dom.byId(id));
+		return id;
+	};
+
+	// IE10
+
+	b._fixMsTouchAction = function(/*dojox/gfx/shape.Surface*/surface){
+		var r = surface.rawNode;
+		if (typeof r.style.msTouchAction != 'undefined')
+			r.style.msTouchAction = "none";
+	};
+
+	/*=====
+	g.Stroke = {
+		// summary:
+		//		A stroke defines stylistic properties that are used when drawing a path.
+
+		// color: String
+		//		The color of the stroke, default value 'black'.
+		color: "black",
+
+		// style: String
+		//		The style of the stroke, one of 'solid', ... . Default value 'solid'.
+		style: "solid",
+
+		// width: Number
+		//		The width of a stroke, default value 1.
+		width: 1,
+
+		// cap: String
+		//		The endcap style of the path. One of 'butt', 'round', ... . Default value 'butt'.
+		cap: "butt",
+
+		// join: Number
+		//		The join style to use when combining path segments. Default value 4.
+		join: 4
+	};
+
+	g.Fill = {
+		// summary:
+		//		Defines how to fill a shape. Four types of fills can be used: solid, linear gradient, radial gradient and pattern.
+		//		See dojox/gfx.LinearGradient, dojox/gfx.RadialGradient and dojox/gfx.Pattern respectively for more information about the properties supported by each type.
+
+		// type: String?
+		//		The type of fill. One of 'linear', 'radial', 'pattern' or undefined. If not specified, a solid fill is assumed.
+		type:"",
+
+		// color: String|dojo/Color?
+		//		The color of a solid fill type.
+		color:null,
+
+	};
+
+	g.LinearGradient = {
+		// summary:
+		//		An object defining the default stylistic properties used for Linear Gradient fills.
+		//		Linear gradients are drawn along a virtual line, which results in appearance of a rotated pattern in a given direction/orientation.
+
+		// type: String
+		//		Specifies this object is a Linear Gradient, value 'linear'
+		type: "linear",
+
+		// x1: Number
+		//		The X coordinate of the start of the virtual line along which the gradient is drawn, default value 0.
+		x1: 0,
+
+		// y1: Number
+		//		The Y coordinate of the start of the virtual line along which the gradient is drawn, default value 0.
+		y1: 0,
+
+		// x2: Number
+		//		The X coordinate of the end of the virtual line along which the gradient is drawn, default value 100.
+		x2: 100,
+
+		// y2: Number
+		//		The Y coordinate of the end of the virtual line along which the gradient is drawn, default value 100.
+		y2: 100,
+
+		// colors: Array
+		//		An array of colors at given offsets (from the start of the line).  The start of the line is
+		//		defined at offest 0 with the end of the line at offset 1.
+		//		Default value, [{ offset: 0, color: 'black'},{offset: 1, color: 'white'}], is a gradient from black to white.
+		colors: []
+	};
+
+	g.RadialGradient = {
+		// summary:
+		//		Specifies the properties for RadialGradients using in fills patterns.
+
+		// type: String
+		//		Specifies this is a RadialGradient, value 'radial'
+		type: "radial",
+
+		// cx: Number
+		//		The X coordinate of the center of the radial gradient, default value 0.
+		cx: 0,
+
+		// cy: Number
+		//		The Y coordinate of the center of the radial gradient, default value 0.
+		cy: 0,
+
+		// r: Number
+		//		The radius to the end of the radial gradient, default value 100.
+		r: 100,
+
+		// colors: Array
+		//		An array of colors at given offsets (from the center of the radial gradient).
+		//		The center is defined at offest 0 with the outer edge of the gradient at offset 1.
+		//		Default value, [{ offset: 0, color: 'black'},{offset: 1, color: 'white'}], is a gradient from black to white.
+		colors: []
+	};
+
+	g.Pattern = {
+		// summary:
+		//		An object specifying the default properties for a Pattern using in fill operations.
+
+		// type: String
+		//		Specifies this object is a Pattern, value 'pattern'.
+		type: "pattern",
+
+		// x: Number
+		//		The X coordinate of the position of the pattern, default value is 0.
+		x: 0,
+
+		// y: Number
+		//		The Y coordinate of the position of the pattern, default value is 0.
+		y: 0,
+
+		// width: Number
+		//		The width of the pattern image, default value is 0.
+		width: 0,
+
+		// height: Number
+		//		The height of the pattern image, default value is 0.
+		height: 0,
+
+		// src: String
+		//		A url specifying the image to use for the pattern.
+		src: ""
+	};
+
+	g.Text = {
+		//	summary:
+		//		A keyword argument object defining both the text to be rendered in a VectorText shape,
+		//		and specifying position, alignment, and fitting.
+		//	text: String
+		//		The text to be rendered.
+		//	x: Number?
+		//		The left coordinate for the text's bounding box.
+		//	y: Number?
+		//		The top coordinate for the text's bounding box.
+		//	width: Number?
+		//		The width of the text's bounding box.
+		//	height: Number?
+		//		The height of the text's bounding box.
+		//	align: String?
+		//		The alignment of the text, as defined in SVG. Can be "start", "end" or "middle".
+		//	fitting: Number?
+		//		How the text is to be fitted to the bounding box. Can be 0 (no fitting), 1 (fitting based on
+		//		passed width of the bounding box and the size of the font), or 2 (fit text to the bounding box,
+		//		and ignore any size parameters).
+		//	leading: Number?
+		//		The leading to be used between lines in the text.
+		//	decoration: String?
+		//		Any text decoration to be used.
+	};
+
+	g.Font = {
+		// summary:
+		//		An object specifying the properties for a Font used in text operations.
+
+		// type: String
+		//		Specifies this object is a Font, value 'font'.
+		type: "font",
+
+		// style: String
+		//		The font style, one of 'normal', 'bold', default value 'normal'.
+		style: "normal",
+
+		// variant: String
+		//		The font variant, one of 'normal', ... , default value 'normal'.
+		variant: "normal",
+
+		// weight: String
+		//		The font weight, one of 'normal', ..., default value 'normal'.
+		weight: "normal",
+
+		// size: String
+		//		The font size (including units), default value '10pt'.
+		size: "10pt",
+
+		// family: String
+		//		The font family, one of 'serif', 'sanserif', ..., default value 'serif'.
+		family: "serif"
+	};
+
+	=====*/
+
+	lang.mixin(g, {
+		// summary:
+		//		defines constants, prototypes, and utility functions for the core Graphics API
+
+		// default shapes, which are used to fill in missing parameters
+		defaultPath: {
+			// summary:
+			//		Defines the default Path prototype object.
+
+			// type: String
+			//		Specifies this object is a Path, default value 'path'.
+			type: "path",
+
+			// path: String
+			//		The path commands. See W32C SVG 1.0 specification.
+			//		Defaults to empty string value.
+			path: ""
+		},
+		defaultPolyline: {
+			// summary:
+			//		Defines the default PolyLine prototype.
+
+			// type: String
+			//		Specifies this object is a PolyLine, default value 'polyline'.
+			type: "polyline",
+
+			// points: Array
+			//		An array of point objects [{x:0,y:0},...] defining the default polyline's line segments. Value is an empty array [].
+			points: []
+		},
+		defaultRect: {
+			// summary:
+			//		Defines the default Rect prototype.
+
+			// type: String
+			//		Specifies this default object is a type of Rect. Value is 'rect'
+			type: "rect",
+
+			// x: Number
+			//		The X coordinate of the default rectangles position, value 0.
+			x: 0,
+
+			// y: Number
+			//		The Y coordinate of the default rectangle's position, value 0.
+			y: 0,
+
+			// width: Number
+			//		The width of the default rectangle, value 100.
+			width: 100,
+
+			// height: Number
+			//		The height of the default rectangle, value 100.
+			height: 100,
+
+			// r: Number
+			//		The corner radius for the default rectangle, value 0.
+			r: 0
+		},
+		defaultEllipse: {
+			// summary:
+			//		Defines the default Ellipse prototype.
+
+			// type: String
+			//		Specifies that this object is a type of Ellipse, value is 'ellipse'
+			type: "ellipse",
+
+			// cx: Number
+			//		The X coordinate of the center of the ellipse, default value 0.
+			cx: 0,
+
+			// cy: Number
+			//		The Y coordinate of the center of the ellipse, default value 0.
+			cy: 0,
+
+			// rx: Number
+			//		The radius of the ellipse in the X direction, default value 200.
+			rx: 200,
+
+			// ry: Number
+			//		The radius of the ellipse in the Y direction, default value 200.
+			ry: 100
+		},
+		defaultCircle: {
+			// summary:
+			//		An object defining the default Circle prototype.
+
+			// type: String
+			//		Specifies this object is a circle, value 'circle'
+			type: "circle",
+
+			// cx: Number
+			//		The X coordinate of the center of the circle, default value 0.
+			cx: 0,
+			// cy: Number
+			//		The Y coordinate of the center of the circle, default value 0.
+			cy: 0,
+
+			// r: Number
+			//		The radius, default value 100.
+			r: 100
+		},
+		defaultLine: {
+			// summary:
+			//		An object defining the default Line prototype.
+
+			// type: String
+			//		Specifies this is a Line, value 'line'
+			type: "line",
+
+			// x1: Number
+			//		The X coordinate of the start of the line, default value 0.
+			x1: 0,
+
+			// y1: Number
+			//		The Y coordinate of the start of the line, default value 0.
+			y1: 0,
+
+			// x2: Number
+			//		The X coordinate of the end of the line, default value 100.
+			x2: 100,
+
+			// y2: Number
+			//		The Y coordinate of the end of the line, default value 100.
+			y2: 100
+		},
+		defaultImage: {
+			// summary:
+			//		Defines the default Image prototype.
+
+			// type: String
+			//		Specifies this object is an image, value 'image'.
+			type: "image",
+
+			// x: Number
+			//		The X coordinate of the image's position, default value 0.
+			x: 0,
+
+			// y: Number
+			//		The Y coordinate of the image's position, default value 0.
+			y: 0,
+
+			// width: Number
+			//		The width of the image, default value 0.
+			width: 0,
+
+			// height: Number
+			//		The height of the image, default value 0.
+			height: 0,
+
+			// src: String
+			//		The src url of the image, defaults to empty string.
+			src: ""
+		},
+		defaultText: {
+			// summary:
+			//		Defines the default Text prototype.
+
+			// type: String
+			//		Specifies this is a Text shape, value 'text'.
+			type: "text",
+
+			// x: Number
+			//		The X coordinate of the text position, default value 0.
+			x: 0,
+
+			// y: Number
+			//		The Y coordinate of the text position, default value 0.
+			y: 0,
+
+			// text: String
+			//		The text to be displayed, default value empty string.
+			text: "",
+
+			// align:	String
+			//		The horizontal text alignment, one of 'start', 'end', 'center'. Default value 'start'.
+			align: "start",
+
+			// decoration: String
+			//		The text decoration , one of 'none', ... . Default value 'none'.
+			decoration: "none",
+
+			// rotated: Boolean
+			//		Whether the text is rotated, boolean default value false.
+			rotated: false,
+
+			// kerning: Boolean
+			//		Whether kerning is used on the text, boolean default value true.
+			kerning: true
+		},
+		defaultTextPath: {
+			// summary:
+			//		Defines the default TextPath prototype.
+
+			// type: String
+			//		Specifies this is a TextPath, value 'textpath'.
+			type: "textpath",
+
+			// text: String
+			//		The text to be displayed, default value empty string.
+			text: "",
+
+			// align: String
+			//		The horizontal text alignment, one of 'start', 'end', 'center'. Default value 'start'.
+			align: "start",
+
+			// decoration: String
+			//		The text decoration , one of 'none', ... . Default value 'none'.
+			decoration: "none",
+
+			// rotated: Boolean
+			//		Whether the text is rotated, boolean default value false.
+			rotated: false,
+
+			// kerning: Boolean
+			//		Whether kerning is used on the text, boolean default value true.
+			kerning: true
+		},
+
+		// default stylistic attributes
+		defaultStroke: {
+			// summary:
+			//		A stroke defines stylistic properties that are used when drawing a path.
+			//		This object defines the default Stroke prototype.
+			// type: String
+			//		Specifies this object is a type of Stroke, value 'stroke'.
+			type: "stroke",
+
+			// color: String
+			//		The color of the stroke, default value 'black'.
+			color: "black",
+
+			// style: String
+			//		The style of the stroke, one of 'solid', ... . Default value 'solid'.
+			style: "solid",
+
+			// width: Number
+			//		The width of a stroke, default value 1.
+			width: 1,
+
+			// cap: String
+			//		The endcap style of the path. One of 'butt', 'round', ... . Default value 'butt'.
+			cap: "butt",
+
+			// join: Number
+			//		The join style to use when combining path segments. Default value 4.
+			join: 4
+		},
+		defaultLinearGradient: {
+			// summary:
+			//		An object defining the default stylistic properties used for Linear Gradient fills.
+			//		Linear gradients are drawn along a virtual line, which results in appearance of a rotated pattern in a given direction/orientation.
+
+			// type: String
+			//		Specifies this object is a Linear Gradient, value 'linear'
+			type: "linear",
+
+			// x1: Number
+			//		The X coordinate of the start of the virtual line along which the gradient is drawn, default value 0.
+			x1: 0,
+
+			// y1: Number
+			//		The Y coordinate of the start of the virtual line along which the gradient is drawn, default value 0.
+			y1: 0,
+
+			// x2: Number
+			//		The X coordinate of the end of the virtual line along which the gradient is drawn, default value 100.
+			x2: 100,
+
+			// y2: Number
+			//		The Y coordinate of the end of the virtual line along which the gradient is drawn, default value 100.
+			y2: 100,
+
+			// colors: Array
+			//		An array of colors at given offsets (from the start of the line).  The start of the line is
+			//		defined at offest 0 with the end of the line at offset 1.
+			//		Default value, [{ offset: 0, color: 'black'},{offset: 1, color: 'white'}], is a gradient from black to white.
+			colors: [
+				{ offset: 0, color: "black" }, { offset: 1, color: "white" }
+			]
+		},
+		defaultRadialGradient: {
+			// summary:
+			//		An object specifying the default properties for RadialGradients using in fills patterns.
+
+			// type: String
+			//		Specifies this is a RadialGradient, value 'radial'
+			type: "radial",
+
+			// cx: Number
+			//		The X coordinate of the center of the radial gradient, default value 0.
+			cx: 0,
+
+			// cy: Number
+			//		The Y coordinate of the center of the radial gradient, default value 0.
+			cy: 0,
+
+			// r: Number
+			//		The radius to the end of the radial gradient, default value 100.
+			r: 100,
+
+			// colors: Array
+			//		An array of colors at given offsets (from the center of the radial gradient).
+			//		The center is defined at offest 0 with the outer edge of the gradient at offset 1.
+			//		Default value, [{ offset: 0, color: 'black'},{offset: 1, color: 'white'}], is a gradient from black to white.
+			colors: [
+				{ offset: 0, color: "black" }, { offset: 1, color: "white" }
+			]
+		},
+		defaultPattern: {
+			// summary:
+			//		An object specifying the default properties for a Pattern using in fill operations.
+
+			// type: String
+			//		Specifies this object is a Pattern, value 'pattern'.
+			type: "pattern",
+
+			// x: Number
+			//		The X coordinate of the position of the pattern, default value is 0.
+			x: 0,
+
+			// y: Number
+			//		The Y coordinate of the position of the pattern, default value is 0.
+			y: 0,
+
+			// width: Number
+			//		The width of the pattern image, default value is 0.
+			width: 0,
+
+			// height: Number
+			//		The height of the pattern image, default value is 0.
+			height: 0,
+
+			// src: String
+			//		A url specifying the image to use for the pattern.
+			src: ""
+		},
+		defaultFont: {
+			// summary:
+			//		An object specifying the default properties for a Font used in text operations.
+
+			// type: String
+			//		Specifies this object is a Font, value 'font'.
+			type: "font",
+
+			// style: String
+			//		The font style, one of 'normal', 'bold', default value 'normal'.
+			style: "normal",
+
+			// variant: String
+			//		The font variant, one of 'normal', ... , default value 'normal'.
+			variant: "normal",
+
+			// weight: String
+			//		The font weight, one of 'normal', ..., default value 'normal'.
+			weight: "normal",
+
+			// size: String
+			//		The font size (including units), default value '10pt'.
+			size: "10pt",
+
+			// family: String
+			//		The font family, one of 'serif', 'sanserif', ..., default value 'serif'.
+			family: "serif"
+		},
+
+		getDefault: (function(){
+			// summary:
+			//		Returns a function used to access default memoized prototype objects (see them defined above).
+			var typeCtorCache = {};
+			// a memoized delegate()
+			return function(/*String*/ type){
+				var t = typeCtorCache[type];
+				if(t){
+					return new t();
+				}
+				t = typeCtorCache[type] = new Function();
+				t.prototype = g[ "default" + type ];
+				return new t();
+			}
+		})(),
+
+		normalizeColor: function(/*dojo/Color|Array|string|Object*/ color){
+			// summary:
+			//		converts any legal color representation to normalized
+			//		dojo/Color object
+			// color:
+			//		A color representation.
+			return (color instanceof Color) ? color : new Color(color); // dojo/Color
+		},
+		normalizeParameters: function(existed, update){
+			// summary:
+			//		updates an existing object with properties from an 'update'
+			//		object
+			// existed: Object
+			//		the target object to be updated
+			// update: Object
+			//		the 'update' object, whose properties will be used to update
+			//		the existed object
+			var x;
+			if(update){
+				var empty = {};
+				for(x in existed){
+					if(x in update && !(x in empty)){
+						existed[x] = update[x];
+					}
+				}
+			}
+			return existed;	// Object
+		},
+		makeParameters: function(defaults, update){
+			// summary:
+			//		copies the original object, and all copied properties from the
+			//		'update' object
+			// defaults: Object
+			//		the object to be cloned before updating
+			// update: Object
+			//		the object, which properties are to be cloned during updating
+			// returns: Object
+			//      new object with new and default properties
+			var i = null;
+			if(!update){
+				// return dojo.clone(defaults);
+				return lang.delegate(defaults);
+			}
+			var result = {};
+			for(i in defaults){
+				if(!(i in result)){
+					result[i] = lang.clone((i in update) ? update[i] : defaults[i]);
+				}
+			}
+			return result; // Object
+		},
+		formatNumber: function(x, addSpace){
+			// summary:
+			//		converts a number to a string using a fixed notation
+			// x: Number
+			//		number to be converted
+			// addSpace: Boolean
+			//		whether to add a space before a positive number
+			// returns: String
+			//      the formatted value
+			var val = x.toString();
+			if(val.indexOf("e") >= 0){
+				val = x.toFixed(4);
+			}else{
+				var point = val.indexOf(".");
+				if(point >= 0 && val.length - point > 5){
+					val = x.toFixed(4);
+				}
+			}
+			if(x < 0){
+				return val; // String
+			}
+			return addSpace ? " " + val : val; // String
+		},
+		// font operations
+		makeFontString: function(font){
+			// summary:
+			//		converts a font object to a CSS font string
+			// font: Object
+			//		font object (see dojox/gfx.defaultFont)
+			return font.style + " " + font.variant + " " + font.weight + " " + font.size + " " + font.family; // Object
+		},
+		splitFontString: function(str){
+			// summary:
+			//		converts a CSS font string to a font object
+			// description:
+			//		Converts a CSS font string to a gfx font object. The CSS font
+			//		string components should follow the W3C specified order
+			//		(see http://www.w3.org/TR/CSS2/fonts.html#font-shorthand):
+			//		style, variant, weight, size, optional line height (will be
+			//		ignored), and family. Note that the Font.size attribute is limited to numeric CSS length.
+			// str: String
+			//		a CSS font string.
+			// returns: Object
+			//      object in dojox/gfx.defaultFont format
+			var font = g.getDefault("Font");
+			var t = str.split(/\s+/);
+			do{
+				if(t.length < 5){ break; }
+				font.style   = t[0];
+				font.variant = t[1];
+				font.weight  = t[2];
+				var i = t[3].indexOf("/");
+				font.size = i < 0 ? t[3] : t[3].substring(0, i);
+				var j = 4;
+				if(i < 0){
+					if(t[4] == "/"){
+						j = 6;
+					}else if(t[4].charAt(0) == "/"){
+						j = 5;
+					}
+				}
+				if(j < t.length){
+					font.family = t.slice(j).join(" ");
+				}
+			}while(false);
+			return font;	// Object
+		},
+		// length operations
+
+		// cm_in_pt: Number
+		//		points per centimeter (constant)
+		cm_in_pt: 72 / 2.54,
+
+		// mm_in_pt: Number
+		//		points per millimeter (constant)
+		mm_in_pt: 7.2 / 2.54,
+
+		px_in_pt: function(){
+			// summary:
+			//		returns the current number of pixels per point.
+			return g._base._getCachedFontMeasurements()["12pt"] / 12;	// Number
+		},
+
+		pt2px: function(len){
+			// summary:
+			//		converts points to pixels
+			// len: Number
+			//		a value in points
+			return len * g.px_in_pt();	// Number
+		},
+
+		px2pt: function(len){
+			// summary:
+			//		converts pixels to points
+			// len: Number
+			//		a value in pixels
+			return len / g.px_in_pt();	// Number
+		},
+
+		normalizedLength: function(len) {
+			// summary:
+			//		converts any length value to pixels
+			// len: String
+			//		a length, e.g., '12pc'
+			// returns: Number
+			//      pixels
+			if(len.length === 0){ return 0; }
+			if(len.length > 2){
+				var px_in_pt = g.px_in_pt();
+				var val = parseFloat(len);
+				switch(len.slice(-2)){
+					case "px": return val;
+					case "pt": return val * px_in_pt;
+					case "in": return val * 72 * px_in_pt;
+					case "pc": return val * 12 * px_in_pt;
+					case "mm": return val * g.mm_in_pt * px_in_pt;
+					case "cm": return val * g.cm_in_pt * px_in_pt;
+				}
+			}
+			return parseFloat(len);	// Number
+		},
+
+		// pathVmlRegExp: RegExp
+		//		a constant regular expression used to split a SVG/VML path into primitive components
+		// tags:
+		//		private
+		pathVmlRegExp: /([A-Za-z]+)|(\d+(\.\d+)?)|(\.\d+)|(-\d+(\.\d+)?)|(-\.\d+)/g,
+
+		// pathVmlRegExp: RegExp
+		//		a constant regular expression used to split a SVG/VML path into primitive components
+		// tags:
+		//		private
+		pathSvgRegExp: /([A-DF-Za-df-z])|([-+]?\d*[.]?\d+(?:[eE][-+]?\d+)?)/g,
+
+		equalSources: function(a, b){
+			// summary:
+			//		compares event sources, returns true if they are equal
+			// a: Object
+			//		first event source
+			// b: Object
+			//		event source to compare against a
+			// returns: Boolean
+			//      true, if objects are truthy and the same
+			return a && b && a === b;
+		},
+
+		switchTo: function(/*String|Object*/ renderer){
+			// summary:
+			//		switch the graphics implementation to the specified renderer.
+			// renderer:
+			//		Either the string name of a renderer (eg. 'canvas', 'svg, ...) or the renderer
+			//		object to switch to.
+			var ns = typeof renderer == "string" ? g[renderer] : renderer;
+			if(ns){
+				// If more options are added, update the docblock at the end of shape.js!
+				arr.forEach(["Group", "Rect", "Ellipse", "Circle", "Line",
+						"Polyline", "Image", "Text", "Path", "TextPath",
+						"Surface", "createSurface", "fixTarget"], function(name){
+					g[name] = ns[name];
+				});
+				if(typeof renderer == "string"){
+					g.renderer = renderer;
+				}else{
+					arr.some(["svg","vml","canvas","canvasWithEvents","silverlight"], function(r){
+						return (g.renderer = g[r] && g[r].Surface === g.Surface ? r : null);
+					});
+				}
+			}
+		}
+	});
+
+	/*=====
+		g.createSurface = function(parentNode, width, height){
+			// summary:
+			//		creates a surface
+			// parentNode: Node
+			//		a parent node
+			// width: String|Number
+			//		width of surface, e.g., "100px" or 100
+			// height: String|Number
+			//		height of surface, e.g., "100px" or 100
+			// returns: dojox/gfx.Surface
+			//     newly created surface
+		};
+		g.fixTarget = function(){
+			// tags:
+			//		private
+		};
+	=====*/
+
+	return g; // defaults object api
+});
+},
+'dojox/gfx/renderer':function(){
+define(["./_base","dojo/_base/lang", "dojo/_base/sniff", "dojo/_base/window", "dojo/_base/config"],
+  function(g, lang, has, win, config){
+  //>> noBuildResolver
+	var currentRenderer = null;
+
+	has.add("vml", function(global, document, element){
+		element.innerHTML = "<v:shape adj=\"1\"/>";
+		var supported = ("adj" in element.firstChild);
+		element.innerHTML = "";
+		return supported;
+	});
+
+	return {
+		// summary:
+		//		This module is an AMD loader plugin that loads the appropriate graphics renderer
+		//		implementation based on detected environment and current configuration settings.
+
+		load: function(id, require, load){
+			// tags:
+			//      private
+			if(currentRenderer && id != "force"){
+				load(currentRenderer);
+				return;
+			}
+			var renderer = config.forceGfxRenderer,
+				renderers = !renderer && (lang.isString(config.gfxRenderer) ?
+					config.gfxRenderer : "svg,vml,canvas,silverlight").split(","),
+				silverlightObject, silverlightFlag;
+
+			while(!renderer && renderers.length){
+				switch(renderers.shift()){
+					case "svg":
+						// the next test is from https://github.com/phiggins42/has.js
+						if("SVGAngle" in win.global){
+							renderer = "svg";
+						}
+						break;
+					case "vml":
+						if(has("vml")){
+							renderer = "vml";
+						}
+						break;
+					case "silverlight":
+						try{
+							if(has("ie")){
+								silverlightObject = new ActiveXObject("AgControl.AgControl");
+								if(silverlightObject && silverlightObject.IsVersionSupported("1.0")){
+									silverlightFlag = true;
+								}
+							}else{
+								if(navigator.plugins["Silverlight Plug-In"]){
+									silverlightFlag = true;
+								}
+							}
+						}catch(e){
+							silverlightFlag = false;
+						}finally{
+							silverlightObject = null;
+						}
+						if(silverlightFlag){
+							renderer = "silverlight";
+						}
+						break;
+					case "canvas":
+						if(win.global.CanvasRenderingContext2D){
+							renderer = "canvas";
+						}
+						break;
+				}
+			}
+
+			if (renderer === 'canvas' && config.canvasEvents !== false) {
+				renderer = "canvasWithEvents";
+			}
+
+			if(config.isDebug){
+				console.log("gfx renderer = " + renderer);
+			}
+
+			function loadRenderer(){
+				require(["dojox/gfx/" + renderer], function(module){
+					g.renderer = renderer;
+					// memorize the renderer module
+					currentRenderer = module;
+					// now load it
+					load(module);
+				});
+			}
+			if(renderer == "svg" && typeof window.svgweb != "undefined"){
+				window.svgweb.addOnLoad(loadRenderer);
+			}else{
+				loadRenderer();
+			}
+		}
+	};
+});
+},
+'dojox/gfx':function(){
+define(["dojo/_base/lang", "./gfx/_base", "./gfx/renderer!"],
+  function(lang, gfxBase, renderer){
+	// module:
+	//		dojox/gfx
+	// summary:
+	//		This the root of the Dojo Graphics package
+	gfxBase.switchTo(renderer);
+	return gfxBase;
+});
+},
+'dojox/gfx/matrix':function(){
+define(["./_base","dojo/_base/lang"],
+  function(g, lang){
+	var m = g.matrix = {};
+
+	// candidates for dojox.math:
+	var _degToRadCache = {};
+	m._degToRad = function(degree){
+		return _degToRadCache[degree] || (_degToRadCache[degree] = (Math.PI * degree / 180));
+	};
+	m._radToDeg = function(radian){ return radian / Math.PI * 180; };
+
+	m.Matrix2D = function(arg){
+		// summary:
+		//		a 2D matrix object
+		// description:
+		//		Normalizes a 2D matrix-like object. If arrays is passed,
+		//		all objects of the array are normalized and multiplied sequentially.
+		// arg: Object
+		//		a 2D matrix-like object, a number, or an array of such objects
+		if(arg){
+			if(typeof arg == "number"){
+				this.xx = this.yy = arg;
+			}else if(arg instanceof Array){
+				if(arg.length > 0){
+					var matrix = m.normalize(arg[0]);
+					// combine matrices
+					for(var i = 1; i < arg.length; ++i){
+						var l = matrix, r = m.normalize(arg[i]);
+						matrix = new m.Matrix2D();
+						matrix.xx = l.xx * r.xx + l.xy * r.yx;
+						matrix.xy = l.xx * r.xy + l.xy * r.yy;
+						matrix.yx = l.yx * r.xx + l.yy * r.yx;
+						matrix.yy = l.yx * r.xy + l.yy * r.yy;
+						matrix.dx = l.xx * r.dx + l.xy * r.dy + l.dx;
+						matrix.dy = l.yx * r.dx + l.yy * r.dy + l.dy;
+					}
+					lang.mixin(this, matrix);
+				}
+			}else{
+				lang.mixin(this, arg);
+			}
+		}
+	};
+
+	// the default (identity) matrix, which is used to fill in missing values
+	lang.extend(m.Matrix2D, {xx: 1, xy: 0, yx: 0, yy: 1, dx: 0, dy: 0});
+
+	lang.mixin(m, {
+		// summary:
+		//		class constants, and methods of dojox/gfx/matrix
+
+		// matrix constants
+
+		// identity: dojox/gfx/matrix.Matrix2D
+		//		an identity matrix constant: identity * (x, y) == (x, y)
+		identity: new m.Matrix2D(),
+
+		// flipX: dojox/gfx/matrix.Matrix2D
+		//		a matrix, which reflects points at x = 0 line: flipX * (x, y) == (-x, y)
+		flipX:    new m.Matrix2D({xx: -1}),
+
+		// flipY: dojox/gfx/matrix.Matrix2D
+		//		a matrix, which reflects points at y = 0 line: flipY * (x, y) == (x, -y)
+		flipY:    new m.Matrix2D({yy: -1}),
+
+		// flipXY: dojox/gfx/matrix.Matrix2D
+		//		a matrix, which reflects points at the origin of coordinates: flipXY * (x, y) == (-x, -y)
+		flipXY:   new m.Matrix2D({xx: -1, yy: -1}),
+
+		// matrix creators
+
+		translate: function(a, b){
+			// summary:
+			//		forms a translation matrix
+			// description:
+			//		The resulting matrix is used to translate (move) points by specified offsets.
+			// a: Number|dojox/gfx.Point
+			//		an x coordinate value, or a point-like object, which specifies offsets for both dimensions
+			// b: Number?
+			//		a y coordinate value
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 1){
+				return new m.Matrix2D({dx: a, dy: b}); // dojox/gfx/matrix.Matrix2D
+			}
+			// branch
+			return new m.Matrix2D({dx: a.x, dy: a.y}); // dojox/gfx/matrix.Matrix2D
+		},
+		scale: function(a, b){
+			// summary:
+			//		forms a scaling matrix
+			// description:
+			//		The resulting matrix is used to scale (magnify) points by specified offsets.
+			// a: Number|dojox/gfx.Point
+			//		a scaling factor used for the x coordinate, or
+			//		a uniform scaling factor used for the both coordinates, or
+			//		a point-like object, which specifies scale factors for both dimensions
+			// b: Number?
+			//		a scaling factor used for the y coordinate
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 1){
+				return new m.Matrix2D({xx: a, yy: b}); // dojox/gfx/matrix.Matrix2D
+			}
+			if(typeof a == "number"){
+				return new m.Matrix2D({xx: a, yy: a}); // dojox/gfx/matrix.Matrix2D
+			}
+			return new m.Matrix2D({xx: a.x, yy: a.y}); // dojox/gfx/matrix.Matrix2D
+		},
+		rotate: function(angle){
+			// summary:
+			//		forms a rotating matrix
+			// description:
+			//		The resulting matrix is used to rotate points
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		an angle of rotation in radians (>0 for CW)
+			// returns: dojox/gfx/matrix.Matrix2D
+			var c = Math.cos(angle);
+			var s = Math.sin(angle);
+			return new m.Matrix2D({xx: c, xy: -s, yx: s, yy: c}); // dojox/gfx/matrix.Matrix2D
+		},
+		rotateg: function(degree){
+			// summary:
+			//		forms a rotating matrix
+			// description:
+			//		The resulting matrix is used to rotate points
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		See dojox/gfx/matrix.rotate() for comparison.
+			// degree: Number
+			//		an angle of rotation in degrees (>0 for CW)
+			// returns: dojox/gfx/matrix.Matrix2D
+			return m.rotate(m._degToRad(degree)); // dojox/gfx/matrix.Matrix2D
+		},
+		skewX: function(angle) {
+			// summary:
+			//		forms an x skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the x dimension
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		a skewing angle in radians
+			// returns: dojox/gfx/matrix.Matrix2D
+			return new m.Matrix2D({xy: Math.tan(angle)}); // dojox/gfx/matrix.Matrix2D
+		},
+		skewXg: function(degree){
+			// summary:
+			//		forms an x skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the x dimension
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		See dojox/gfx/matrix.skewX() for comparison.
+			// degree: Number
+			//		a skewing angle in degrees
+			// returns: dojox/gfx/matrix.Matrix2D
+			return m.skewX(m._degToRad(degree)); // dojox/gfx/matrix.Matrix2D
+		},
+		skewY: function(angle){
+			// summary:
+			//		forms a y skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the y dimension
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		a skewing angle in radians
+			// returns: dojox/gfx/matrix.Matrix2D
+			return new m.Matrix2D({yx: Math.tan(angle)}); // dojox/gfx/matrix.Matrix2D
+		},
+		skewYg: function(degree){
+			// summary:
+			//		forms a y skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the y dimension
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		See dojox/gfx/matrix.skewY() for comparison.
+			// degree: Number
+			//		a skewing angle in degrees
+			// returns: dojox/gfx/matrix.Matrix2D
+			return m.skewY(m._degToRad(degree)); // dojox/gfx/matrix.Matrix2D
+		},
+		reflect: function(a, b){
+			// summary:
+			//		forms a reflection matrix
+			// description:
+			//		The resulting matrix is used to reflect points around a vector,
+			//		which goes through the origin.
+			// a: dojox/gfx.Point|Number
+			//		a point-like object, which specifies a vector of reflection, or an X value
+			// b: Number?
+			//		a Y value
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length == 1){
+				b = a.y;
+				a = a.x;
+			}
+			// make a unit vector
+			var a2 = a * a, b2 = b * b, n2 = a2 + b2, xy = 2 * a * b / n2;
+			return new m.Matrix2D({xx: 2 * a2 / n2 - 1, xy: xy, yx: xy, yy: 2 * b2 / n2 - 1}); // dojox/gfx/matrix.Matrix2D
+		},
+		project: function(a, b){
+			// summary:
+			//		forms an orthogonal projection matrix
+			// description:
+			//		The resulting matrix is used to project points orthogonally on a vector,
+			//		which goes through the origin.
+			// a: dojox/gfx.Point|Number
+			//		a point-like object, which specifies a vector of projection, or
+			//		an x coordinate value
+			// b: Number?
+			//		a y coordinate value
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length == 1){
+				b = a.y;
+				a = a.x;
+			}
+			// make a unit vector
+			var a2 = a * a, b2 = b * b, n2 = a2 + b2, xy = a * b / n2;
+			return new m.Matrix2D({xx: a2 / n2, xy: xy, yx: xy, yy: b2 / n2}); // dojox/gfx/matrix.Matrix2D
+		},
+
+		// ensure matrix 2D conformance
+		normalize: function(matrix){
+			// summary:
+			//		converts an object to a matrix, if necessary
+			// description:
+			//		Converts any 2D matrix-like object or an array of
+			//		such objects to a valid dojox/gfx/matrix.Matrix2D object.
+			// matrix: Object
+			//		an object, which is converted to a matrix, if necessary
+			// returns: dojox/gfx/matrix.Matrix2D
+			return (matrix instanceof m.Matrix2D) ? matrix : new m.Matrix2D(matrix); // dojox/gfx/matrix.Matrix2D
+		},
+
+		// common operations
+
+		isIdentity: function(matrix){
+			// summary:
+			//		returns whether the specified matrix is the identity.
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix object to be tested
+			// returns: Boolean
+			return matrix.xx == 1 && matrix.xy == 0 && matrix.yx == 0 && matrix.yy == 1 && matrix.dx == 0 && matrix.dy == 0; // Boolean
+		},
+		clone: function(matrix){
+			// summary:
+			//		creates a copy of a 2D matrix
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix-like object to be cloned
+			// returns: dojox/gfx/matrix.Matrix2D
+			var obj = new m.Matrix2D();
+			for(var i in matrix){
+				if(typeof(matrix[i]) == "number" && typeof(obj[i]) == "number" && obj[i] != matrix[i]) obj[i] = matrix[i];
+			}
+			return obj; // dojox/gfx/matrix.Matrix2D
+		},
+		invert: function(matrix){
+			// summary:
+			//		inverts a 2D matrix
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix-like object to be inverted
+			// returns: dojox/gfx/matrix.Matrix2D
+			var M = m.normalize(matrix),
+				D = M.xx * M.yy - M.xy * M.yx;
+				M = new m.Matrix2D({
+					xx: M.yy/D, xy: -M.xy/D,
+					yx: -M.yx/D, yy: M.xx/D,
+					dx: (M.xy * M.dy - M.yy * M.dx) / D,
+					dy: (M.yx * M.dx - M.xx * M.dy) / D
+				});
+			return M; // dojox/gfx/matrix.Matrix2D
+		},
+		_multiplyPoint: function(matrix, x, y){
+			// summary:
+			//		applies a matrix to a point
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix object to be applied
+			// x: Number
+			//		an x coordinate of a point
+			// y: Number
+			//		a y coordinate of a point
+			// returns: dojox/gfx.Point
+			return {x: matrix.xx * x + matrix.xy * y + matrix.dx, y: matrix.yx * x + matrix.yy * y + matrix.dy}; // dojox/gfx.Point
+		},
+		multiplyPoint: function(matrix, /* Number||Point */ a, /* Number? */ b){
+			// summary:
+			//		applies a matrix to a point
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix object to be applied
+			// a: Number|dojox/gfx.Point
+			//		an x coordinate of a point, or a point
+			// b: Number?
+			//		a y coordinate of a point
+			// returns: dojox/gfx.Point
+			var M = m.normalize(matrix);
+			if(typeof a == "number" && typeof b == "number"){
+				return m._multiplyPoint(M, a, b); // dojox/gfx.Point
+			}
+			return m._multiplyPoint(M, a.x, a.y); // dojox/gfx.Point
+		},
+		multiplyRectangle: function(matrix, /*Rectangle*/ rect){
+			// summary:
+			//		Applies a matrix to a rectangle.
+			// description:
+			//		The method applies the transformation on all corners of the
+			//		rectangle and returns the smallest rectangle enclosing the 4 transformed
+			//		points.
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix object to be applied.
+			// rect: Rectangle
+			//		the rectangle to transform.
+			// returns: dojox/gfx.Rectangle
+			var M = m.normalize(matrix);
+			rect = rect || {x:0, y:0, width:0, height:0};
+			if(m.isIdentity(M))
+				return {x: rect.x, y: rect.y, width: rect.width, height: rect.height}; // dojo/gfx.Rectangle
+			var p0 = m.multiplyPoint(M, rect.x, rect.y),
+				p1 = m.multiplyPoint(M, rect.x, rect.y + rect.height),
+				p2 = m.multiplyPoint(M, rect.x + rect.width, rect.y),
+				p3 = m.multiplyPoint(M, rect.x + rect.width, rect.y + rect.height),
+				minx = Math.min(p0.x, p1.x, p2.x, p3.x),
+				miny = Math.min(p0.y, p1.y, p2.y, p3.y),
+				maxx = Math.max(p0.x, p1.x, p2.x, p3.x),
+				maxy = Math.max(p0.y, p1.y, p2.y, p3.y);
+			return{ // dojo/gfx.Rectangle
+				x: minx,
+				y: miny,
+				width: maxx - minx,
+				height: maxy - miny
+			};
+		},
+		multiply: function(matrix){
+			// summary:
+			//		combines matrices by multiplying them sequentially in the given order
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix-like object,
+			//		all subsequent arguments are matrix-like objects too
+			var M = m.normalize(matrix);
+			// combine matrices
+			for(var i = 1; i < arguments.length; ++i){
+				var l = M, r = m.normalize(arguments[i]);
+				M = new m.Matrix2D();
+				M.xx = l.xx * r.xx + l.xy * r.yx;
+				M.xy = l.xx * r.xy + l.xy * r.yy;
+				M.yx = l.yx * r.xx + l.yy * r.yx;
+				M.yy = l.yx * r.xy + l.yy * r.yy;
+				M.dx = l.xx * r.dx + l.xy * r.dy + l.dx;
+				M.dy = l.yx * r.dx + l.yy * r.dy + l.dy;
+			}
+			return M; // dojox/gfx/matrix.Matrix2D
+		},
+
+		// high level operations
+
+		_sandwich: function(matrix, x, y){
+			// summary:
+			//		applies a matrix at a central point
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix-like object, which is applied at a central point
+			// x: Number
+			//		an x component of the central point
+			// y: Number
+			//		a y component of the central point
+			return m.multiply(m.translate(x, y), matrix, m.translate(-x, -y)); // dojox/gfx/matrix.Matrix2D
+		},
+		scaleAt: function(a, b, c, d){
+			// summary:
+			//		scales a picture using a specified point as a center of scaling
+			// description:
+			//		Compare with dojox/gfx/matrix.scale().
+			// a: Number
+			//		a scaling factor used for the x coordinate, or a uniform scaling factor used for both coordinates
+			// b: Number?
+			//		a scaling factor used for the y coordinate
+			// c: Number|Point
+			//		an x component of a central point, or a central point
+			// d: Number
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			switch(arguments.length){
+				case 4:
+					// a and b are scale factor components, c and d are components of a point
+					return m._sandwich(m.scale(a, b), c, d); // dojox/gfx/matrix.Matrix2D
+				case 3:
+					if(typeof c == "number"){
+						return m._sandwich(m.scale(a), b, c); // dojox/gfx/matrix.Matrix2D
+					}
+					return m._sandwich(m.scale(a, b), c.x, c.y); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.scale(a), b.x, b.y); // dojox/gfx/matrix.Matrix2D
+		},
+		rotateAt: function(angle, a, b){
+			// summary:
+			//		rotates a picture using a specified point as a center of rotation
+			// description:
+			//		Compare with dojox/gfx/matrix.rotate().
+			// angle: Number
+			//		an angle of rotation in radians (>0 for CW)
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.rotate(angle), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.rotate(angle), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		},
+		rotategAt: function(degree, a, b){
+			// summary:
+			//		rotates a picture using a specified point as a center of rotation
+			// description:
+			//		Compare with dojox/gfx/matrix.rotateg().
+			// degree: Number
+			//		an angle of rotation in degrees (>0 for CW)
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.rotateg(degree), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.rotateg(degree), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		},
+		skewXAt: function(angle, a, b){
+			// summary:
+			//		skews a picture along the x axis using a specified point as a center of skewing
+			// description:
+			//		Compare with dojox/gfx/matrix.skewX().
+			// angle: Number
+			//		a skewing angle in radians
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.skewX(angle), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.skewX(angle), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		},
+		skewXgAt: function(degree, a, b){
+			// summary:
+			//		skews a picture along the x axis using a specified point as a center of skewing
+			// description:
+			//		Compare with dojox/gfx/matrix.skewXg().
+			// degree: Number
+			//		a skewing angle in degrees
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.skewXg(degree), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.skewXg(degree), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		},
+		skewYAt: function(angle, a, b){
+			// summary:
+			//		skews a picture along the y axis using a specified point as a center of skewing
+			// description:
+			//		Compare with dojox/gfx/matrix.skewY().
+			// angle: Number
+			//		a skewing angle in radians
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.skewY(angle), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.skewY(angle), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		},
+		skewYgAt: function(/* Number */ degree, /* Number||Point */ a, /* Number? */ b){
+			// summary:
+			//		skews a picture along the y axis using a specified point as a center of skewing
+			// description:
+			//		Compare with dojox/gfx/matrix.skewYg().
+			// degree: Number
+			//		a skewing angle in degrees
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: dojox/gfx/matrix.Matrix2D
+			if(arguments.length > 2){
+				return m._sandwich(m.skewYg(degree), a, b); // dojox/gfx/matrix.Matrix2D
+			}
+			return m._sandwich(m.skewYg(degree), a.x, a.y); // dojox/gfx/matrix.Matrix2D
+		}
+
+		//TODO: rect-to-rect mapping, scale-to-fit (isotropic and anisotropic versions)
+
+	});
+	// propagate Matrix2D up
+	g.Matrix2D = m.Matrix2D;
+
+	return m;
+});
+},
+'dojox/gfx/shape':function(){
+define(["./_base", "dojo/_base/lang", "dojo/_base/declare", "dojo/_base/kernel", "dojo/_base/sniff",
+	"dojo/on", "dojo/_base/array", "dojo/dom-construct", "dojo/_base/Color", "./matrix" ],
+	function(g, lang, declare, kernel, has, on, arr, domConstruct, Color, matrixLib){
+
+	var shape = g.shape = {
+		// summary:
+		//		This module contains the core graphics Shape API.
+		//		Different graphics renderer implementation modules (svg, canvas, vml, silverlight, etc.) extend this
+		//		basic api to provide renderer-specific implementations for each shape.
+	};
+
+	shape.Shape = declare("dojox.gfx.shape.Shape", null, {
+		// summary:
+		//		a Shape object, which knows how to apply
+		//		graphical attributes and transformations
+
+		constructor: function(){
+			// rawNode: Node
+			//		underlying graphics-renderer-specific implementation object (if applicable)
+			this.rawNode = null;
+
+			// shape: Object
+			//		an abstract shape object
+			//		(see dojox/gfx.defaultPath,
+			//		dojox/gfx.defaultPolyline,
+			//		dojox/gfx.defaultRect,
+			//		dojox/gfx.defaultEllipse,
+			//		dojox/gfx.defaultCircle,
+			//		dojox/gfx.defaultLine,
+			//		or dojox/gfx.defaultImage)
+			this.shape = null;
+
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a transformation matrix
+			this.matrix = null;
+
+			// fillStyle: dojox/gfx.Fill
+			//		a fill object
+			//		(see dojox/gfx.defaultLinearGradient,
+			//		dojox/gfx.defaultRadialGradient,
+			//		dojox/gfx.defaultPattern,
+			//		or dojo/Color)
+			this.fillStyle = null;
+
+			// strokeStyle: dojox/gfx.Stroke
+			//		a stroke object
+			//		(see dojox/gfx.defaultStroke)
+			this.strokeStyle = null;
+
+			// bbox: dojox/gfx.Rectangle
+			//		a bounding box of this shape
+			//		(see dojox/gfx.defaultRect)
+			this.bbox = null;
+
+			// virtual group structure
+
+			// parent: Object
+			//		a parent or null
+			//		(see dojox/gfx/shape.Surface,
+			//		or dojox/gfx.Group)
+			this.parent = null;
+
+			// parentMatrix: dojox/gfx/matrix.Matrix2D
+			//		a transformation matrix inherited from the parent
+			this.parentMatrix = null;
+
+			if(has("gfxRegistry")){
+				var uid = shape.register(this);
+				this.getUID = function(){
+					return uid;
+				}
+			}
+		},
+
+		destroy: function(){
+			// summary:
+			//		Releases all internal resources owned by this shape. Once this method has been called,
+			//		the instance is considered destroyed and should not be used anymore.
+			if(has("gfxRegistry")){
+				shape.dispose(this);
+			}
+			if(this.rawNode && "__gfxObject__" in this.rawNode){
+				this.rawNode.__gfxObject__ = null;
+			}
+			this.rawNode = null;
+		},
+
+		// trivial getters
+
+		getNode: function(){
+			// summary:
+			//		Different graphics rendering subsystems implement shapes in different ways.  This
+			//		method provides access to the underlying graphics subsystem object.  Clients calling this
+			//		method and using the return value must be careful not to try sharing or using the underlying node
+			//		in a general way across renderer implementation.
+			//		Returns the underlying graphics Node, or null if no underlying graphics node is used by this shape.
+			return this.rawNode; // Node
+		},
+		getShape: function(){
+			// summary:
+			//		returns the current Shape object or null
+			//		(see dojox/gfx.defaultPath,
+			//		dojox/gfx.defaultPolyline,
+			//		dojox/gfx.defaultRect,
+			//		dojox/gfx.defaultEllipse,
+			//		dojox/gfx.defaultCircle,
+			//		dojox/gfx.defaultLine,
+			//		or dojox/gfx.defaultImage)
+			return this.shape; // Object
+		},
+		getTransform: function(){
+			// summary:
+			//		Returns the current transformation matrix applied to this Shape or null
+			return this.matrix;	// dojox/gfx/matrix.Matrix2D
+		},
+		getFill: function(){
+			// summary:
+			//		Returns the current fill object or null
+			//		(see dojox/gfx.defaultLinearGradient,
+			//		dojox/gfx.defaultRadialGradient,
+			//		dojox/gfx.defaultPattern,
+			//		or dojo/Color)
+			return this.fillStyle;	// Object
+		},
+		getStroke: function(){
+			// summary:
+			//		Returns the current stroke object or null
+			//		(see dojox/gfx.defaultStroke)
+			return this.strokeStyle;	// Object
+		},
+		getParent: function(){
+			// summary:
+			//		Returns the parent Shape, Group or null if this Shape is unparented.
+			//		(see dojox/gfx/shape.Surface,
+			//		or dojox/gfx.Group)
+			return this.parent;	// Object
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		Returns the bounding box Rectangle for this shape or null if a BoundingBox cannot be
+			//		calculated for the shape on the current renderer or for shapes with no geometric area (points).
+			//		A bounding box is a rectangular geometric region
+			//		defining the X and Y extent of the shape.
+			//		(see dojox/gfx.defaultRect)
+			//		Note that this method returns a direct reference to the attribute of this instance. Therefore you should
+			//		not modify its value directly but clone it instead.
+			return this.bbox;	// dojox/gfx.Rectangle
+		},
+		getTransformedBoundingBox: function(){
+			// summary:
+			//		returns an array of four points or null
+			//		four points represent four corners of the untransformed bounding box
+			var b = this.getBoundingBox();
+			if(!b){
+				return null;	// null
+			}
+			var m = this._getRealMatrix(),
+				gm = matrixLib;
+			return [	// Array
+					gm.multiplyPoint(m, b.x, b.y),
+					gm.multiplyPoint(m, b.x + b.width, b.y),
+					gm.multiplyPoint(m, b.x + b.width, b.y + b.height),
+					gm.multiplyPoint(m, b.x, b.y + b.height)
+				];
+		},
+		getEventSource: function(){
+			// summary:
+			//		returns a Node, which is used as
+			//		a source of events for this shape
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			return this.rawNode;	// Node
+		},
+
+		// empty settings
+
+		setClip: function(clip){
+			// summary:
+			//		sets the clipping area of this shape.
+			// description:
+			//		The clipping area defines the shape area that will be effectively visible. Everything that
+			//		would be drawn outside of the clipping area will not be rendered.
+			//		The possible clipping area types are rectangle, ellipse, polyline and path, but all are not
+			//		supported by all the renderers. vml only supports rectangle clipping, while the gfx silverlight renderer does not
+			//		support path clipping.
+			//		The clip parameter defines the clipping area geometry, and should be an object with the following properties:
+			//
+			//		- {x:Number, y:Number, width:Number, height:Number} for rectangular clip
+			//		- {cx:Number, cy:Number, rx:Number, ry:Number} for ellipse clip
+			//		- {points:Array} for polyline clip
+			//		- {d:String} for a path clip.
+			//
+			//		The clip geometry coordinates are expressed in the coordinate system used to draw the shape. In other
+			//		words, the clipping area is defined in the shape parent coordinate system and the shape transform is automatically applied.
+			// example:
+			//		The following example shows how to clip a gfx image with all the possible clip geometry: a rectangle,
+			//		an ellipse, a circle (using the ellipse geometry), a polyline and a path:
+			//
+			//	|	surface.createImage({src:img, width:200,height:200}).setClip({x:10,y:10,width:50,height:50});
+			//	|	surface.createImage({src:img, x:100,y:50,width:200,height:200}).setClip({cx:200,cy:100,rx:20,ry:30});
+			//	|	surface.createImage({src:img, x:0,y:350,width:200,height:200}).setClip({cx:100,cy:425,rx:60,ry:60});
+			//	|	surface.createImage({src:img, x:300,y:0,width:200,height:200}).setClip({points:[350,0,450,50,380,130,300,110]});
+			//	|	surface.createImage({src:img, x:300,y:350,width:200,height:200}).setClip({d:"M 350,350 C314,414 317,557 373,450.0000 z"});
+
+			// clip: Object
+			//		an object that defines the clipping geometry, or null to remove clip.
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			this.clip = clip;
+		},
+
+		getClip: function(){
+			return this.clip;
+		},
+
+		setShape: function(shape){
+			// summary:
+			//		sets a shape object
+			//		(the default implementation simply ignores it)
+			// shape: Object
+			//		a shape object
+			//		(see dojox/gfx.defaultPath,
+			//		dojox/gfx.defaultPolyline,
+			//		dojox/gfx.defaultRect,
+			//		dojox/gfx.defaultEllipse,
+			//		dojox/gfx.defaultCircle,
+			//		dojox/gfx.defaultLine,
+			//		or dojox/gfx.defaultImage)
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			this.shape = g.makeParameters(this.shape, shape);
+			this.bbox = null;
+			return this;	// self
+		},
+		setFill: function(fill){
+			// summary:
+			//		sets a fill object
+			//		(the default implementation simply ignores it)
+			// fill: Object
+			//		a fill object
+			//		(see dojox/gfx.defaultLinearGradient,
+			//		dojox/gfx.defaultRadialGradient,
+			//		dojox/gfx.defaultPattern,
+			//		or dojo/_base/Color)
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			if(!fill){
+				// don't fill
+				this.fillStyle = null;
+				return this;	// self
+			}
+			var f = null;
+			if(typeof(fill) == "object" && "type" in fill){
+				// gradient or pattern
+				switch(fill.type){
+					case "linear":
+						f = g.makeParameters(g.defaultLinearGradient, fill);
+						break;
+					case "radial":
+						f = g.makeParameters(g.defaultRadialGradient, fill);
+						break;
+					case "pattern":
+						f = g.makeParameters(g.defaultPattern, fill);
+						break;
+				}
+			}else{
+				// color object
+				f = g.normalizeColor(fill);
+			}
+			this.fillStyle = f;
+			return this;	// self
+		},
+		setStroke: function(stroke){
+			// summary:
+			//		sets a stroke object
+			//		(the default implementation simply ignores it)
+			// stroke: Object
+			//		a stroke object
+			//		(see dojox/gfx.defaultStroke)
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			if(!stroke){
+				// don't stroke
+				this.strokeStyle = null;
+				return this;	// self
+			}
+			// normalize the stroke
+			if(typeof stroke == "string" || lang.isArray(stroke) || stroke instanceof Color){
+				stroke = {color: stroke};
+			}
+			var s = this.strokeStyle = g.makeParameters(g.defaultStroke, stroke);
+			s.color = g.normalizeColor(s.color);
+			return this;	// self
+		},
+		setTransform: function(matrix){
+			// summary:
+			//		sets a transformation matrix
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a matrix or a matrix-like object
+			//		(see an argument of dojox/gfx/matrix.Matrix2D
+			//		constructor for a list of acceptable arguments)
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			this.matrix = matrixLib.clone(matrix ? matrixLib.normalize(matrix) : matrixLib.identity);
+			return this._applyTransform();	// self
+		},
+
+		_applyTransform: function(){
+			// summary:
+			//		physically sets a matrix
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			return this;	// self
+		},
+
+		// z-index
+
+		moveToFront: function(){
+			// summary:
+			//		moves a shape to front of its parent's list of shapes
+			var p = this.getParent();
+			if(p){
+				p._moveChildToFront(this);
+				this._moveToFront();	// execute renderer-specific action
+			}
+			return this;	// self
+		},
+		moveToBack: function(){
+			// summary:
+			//		moves a shape to back of its parent's list of shapes
+			var p = this.getParent();
+			if(p){
+				p._moveChildToBack(this);
+				this._moveToBack();	// execute renderer-specific action
+			}
+			return this;
+		},
+		_moveToFront: function(){
+			// summary:
+			//		renderer-specific hook, see dojox/gfx/shape.Shape.moveToFront()
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+		},
+		_moveToBack: function(){
+			// summary:
+			//		renderer-specific hook, see dojox/gfx/shape.Shape.moveToFront()
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+		},
+
+		// apply left & right transformation
+
+		applyRightTransform: function(matrix){
+			// summary:
+			//		multiplies the existing matrix with an argument on right side
+			//		(this.matrix * matrix)
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a matrix or a matrix-like object
+			//		(see an argument of dojox/gfx/matrix.Matrix2D
+			//		constructor for a list of acceptable arguments)
+			return matrix ? this.setTransform([this.matrix, matrix]) : this;	// self
+		},
+		applyLeftTransform: function(matrix){
+			// summary:
+			//		multiplies the existing matrix with an argument on left side
+			//		(matrix * this.matrix)
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a matrix or a matrix-like object
+			//		(see an argument of dojox/gfx/matrix.Matrix2D
+			//		constructor for a list of acceptable arguments)
+			return matrix ? this.setTransform([matrix, this.matrix]) : this;	// self
+		},
+		applyTransform: function(matrix){
+			// summary:
+			//		a shortcut for dojox/gfx/shape.Shape.applyRightTransform
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a matrix or a matrix-like object
+			//		(see an argument of dojox/gfx/matrix.Matrix2D
+			//		constructor for a list of acceptable arguments)
+			return matrix ? this.setTransform([this.matrix, matrix]) : this;	// self
+		},
+
+		// virtual group methods
+
+		removeShape: function(silently){
+			// summary:
+			//		removes the shape from its parent's list of shapes
+			// silently: Boolean
+			//		if true, do not redraw a picture yet
+			if(this.parent){
+				this.parent.remove(this, silently);
+			}
+			return this;	// self
+		},
+		_setParent: function(parent, matrix){
+			// summary:
+			//		sets a parent
+			// parent: Object
+			//		a parent or null
+			//		(see dojox/gfx/shape.Surface,
+			//		or dojox/gfx.Group)
+			// matrix: dojox/gfx/matrix.Matrix2D
+			//		a 2D matrix or a matrix-like object
+			this.parent = parent;
+			return this._updateParentMatrix(matrix);	// self
+		},
+		_updateParentMatrix: function(matrix){
+			// summary:
+			//		updates the parent matrix with new matrix
+			// matrix: dojox/gfx/Matrix2D
+			//		a 2D matrix or a matrix-like object
+			this.parentMatrix = matrix ? matrixLib.clone(matrix) : null;
+			return this._applyTransform();	// self
+		},
+		_getRealMatrix: function(){
+			// summary:
+			//		returns the cumulative ('real') transformation matrix
+			//		by combining the shape's matrix with its parent's matrix
+			var m = this.matrix;
+			var p = this.parent;
+			while(p){
+				if(p.matrix){
+					m = matrixLib.multiply(p.matrix, m);
+				}
+				p = p.parent;
+			}
+			return m;	// dojox/gfx/matrix.Matrix2D
+		}
+	});
+
+	shape._eventsProcessing = {
+		on: function(type, listener){
+			//	summary:
+			//		Connects an event to this shape.
+
+			return on(this.getEventSource(), type, shape.fixCallback(this, g.fixTarget, listener));
+		},
+
+		connect: function(name, object, method){
+			// summary:
+			//		connects a handler to an event on this shape
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+			// redirect to fixCallback to normalize events and add the gfxTarget to the event. The latter
+			// is done by dojox/gfx.fixTarget which is defined by each renderer
+			if(name.substring(0, 2) == "on"){
+				name = name.substring(2);
+			}
+			return this.on(name, method ? lang.hitch(object, method) : object);
+		},
+
+		disconnect: function(token){
+			// summary:
+			//		connects a handler by token from an event on this shape
+
+			// COULD BE RE-IMPLEMENTED BY THE RENDERER!
+
+			return token.remove();
+		}
+	};
+
+	shape.fixCallback = function(gfxElement, fixFunction, scope, method){
+		// summary:
+		//		Wraps the callback to allow for tests and event normalization
+		//		before it gets invoked. This is where 'fixTarget' is invoked.
+		// tags:
+		//      private
+		// gfxElement: Object
+		//		The GFX object that triggers the action (ex.:
+		//		dojox/gfx.Surface and dojox/gfx/shape.Shape). A new event property
+		//		'gfxTarget' is added to the event to reference this object.
+		//		for easy manipulation of GFX objects by the event handlers.
+		// fixFunction: Function
+		//		The function that implements the logic to set the 'gfxTarget'
+		//		property to the event. It should be 'dojox/gfx.fixTarget' for
+		//		most of the cases
+		// scope: Object
+		//		Optional. The scope to be used when invoking 'method'. If
+		//		omitted, a global scope is used.
+		// method: Function|String
+		//		The original callback to be invoked.
+		if(!method){
+			method = scope;
+			scope = null;
+		}
+		if(lang.isString(method)){
+			scope = scope || kernel.global;
+			if(!scope[method]){ throw(['dojox.gfx.shape.fixCallback: scope["', method, '"] is null (scope="', scope, '")'].join('')); }
+			return function(e){
+				return fixFunction(e,gfxElement) ? scope[method].apply(scope, arguments || []) : undefined; }; // Function
+		}
+		return !scope
+			? function(e){
+				return fixFunction(e,gfxElement) ? method.apply(scope, arguments) : undefined; }
+			: function(e){
+				return fixFunction(e,gfxElement) ? method.apply(scope, arguments || []) : undefined; }; // Function
+	};
+	lang.extend(shape.Shape, shape._eventsProcessing);
+
+	shape.Container = {
+		// summary:
+		//		a container of shapes, which can be used
+		//		as a foundation for renderer-specific groups, or as a way
+		//		to logically group shapes (e.g, to propagate matricies)
+
+		_init: function() {
+			// children: Array
+			//		a list of children
+			this.children = [];
+			this._batch = 0;
+		},
+
+		// group management
+
+		openBatch: function() {
+			// summary:
+			//		starts a new batch, subsequent new child shapes will be held in
+			//		the batch instead of appending to the container directly.
+			// description:
+			//		Because the canvas renderer has no DOM hierarchy, the canvas implementation differs
+			//		such that it suspends the repaint requests for this container until the current batch is closed by a call to closeBatch().
+			return this;
+		},
+		closeBatch: function() {
+			// summary:
+			//		submits the current batch, append all pending child shapes to DOM
+			// description:
+			//		On canvas, this method flushes the pending redraws queue.
+			return this;
+		},
+		add: function(shape){
+			// summary:
+			//		adds a shape to the list
+			// shape: dojox/gfx/shape.Shape
+			//		the shape to add to the list
+			var oldParent = shape.getParent();
+			if(oldParent){
+				oldParent.remove(shape, true);
+			}
+			this.children.push(shape);
+			return shape._setParent(this, this._getRealMatrix());	// self
+		},
+		remove: function(shape, silently){
+			// summary:
+			//		removes a shape from the list
+			// shape: dojox/gfx/shape.Shape
+			//		the shape to remove
+			// silently: Boolean
+			//		if true, do not redraw a picture yet
+			for(var i = 0; i < this.children.length; ++i){
+				if(this.children[i] == shape){
+					if(silently){
+						// skip for now
+					}else{
+						shape.parent = null;
+						shape.parentMatrix = null;
+					}
+					this.children.splice(i, 1);
+					break;
+				}
+			}
+			return this;	// self
+		},
+		clear: function(/*Boolean?*/ destroy){
+			// summary:
+			//		removes all shapes from a group/surface.
+			// destroy: Boolean
+			//		Indicates whether the children should be destroyed. Optional.
+			var shape;
+			for(var i = 0; i < this.children.length;++i){
+				shape = this.children[i];
+				shape.parent = null;
+				shape.parentMatrix = null;
+				if(destroy){
+					shape.destroy();
+				}
+			}
+			this.children = [];
+			return this;	// self
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		Returns the bounding box Rectangle for this shape.
+			if(this.children){
+				// if this is a composite shape, then sum up all the children
+				var result = null;
+				arr.forEach(this.children, function(shape){
+					var bb = shape.getBoundingBox();
+					if(bb){
+						var ct = shape.getTransform();
+						if(ct){
+							bb = matrixLib.multiplyRectangle(ct, bb);
+						}
+						if(result){
+							// merge two bbox
+							result.x = Math.min(result.x, bb.x);
+							result.y = Math.min(result.y, bb.y);
+							result.endX = Math.max(result.endX, bb.x + bb.width);
+							result.endY = Math.max(result.endY, bb.y + bb.height);
+						}else{
+							// first bbox
+							result = {
+								x: bb.x,
+								y: bb.y,
+								endX: bb.x + bb.width,
+								endY: bb.y + bb.height
+							};
+						}
+					}
+				});
+				if(result){
+					result.width = result.endX - result.x;
+					result.height = result.endY - result.y;
+				}
+				return result; // dojox/gfx.Rectangle
+			}
+			// unknown/empty bounding box, subclass shall override this impl
+			return null;
+		},
+		// moving child nodes
+		_moveChildToFront: function(shape){
+			// summary:
+			//		moves a shape to front of the list of shapes
+			// shape: dojox/gfx/shape.Shape
+			//		one of the child shapes to move to the front
+			for(var i = 0; i < this.children.length; ++i){
+				if(this.children[i] == shape){
+					this.children.splice(i, 1);
+					this.children.push(shape);
+					break;
+				}
+			}
+			return this;	// self
+		},
+		_moveChildToBack: function(shape){
+			// summary:
+			//		moves a shape to back of the list of shapes
+			// shape: dojox/gfx/shape.Shape
+			//		one of the child shapes to move to the front
+			for(var i = 0; i < this.children.length; ++i){
+				if(this.children[i] == shape){
+					this.children.splice(i, 1);
+					this.children.unshift(shape);
+					break;
+				}
+			}
+			return this;	// self
+		}
+	};
+
+	shape.Surface = declare("dojox.gfx.shape.Surface", null, {
+		// summary:
+		//		a surface object to be used for drawings
+		constructor: function(){
+			// underlying node
+			this.rawNode = null;
+			// the parent node
+			this._parent = null;
+			// the list of DOM nodes to be deleted in the case of destruction
+			this._nodes = [];
+			// the list of events to be detached in the case of destruction
+			this._events = [];
+		},
+		destroy: function(){
+			// summary:
+			//		destroy all relevant external resources and release all
+			//		external references to make this object garbage-collectible
+			arr.forEach(this._nodes, domConstruct.destroy);
+			this._nodes = [];
+			arr.forEach(this._events, function(h){ if(h){ h.remove(); } });
+			this._events = [];
+			this.rawNode = null;	// recycle it in _nodes, if it needs to be recycled
+			if(has("ie")){
+				while(this._parent.lastChild){
+					domConstruct.destroy(this._parent.lastChild);
+				}
+			}else{
+				this._parent.innerHTML = "";
+			}
+			this._parent = null;
+		},
+		getEventSource: function(){
+			// summary:
+			//		returns a node, which can be used to attach event listeners
+			return this.rawNode; // Node
+		},
+		_getRealMatrix: function(){
+			// summary:
+			//		always returns the identity matrix
+			return null;	// dojox/gfx/Matrix2D
+		},
+		/*=====
+		 setDimensions: function(width, height){
+			 // summary:
+			 //		sets the width and height of the rawNode
+			 // width: String
+			 //		width of surface, e.g., "100px"
+			 // height: String
+			 //		height of surface, e.g., "100px"
+			 return this;	// self
+		 },
+		 getDimensions: function(){
+			 // summary:
+			 //     gets current width and height in pixels
+			 // returns: Object
+			 //     object with properties "width" and "height"
+		 },
+		 =====*/
+		isLoaded: true,
+		onLoad: function(/*dojox/gfx/shape.Surface*/ surface){
+			// summary:
+			//		local event, fired once when the surface is created
+			//		asynchronously, used only when isLoaded is false, required
+			//		only for Silverlight.
+		},
+		whenLoaded: function(/*Object|Null*/ context, /*Function|String*/ method){
+			var f = lang.hitch(context, method);
+			if(this.isLoaded){
+				f(this);
+			}else{
+				on.once(this, "load", function(surface){
+					f(surface);
+				});
+			}
+		}
+	});
+	lang.extend(shape.Surface, shape._eventsProcessing);
+
+	/*=====
+	g.Point = declare("dojox/gfx.Point", null, {
+		// summary:
+		//		2D point for drawings - {x, y}
+		// description:
+		//		Do not use this object directly!
+		//		Use the naked object instead: {x: 1, y: 2}.
+	});
+
+	g.Rectangle = declare("dojox.gfx.Rectangle", null, {
+		// summary:
+		//		rectangle - {x, y, width, height}
+		// description:
+		//		Do not use this object directly!
+		//		Use the naked object instead: {x: 1, y: 2, width: 100, height: 200}.
+	});
+	 =====*/
+
+
+	shape.Rect = declare("dojox.gfx.shape.Rect", shape.Shape, {
+		// summary:
+		//		a generic rectangle
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		The underlying graphics system object (typically a DOM Node)
+			this.shape = g.getDefault("Rect");
+			this.rawNode = rawNode;
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box (its shape in this case)
+			return this.shape;	// dojox/gfx.Rectangle
+		}
+	});
+
+	shape.Ellipse = declare("dojox.gfx.shape.Ellipse", shape.Shape, {
+		// summary:
+		//		a generic ellipse
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.shape = g.getDefault("Ellipse");
+			this.rawNode = rawNode;
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box
+			if(!this.bbox){
+				var shape = this.shape;
+				this.bbox = {x: shape.cx - shape.rx, y: shape.cy - shape.ry,
+					width: 2 * shape.rx, height: 2 * shape.ry};
+			}
+			return this.bbox;	// dojox/gfx.Rectangle
+		}
+	});
+
+	shape.Circle = declare("dojox.gfx.shape.Circle", shape.Shape, {
+		// summary:
+		//		a generic circle
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.shape = g.getDefault("Circle");
+			this.rawNode = rawNode;
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box
+			if(!this.bbox){
+				var shape = this.shape;
+				this.bbox = {x: shape.cx - shape.r, y: shape.cy - shape.r,
+					width: 2 * shape.r, height: 2 * shape.r};
+			}
+			return this.bbox;	// dojox/gfx.Rectangle
+		}
+	});
+
+	shape.Line = declare("dojox.gfx.shape.Line", shape.Shape, {
+		// summary:
+		//		a generic line (do not instantiate it directly)
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.shape = g.getDefault("Line");
+			this.rawNode = rawNode;
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box
+			if(!this.bbox){
+				var shape = this.shape;
+				this.bbox = {
+					x:		Math.min(shape.x1, shape.x2),
+					y:		Math.min(shape.y1, shape.y2),
+					width:	Math.abs(shape.x2 - shape.x1),
+					height:	Math.abs(shape.y2 - shape.y1)
+				};
+			}
+			return this.bbox;	// dojox/gfx.Rectangle
+		}
+	});
+
+	shape.Polyline = declare("dojox.gfx.shape.Polyline", shape.Shape, {
+		// summary:
+		//		a generic polyline/polygon (do not instantiate it directly)
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.shape = g.getDefault("Polyline");
+			this.rawNode = rawNode;
+		},
+		setShape: function(points, closed){
+			// summary:
+			//		sets a polyline/polygon shape object
+			// points: Object|Array
+			//		a polyline/polygon shape object, or an array of points
+			// closed: Boolean
+			//		close the polyline to make a polygon
+			if(points && points instanceof Array){
+				this.inherited(arguments, [{points: points}]);
+				if(closed && this.shape.points.length){
+					this.shape.points.push(this.shape.points[0]);
+				}
+			}else{
+				this.inherited(arguments, [points]);
+			}
+			return this;	// self
+		},
+		_normalizePoints: function(){
+			// summary:
+			//		normalize points to array of {x:number, y:number}
+			var p = this.shape.points, l = p && p.length;
+			if(l && typeof p[0] == "number"){
+				var points = [];
+				for(var i = 0; i < l; i += 2){
+					points.push({x: p[i], y: p[i + 1]});
+				}
+				this.shape.points = points;
+			}
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box
+			if(!this.bbox && this.shape.points.length){
+				var p = this.shape.points;
+				var l = p.length;
+				var t = p[0];
+				var bbox = {l: t.x, t: t.y, r: t.x, b: t.y};
+				for(var i = 1; i < l; ++i){
+					t = p[i];
+					if(bbox.l > t.x) bbox.l = t.x;
+					if(bbox.r < t.x) bbox.r = t.x;
+					if(bbox.t > t.y) bbox.t = t.y;
+					if(bbox.b < t.y) bbox.b = t.y;
+				}
+				this.bbox = {
+					x:		bbox.l,
+					y:		bbox.t,
+					width:	bbox.r - bbox.l,
+					height:	bbox.b - bbox.t
+				};
+			}
+			return this.bbox;	// dojox/gfx.Rectangle
+		}
+	});
+
+	shape.Image = declare("dojox.gfx.shape.Image", shape.Shape, {
+		// summary:
+		//		a generic image (do not instantiate it directly)
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.shape = g.getDefault("Image");
+			this.rawNode = rawNode;
+		},
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box (its shape in this case)
+			return this.shape;	// dojox/gfx.Rectangle
+		},
+		setStroke: function(){
+			// summary:
+			//		ignore setting a stroke style
+			return this;	// self
+		},
+		setFill: function(){
+			// summary:
+			//		ignore setting a fill style
+			return this;	// self
+		}
+	});
+
+	shape.Text = declare(shape.Shape, {
+		// summary:
+		//		a generic text (do not instantiate it directly)
+		constructor: function(rawNode){
+			// rawNode: Node
+			//		a DOM Node
+			this.fontStyle = null;
+			this.shape = g.getDefault("Text");
+			this.rawNode = rawNode;
+		},
+		getFont: function(){
+			// summary:
+			//		returns the current font object or null
+			return this.fontStyle;	// Object
+		},
+		setFont: function(newFont){
+			// summary:
+			//		sets a font for text
+			// newFont: Object
+			//		a font object (see dojox/gfx.defaultFont) or a font string
+			this.fontStyle = typeof newFont == "string" ? g.splitFontString(newFont) :
+				g.makeParameters(g.defaultFont, newFont);
+			this._setFont();
+			return this;	// self
+		},
+		getBoundingBox: function(){
+			var bbox = null, s = this.getShape();
+			if(s.text){
+				bbox = g._base._computeTextBoundingBox(this);
+			}
+			return bbox;
+		}
+	});
+
+	shape.Creator = {
+		// summary:
+		//		shape creators
+		createShape: function(shape){
+			// summary:
+			//		creates a shape object based on its type; it is meant to be used
+			//		by group-like objects
+			// shape: Object
+			//		a shape descriptor object
+			// returns: dojox/gfx/shape.Shape | Null
+			//      a fully instantiated surface-specific Shape object
+			switch(shape.type){
+				case g.defaultPath.type:		return this.createPath(shape);
+				case g.defaultRect.type:		return this.createRect(shape);
+				case g.defaultCircle.type:	    return this.createCircle(shape);
+				case g.defaultEllipse.type:	    return this.createEllipse(shape);
+				case g.defaultLine.type:		return this.createLine(shape);
+				case g.defaultPolyline.type:	return this.createPolyline(shape);
+				case g.defaultImage.type:		return this.createImage(shape);
+				case g.defaultText.type:		return this.createText(shape);
+				case g.defaultTextPath.type:	return this.createTextPath(shape);
+			}
+			return null;
+		},
+		createGroup: function(){
+			// summary:
+			//		creates a group shape
+			return this.createObject(g.Group);	// dojox/gfx/Group
+		},
+		createRect: function(rect){
+			// summary:
+			//		creates a rectangle shape
+			// rect: Object
+			//		a path object (see dojox/gfx.defaultRect)
+			return this.createObject(g.Rect, rect);	// dojox/gfx/shape.Rect
+		},
+		createEllipse: function(ellipse){
+			// summary:
+			//		creates an ellipse shape
+			// ellipse: Object
+			//		an ellipse object (see dojox/gfx.defaultEllipse)
+			return this.createObject(g.Ellipse, ellipse);	// dojox/gfx/shape.Ellipse
+		},
+		createCircle: function(circle){
+			// summary:
+			//		creates a circle shape
+			// circle: Object
+			//		a circle object (see dojox/gfx.defaultCircle)
+			return this.createObject(g.Circle, circle);	// dojox/gfx/shape.Circle
+		},
+		createLine: function(line){
+			// summary:
+			//		creates a line shape
+			// line: Object
+			//		a line object (see dojox/gfx.defaultLine)
+			return this.createObject(g.Line, line);	// dojox/gfx/shape.Line
+		},
+		createPolyline: function(points){
+			// summary:
+			//		creates a polyline/polygon shape
+			// points: Object
+			//		a points object (see dojox/gfx.defaultPolyline)
+			//		or an Array of points
+			return this.createObject(g.Polyline, points);	// dojox/gfx/shape.Polyline
+		},
+		createImage: function(image){
+			// summary:
+			//		creates a image shape
+			// image: Object
+			//		an image object (see dojox/gfx.defaultImage)
+			return this.createObject(g.Image, image);	// dojox/gfx/shape.Image
+		},
+		createText: function(text){
+			// summary:
+			//		creates a text shape
+			// text: Object
+			//		a text object (see dojox/gfx.defaultText)
+			return this.createObject(g.Text, text);	// dojox/gfx/shape.Text
+		},
+		createPath: function(path){
+			// summary:
+			//		creates a path shape
+			// path: Object
+			//		a path object (see dojox/gfx.defaultPath)
+			return this.createObject(g.Path, path);	// dojox/gfx/shape.Path
+		},
+		createTextPath: function(text){
+			// summary:
+			//		creates a text shape
+			// text: Object
+			//		a textpath object (see dojox/gfx.defaultTextPath)
+			return this.createObject(g.TextPath, {}).setText(text);	// dojox/gfx/shape.TextPath
+		},
+		createObject: function(shapeType, rawShape){
+			// summary:
+			//		creates an instance of the passed shapeType class
+			// shapeType: Function
+			//		a class constructor to create an instance of
+			// rawShape: Object
+			//		properties to be passed in to the classes 'setShape' method
+
+			// SHOULD BE RE-IMPLEMENTED BY THE RENDERER!
+			return null;	// dojox/gfx/shape.Shape
+		}
+	};
+
+	/*=====
+	 lang.extend(shape.Surface, shape.Container);
+	 lang.extend(shape.Surface, shape.Creator);
+
+	 g.Group = declare(shape.Shape, {
+		// summary:
+		//		a group shape, which can be used
+		//		to logically group shapes (e.g, to propagate matricies)
+	});
+	lang.extend(g.Group, shape.Container);
+	lang.extend(g.Group, shape.Creator);
+
+	g.Rect     = shape.Rect;
+	g.Circle   = shape.Circle;
+	g.Ellipse  = shape.Ellipse;
+	g.Line     = shape.Line;
+	g.Polyline = shape.Polyline;
+	g.Text     = shape.Text;
+	g.Surface  = shape.Surface;
+	=====*/
+
+	return shape;
+});
+},
+'dojox/charting/Element':function(){
+define(["dojo/_base/array", "dojo/dom-construct","dojo/_base/declare", "dojox/gfx", "dojox/gfx/shape"],
+	function(arr, domConstruct, declare, gfx, shape){
+
+	return declare("dojox.charting.Element", null, {
+		// summary:
+		//		A base class that is used to build other elements of a chart, such as
+		//		a series.
+		// chart: dojox/charting/Chart
+		//		The parent chart for this element.
+		// group: dojox/gfx/shape.Group
+		//		The visual GFX group representing this element.
+		// htmlElement: Array
+		//		Any DOMNodes used as a part of this element (such as HTML-based labels).
+		// dirty: Boolean
+		//		A flag indicating whether or not this element needs to be rendered.
+
+		chart: null,
+		group: null,
+		htmlElements: null,
+		dirty: true,
+		renderingOptions: null,
+
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		Creates a new charting element.
+			// chart: dojox/charting/Chart
+			//		The chart that this element belongs to.
+			this.chart = chart;
+			this.group = null;
+			this.htmlElements = [];
+			this.dirty = true;
+			this.trailingSymbol = "...";
+			this._events = [];
+			if (kwArgs && kwArgs.renderingOptions) {
+				this.renderingOptions = kwArgs.renderingOptions;
+			}
+		},
+		purgeGroup: function(){
+			// summary:
+			//		Clear any elements out of our group, and destroy the group.
+			// returns: dojox/charting/Element
+			//		A reference to this object for functional chaining.
+			this.destroyHtmlElements();
+			if(this.group){
+				// since 1.7.x we need dispose shape otherwise there is a memoryleak
+				this.getGroup().removeShape();
+				var children = this.getGroup().children;
+				// starting with 1.9 the registry is optional and thus dispose is
+				if(shape.dispose){
+					for(var i = 0; i < children.length;++i){
+						shape.dispose(children[i], true);
+					}
+				}
+				if(this.getGroup().rawNode){
+					domConstruct.empty(this.getGroup().rawNode);
+				}
+				this.getGroup().clear();
+				// starting with 1.9 the registry is optional and thus dispose is
+				if(shape.dispose){
+					shape.dispose(this.getGroup(), true);
+				}
+				if(this.getGroup() != this.group){
+					// we do have an intermediary clipping group (see CartesianBase)
+					if(this.group.rawNode){
+						domConstruct.empty(this.group.rawNode);
+					}
+					this.group.clear();
+					// starting with 1.9 the registry is optional and thus dispose is
+					if(shape.dispose){
+						shape.dispose(this.group, true);
+					}
+				}
+				this.group = null;
+			}
+			this.dirty = true;
+			if(this._events.length){
+				arr.forEach(this._events, function(item){
+					item.shape.disconnect(item.handle);
+				});
+				this._events = [];
+			}
+			return this;	//	dojox.charting.Element
+		},
+		cleanGroup: function(creator){
+			// summary:
+			//		Clean any elements (HTML or GFX-based) out of our group, and create a new one.
+			// creator: dojox/gfx/shape.Surface?
+			//		An optional surface to work with.
+			// returns: dojox/charting/Element
+			//		A reference to this object for functional chaining.
+			this.destroyHtmlElements();
+			if(!creator){ creator = this.chart.surface; }
+			if(this.group){
+				var bgnode;
+				var children = this.getGroup().children;
+				// starting with 1.9 the registry is optional and thus dispose is
+				if(shape.dispose){
+					for(var i = 0; i < children.length;++i){
+						shape.dispose(children[i], true);
+					}
+				}
+				if(this.getGroup().rawNode){
+					bgnode = this.getGroup().bgNode;
+					domConstruct.empty(this.getGroup().rawNode);
+				}
+				this.getGroup().clear();
+				if(bgnode){
+					this.getGroup().rawNode.appendChild(bgnode);
+				}
+			}else{
+				this.group = creator.createGroup();
+				// in some cases we have a rawNode but this is not an actual DOM element (CanvasWithEvents) so check
+				// the actual rawNode type.
+				if (this.renderingOptions && this.group.rawNode &&
+					this.group.rawNode.namespaceURI == "http://www.w3.org/2000/svg") {
+					for (var key in this.renderingOptions) {
+						this.group.rawNode.setAttribute(key, this.renderingOptions[key]);
+					}
+				}
+			}
+			this.dirty = true;
+			return this;	//	dojox.charting.Element
+		},
+		getGroup: function(){
+			return this.group;
+		},
+		destroyHtmlElements: function(){
+			// summary:
+			//		Destroy any DOMNodes that may have been created as a part of this element.
+			if(this.htmlElements.length){
+				arr.forEach(this.htmlElements, domConstruct.destroy);
+				this.htmlElements = [];
+			}
+		},
+		destroy: function(){
+			// summary:
+			//		API addition to conform to the rest of the Dojo Toolkit's standard.
+			this.purgeGroup();
+		},
+		//text utilities
+		getTextWidth: function(s, font){
+			return gfx._base._getTextBox(s, {font: font}).w || 0;
+		},
+		getTextWithLimitLength: function(s, font, limitWidth, truncated){
+			// summary:
+			//		Get the truncated string based on the limited width in px(dichotomy algorithm)
+			// s: String?
+			//		candidate text.
+			// font: String?
+			//		text's font style.
+			// limitWidth: Number?
+			//		text limited width in px.
+			// truncated: Boolean?
+			//		whether the input text(s) has already been truncated.
+			// returns: Object
+			// |	{
+			// |		text: processed text, maybe truncated or not,
+			// |		truncated: whether text has been truncated
+			// |	}
+			if(!s || s.length <= 0){
+				return {
+					text: "",
+					truncated: truncated || false
+				};
+			}
+			if(!limitWidth || limitWidth <= 0){
+				return {
+					text: s,
+					truncated: truncated || false
+				};
+			}
+			var delta = 2,
+				//golden section for dichotomy algorithm
+				trucPercentage = 0.618,
+				minStr = s.substring(0,1) + this.trailingSymbol,
+				minWidth = this.getTextWidth(minStr, font);
+			if(limitWidth <= minWidth){
+				return {
+					text: minStr,
+					truncated: true
+				};
+			}
+			var width = this.getTextWidth(s, font);
+			if(width <= limitWidth){
+				return {
+					text: s,
+					truncated: truncated || false
+				};
+			}else{
+				var begin = 0,
+					end = s.length;
+				while(begin < end){
+					if(end - begin <= delta ){
+						while (this.getTextWidth(s.substring(0, begin) + this.trailingSymbol, font) > limitWidth) {
+							begin -= 1;
+						}
+						return {
+							text: (s.substring(0,begin) + this.trailingSymbol),
+							truncated: true
+							};
+					}
+					var index = begin + Math.round((end - begin) * trucPercentage),
+						widthIntercepted = this.getTextWidth(s.substring(0, index), font);
+					if(widthIntercepted < limitWidth){
+						begin = index;
+						end = end;
+					}else{
+						begin = begin;
+						end = index;
+					}
+				}
+			}
+		},
+		getTextWithLimitCharCount: function(s, font, wcLimit, truncated){
+			// summary:
+			//		Get the truncated string based on the limited character count(dichotomy algorithm)
+			// s: String?
+			//		candidate text.
+			// font: String?
+			//		text's font style.
+			// wcLimit: Number?
+			//		text limited character count.
+			// truncated: Boolean?
+			//		whether the input text(s) has already been truncated.
+			// returns: Object
+			// |	{
+			// |		text: processed text, maybe truncated or not,
+			// |		truncated: whether text has been truncated
+			// |	}
+			if (!s || s.length <= 0) {
+				return {
+					text: "",
+					truncated: truncated || false
+				};
+			}
+			if(!wcLimit || wcLimit <= 0 || s.length <= wcLimit){
+				return {
+					text: s,
+					truncated: truncated || false
+				};
+			}
+			return {
+				text: s.substring(0, wcLimit) + this.trailingSymbol,
+				truncated: true
+			};
+		},
+		// fill utilities
+		_plotFill: function(fill, dim, offsets){
+			// process a plot-wide fill
+			if(!fill || !fill.type || !fill.space){
+				return fill;
+			}
+			var space = fill.space, span;
+			switch(fill.type){
+				case "linear":
+					if(space === "plot" || space === "shapeX" || space === "shapeY"){
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultLinearGradient, fill);
+						fill.space = space;
+						// process dimensions
+						if(space === "plot" || space === "shapeX"){
+							// process Y
+							span = dim.height - offsets.t - offsets.b;
+							fill.y1 = offsets.t + span * fill.y1 / 100;
+							fill.y2 = offsets.t + span * fill.y2 / 100;
+						}
+						if(space === "plot" || space === "shapeY"){
+							// process X
+							span = dim.width - offsets.l - offsets.r;
+							fill.x1 = offsets.l + span * fill.x1 / 100;
+							fill.x2 = offsets.l + span * fill.x2 / 100;
+						}
+					}
+					break;
+				case "radial":
+					if(space === "plot"){
+						// this one is used exclusively for scatter charts
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultRadialGradient, fill);
+						fill.space = space;
+						// process both dimensions
+						var spanX = dim.width  - offsets.l - offsets.r,
+							spanY = dim.height - offsets.t - offsets.b;
+						fill.cx = offsets.l + spanX * fill.cx / 100;
+						fill.cy = offsets.t + spanY * fill.cy / 100;
+						fill.r  = fill.r * Math.sqrt(spanX * spanX + spanY * spanY) / 200;
+					}
+					break;
+				case "pattern":
+					if(space === "plot" || space === "shapeX" || space === "shapeY"){
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultPattern, fill);
+						fill.space = space;
+						// process dimensions
+						if(space === "plot" || space === "shapeX"){
+							// process Y
+							span = dim.height - offsets.t - offsets.b;
+							fill.y = offsets.t + span * fill.y / 100;
+							fill.height = span * fill.height / 100;
+						}
+						if(space === "plot" || space === "shapeY"){
+							// process X
+							span = dim.width - offsets.l - offsets.r;
+							fill.x = offsets.l + span * fill.x / 100;
+							fill.width = span * fill.width / 100;
+						}
+					}
+					break;
+			}
+			return fill;
+		},
+		_shapeFill: function(fill, bbox){
+			// process shape-specific fill
+			if(!fill || !fill.space){
+				return fill;
+			}
+			var space = fill.space, span;
+			switch(fill.type){
+				case "linear":
+					if(space === "shape" || space === "shapeX" || space === "shapeY"){
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultLinearGradient, fill);
+						fill.space = space;
+						// process dimensions
+						if(space === "shape" || space === "shapeX"){
+							// process X
+							span = bbox.width;
+							fill.x1 = bbox.x + span * fill.x1 / 100;
+							fill.x2 = bbox.x + span * fill.x2 / 100;
+						}
+						if(space === "shape" || space === "shapeY"){
+							// process Y
+							span = bbox.height;
+							fill.y1 = bbox.y + span * fill.y1 / 100;
+							fill.y2 = bbox.y + span * fill.y2 / 100;
+						}
+					}
+					break;
+				case "radial":
+					if(space === "shape"){
+						// this one is used exclusively for bubble charts and pie charts
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultRadialGradient, fill);
+						fill.space = space;
+						// process both dimensions
+						fill.cx = bbox.x + bbox.width  / 2;
+						fill.cy = bbox.y + bbox.height / 2;
+						fill.r  = fill.r * bbox.width  / 200;
+					}
+					break;
+				case "pattern":
+					if(space === "shape" || space === "shapeX" || space === "shapeY"){
+						// clone a fill so we can modify properly directly
+						fill = gfx.makeParameters(gfx.defaultPattern, fill);
+						fill.space = space;
+						// process dimensions
+						if(space === "shape" || space === "shapeX"){
+							// process X
+							span = bbox.width;
+							fill.x = bbox.x + span * fill.x / 100;
+							fill.width = span * fill.width / 100;
+						}
+						if(space === "shape" || space === "shapeY"){
+							// process Y
+							span = bbox.height;
+							fill.y = bbox.y + span * fill.y / 100;
+							fill.height = span * fill.height / 100;
+						}
+					}
+					break;
+			}
+			return fill;
+		},
+		_pseudoRadialFill: function(fill, center, radius, start, end){
+			// process pseudo-radial fills
+			if(!fill || fill.type !== "radial" || fill.space !== "shape"){
+				return fill;
+			}
+			// clone and normalize fill
+			var space = fill.space;
+			fill = gfx.makeParameters(gfx.defaultRadialGradient, fill);
+			fill.space = space;
+			if(arguments.length < 4){
+				// process both dimensions
+				fill.cx = center.x;
+				fill.cy = center.y;
+				fill.r  = fill.r * radius / 100;
+				return fill;
+			}
+			// convert to a linear gradient
+			var angle = arguments.length < 5 ? start : (end + start) / 2;
+			return {
+				type: "linear",
+				x1: center.x,
+				y1: center.y,
+				x2: center.x + fill.r * radius * Math.cos(angle) / 100,
+				y2: center.y + fill.r * radius * Math.sin(angle) / 100,
+				colors: fill.colors
+			};
+		}
+	});
+});
+},
+'dojox/lang/utils':function(){
+define(["../../", "dojo/_base/lang"],
+  function(dojox, lang){
+	var du = lang.getObject("lang.utils", true, dojox);
+
+	var empty = {}, opts = Object.prototype.toString;
+
+	var clone = function(o){
+		if(o){
+			switch(opts.call(o)){
+				case "[object Array]":
+					return o.slice(0);
+				case "[object Object]":
+					return lang.delegate(o);
+			}
+		}
+		return o;
+	}
+
+	lang.mixin(du, {
+		coerceType: function(target, source){
+			// summary:
+			//		Coerces one object to the type of another.
+			// target: Object
+			//		object, which typeof result is used to coerce "source" object.
+			// source: Object
+			//		object, which will be forced to change type.
+			switch(typeof target){
+				case "number":	return Number(eval("(" + source + ")"));
+				case "string":	return String(source);
+				case "boolean":	return Boolean(eval("(" + source + ")"));
+			}
+			return eval("(" + source + ")");
+		},
+
+		updateWithObject: function(target, source, conv){
+			// summary:
+			//		Updates an existing object in place with properties from an "source" object.
+			// target: Object
+			//		the "target" object to be updated
+			// source: Object
+			//		the "source" object, whose properties will be used to source the existed object.
+			// conv: Boolean?
+			//		force conversion to the original type
+			if(!source){ return target; }
+			for(var x in target){
+				if(x in source && !(x in empty)){
+					var t = target[x];
+					if(t && typeof t == "object"){
+						du.updateWithObject(t, source[x], conv);
+					}else{
+						target[x] = conv ? du.coerceType(t, source[x]) : clone(source[x]);
+					}
+				}
+			}
+			return target;	// Object
+		},
+
+		updateWithPattern: function(target, source, pattern, conv){
+			// summary:
+			//		Updates an existing object in place with properties from an "source" object.
+			// target: Object
+			//		the "target" object to be updated
+			// source: Object
+			//		the "source" object, whose properties will be used to source the existed object.
+			// pattern: Object
+			//		object, whose properties will be used to pull values from the "source"
+			// conv: Boolean?
+			//		force conversion to the original type
+			if(!source || !pattern){ return target; }
+			for(var x in pattern){
+				if(x in source && !(x in empty)){
+					target[x] = conv ? du.coerceType(pattern[x], source[x]) : clone(source[x]);
+				}
+			}
+			return target;	// Object
+		},
+
+		merge: function(object, mixin){
+			// summary:
+			//		Merge two objects structurally, mixin properties will override object's properties.
+			// object: Object
+			//		original object.
+			// mixin: Object
+			//		additional object, which properties will override object's properties.
+			if(mixin){
+				var otype = opts.call(object), mtype = opts.call(mixin), t, i, l, m;
+				switch(mtype){
+					case "[object Array]":
+						if(mtype == otype){
+							t = new Array(Math.max(object.length, mixin.length));
+							for(i = 0, l = t.length; i < l; ++i){
+								t[i] = du.merge(object[i], mixin[i]);
+							}
+							return t;
+						}
+						return mixin.slice(0);
+					case "[object Object]":
+						if(mtype == otype && object){
+							t = lang.delegate(object);
+							for(i in mixin){
+								if(i in object){
+									l = object[i];
+									m = mixin[i];
+									if(m !== l){
+										t[i] = du.merge(l, m);
+									}
+								}else{
+									t[i] = lang.clone(mixin[i]);
+								}
+							}
+							return t;
+						}
+						return lang.clone(mixin);
+				}
+			}
+			return mixin;
+		}
+	});
+
+	return du;
+});
+},
+'dojox/lang/functional/lambda':function(){
+define(["../..", "dojo/_base/lang", "dojo/_base/array"], function(dojox, lang, arr){
+	var df = lang.getObject("lang.functional", true, dojox);
+
+// This module adds high-level functions and related constructs:
+//	- anonymous functions built from the string
+
+// Acknowledgements:
+//	- lambda() is based on work by Oliver Steele
+//		(http://osteele.com/sources/javascript/functional/functional.js)
+//		which was published under MIT License
+
+// Notes:
+//	- lambda() produces functions, which after the compilation step are
+//		as fast as regular JS functions (at least theoretically).
+
+// Lambda input values:
+//	- returns functions unchanged
+//	- converts strings to functions
+//	- converts arrays to a functional composition
+
+	var lcache = {};
+
+	// split() is augmented on IE6 to ensure the uniform behavior
+	var split = "ab".split(/a*/).length > 1 ? String.prototype.split :
+			function(sep){
+				 var r = this.split.call(this, sep),
+					 m = sep.exec(this);
+				 if(m && m.index == 0){ r.unshift(""); }
+				 return r;
+			};
+
+	var lambda = function(/*String*/ s){
+		var args = [], sects = split.call(s, /\s*->\s*/m);
+		if(sects.length > 1){
+			while(sects.length){
+				s = sects.pop();
+				args = sects.pop().split(/\s*,\s*|\s+/m);
+				if(sects.length){ sects.push("(function(" + args.join(", ") + "){ return (" + s + "); })"); }
+			}
+		}else if(s.match(/\b_\b/)){
+			args = ["_"];
+		}else{
+			var l = s.match(/^\s*(?:[+*\/%&|\^\.=<>]|!=)/m),
+				r = s.match(/[+\-*\/%&|\^\.=<>!]\s*$/m);
+			if(l || r){
+				if(l){
+					args.push("$1");
+					s = "$1" + s;
+				}
+				if(r){
+					args.push("$2");
+					s = s + "$2";
+				}
+			}else{
+				// the point of the long regex below is to exclude all well-known
+				// lower-case words from the list of potential arguments
+				var vars = s.
+					replace(/(?:\b[A-Z]|\.[a-zA-Z_$])[a-zA-Z_$\d]*|[a-zA-Z_$][a-zA-Z_$\d]*:|this|true|false|null|undefined|typeof|instanceof|in|delete|new|void|arguments|decodeURI|decodeURIComponent|encodeURI|encodeURIComponent|escape|eval|isFinite|isNaN|parseFloat|parseInt|unescape|dojo|dijit|dojox|window|document|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "").
+					match(/([a-z_$][a-z_$\d]*)/gi) || [], t = {};
+				arr.forEach(vars, function(v){
+					if(!t.hasOwnProperty(v)){
+						args.push(v);
+						t[v] = 1;
+					}
+				});
+			}
+		}
+		return {args: args, body: s};	// Object
+	};
+
+	var compose = function(/*Array*/ a){
+		return a.length ?
+					function(){
+						var i = a.length - 1, x = df.lambda(a[i]).apply(this, arguments);
+						for(--i; i >= 0; --i){ x = df.lambda(a[i]).call(this, x); }
+						return x;
+					}
+				:
+					// identity
+					function(x){ return x; };
+	};
+
+	lang.mixin(df, {
+		// lambda
+		rawLambda: function(/*String*/ s){
+			// summary:
+			//		builds a function from a snippet, or array (composing),
+			//		returns an object describing the function; functions are
+			//		passed through unmodified.
+			// description:
+			//		This method is to normalize a functional representation (a
+			//		text snippet) to an object that contains an array of
+			//		arguments, and a body , which is used to calculate the
+			//		returning value.
+			return lambda(s);	// Object
+		},
+		buildLambda: function(/*String*/ s){
+			// summary:
+			//		builds a function from a snippet, returns a string, which
+			//		represents the function.
+			// description:
+			//		This method returns a textual representation of a function
+			//		built from the snippet. It is meant to be evaled in the
+			//		proper context, so local variables can be pulled from the
+			//		environment.
+			var l = lambda(s);
+			return "function(" + l.args.join(",") + "){return (" + l.body + ");}";	// String
+		},
+		lambda: function(/*Function|String|Array*/ s){
+			// summary:
+			//		builds a function from a snippet, or array (composing),
+			//		returns a function object; functions are passed through
+			//		unmodified.
+			// description:
+			//		This method is used to normalize a functional
+			//		representation (a text snippet, an array, or a function) to
+			//		a function object.
+			if(typeof s == "function"){ return s; }
+			if(s instanceof Array){ return compose(s); }
+			if(lcache.hasOwnProperty(s)){ return lcache[s]; }
+			var l = lambda(s);
+			return lcache[s] = new Function(l.args, "return (" + l.body + ");");	// Function
+		},
+		clearLambdaCache: function(){
+			// summary:
+			//		clears internal cache of lambdas
+			lcache = {};
+		}
+	});
+
+	return df;
+});
+},
+'dojox/lang/functional/array':function(){
+define(["dojo/_base/kernel", "dojo/_base/lang", "dojo/_base/array", "./lambda"],
+	function(kernel, lang, arr, df){
+
+// This module adds high-level functions and related constructs:
+//	- array-processing functions similar to standard JS functions
+
+// Notes:
+//	- this module provides JS standard methods similar to high-level functions in dojo/_base/array.js:
+//		forEach, map, filter, every, some
+
+// Defined methods:
+//	- take any valid lambda argument as the functional argument
+//	- operate on dense arrays
+//	- take a string as the array argument
+//	- take an iterator objects as the array argument
+
+	var empty = {};
+
+	lang.mixin(df, {
+		// JS 1.6 standard array functions, which can take a lambda as a parameter.
+		// Consider using dojo._base.array functions, if you don't need the lambda support.
+		filter: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates a new array with all elements that pass the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var t = [], v, i, n;
+			if(lang.isArray(a)){
+				// array
+				for(i = 0, n = a.length; i < n; ++i){
+					v = a[i];
+					if(f.call(o, v, i, a)){ t.push(v); }
+				}
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				for(i = 0; a.hasNext();){
+					v = a.next();
+					if(f.call(o, v, i++, a)){ t.push(v); }
+				}
+			}else{
+				// object/dictionary
+				for(i in a){
+					if(!(i in empty)){
+						v = a[i];
+						if(f.call(o, v, i, a)){ t.push(v); }
+					}
+				}
+			}
+			return t;	// Array
+		},
+		forEach: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		executes a provided function once per array element.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var i, n;
+			if(lang.isArray(a)){
+				// array
+				for(i = 0, n = a.length; i < n; f.call(o, a[i], i, a), ++i);
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				for(i = 0; a.hasNext(); f.call(o, a.next(), i++, a));
+			}else{
+				// object/dictionary
+				for(i in a){
+					if(!(i in empty)){
+						f.call(o, a[i], i, a);
+					}
+				}
+			}
+			return o;	// Object
+		},
+		map: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates a new array with the results of calling
+			//		a provided function on every element in this array.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var t, n, i;
+			if(lang.isArray(a)){
+				// array
+				t = new Array(n = a.length);
+				for(i = 0; i < n; t[i] = f.call(o, a[i], i, a), ++i);
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				t = [];
+				for(i = 0; a.hasNext(); t.push(f.call(o, a.next(), i++, a)));
+			}else{
+				// object/dictionary
+				t = [];
+				for(i in a){
+					if(!(i in empty)){
+						t.push(f.call(o, a[i], i, a));
+					}
+				}
+			}
+			return t;	// Array
+		},
+		every: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		tests whether all elements in the array pass the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var i, n;
+			if(lang.isArray(a)){
+				// array
+				for(i = 0, n = a.length; i < n; ++i){
+					if(!f.call(o, a[i], i, a)){
+						return false;	// Boolean
+					}
+				}
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				for(i = 0; a.hasNext();){
+					if(!f.call(o, a.next(), i++, a)){
+						return false;	// Boolean
+					}
+				}
+			}else{
+				// object/dictionary
+				for(i in a){
+					if(!(i in empty)){
+						if(!f.call(o, a[i], i, a)){
+							return false;	// Boolean
+						}
+					}
+				}
+			}
+			return true;	// Boolean
+		},
+		some: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		tests whether some element in the array passes the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var i, n;
+			if(lang.isArray(a)){
+				// array
+				for(i = 0, n = a.length; i < n; ++i){
+					if(f.call(o, a[i], i, a)){
+						return true;	// Boolean
+					}
+				}
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				for(i = 0; a.hasNext();){
+					if(f.call(o, a.next(), i++, a)){
+						return true;	// Boolean
+					}
+				}
+			}else{
+				// object/dictionary
+				for(i in a){
+					if(!(i in empty)){
+						if(f.call(o, a[i], i, a)){
+							return true;	// Boolean
+						}
+					}
+				}
+			}
+			return false;	// Boolean
+		}
+	});
+
+	return df;
+});
+},
+'dojox/lang/functional/object':function(){
+define(["dojo/_base/kernel", "dojo/_base/lang", "./lambda"], function(kernel, lang, df){
+
+// This module adds high-level functions and related constructs:
+//	- object/dictionary helpers
+
+// Defined methods:
+//	- take any valid lambda argument as the functional argument
+//	- skip all attributes that are present in the empty object
+//		(IE and/or 3rd-party libraries).
+
+	var empty = {};
+
+	lang.mixin(df, {
+		// object helpers
+		keys: function(/*Object*/ obj){
+			// summary:
+			//		returns an array of all keys in the object
+			var t = [];
+			for(var i in obj){
+				if(!(i in empty)){
+					t.push(i);
+				}
+			}
+			return	t; // Array
+		},
+		values: function(/*Object*/ obj){
+			// summary:
+			//		returns an array of all values in the object
+			var t = [];
+			for(var i in obj){
+				if(!(i in empty)){
+					t.push(obj[i]);
+				}
+			}
+			return	t; // Array
+		},
+		filterIn: function(/*Object*/ obj, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates new object with all attributes that pass the test
+			//		implemented by the provided function.
+			o = o || kernel.global; f = df.lambda(f);
+			var t = {}, v, i;
+			for(i in obj){
+				if(!(i in empty)){
+					v = obj[i];
+					if(f.call(o, v, i, obj)){ t[i] = v; }
+				}
+			}
+			return t;	// Object
+		},
+		forIn: function(/*Object*/ obj, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		iterates over all object attributes.
+			o = o || kernel.global; f = df.lambda(f);
+			for(var i in obj){
+				if(!(i in empty)){
+					f.call(o, obj[i], i, obj);
+				}
+			}
+			return o;	// Object
+		},
+		mapIn: function(/*Object*/ obj, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates new object with the results of calling
+			//		a provided function on every attribute in this object.
+			o = o || kernel.global; f = df.lambda(f);
+			var t = {}, i;
+			for(i in obj){
+				if(!(i in empty)){
+					t[i] = f.call(o, obj[i], i, obj);
+				}
+			}
+			return t;	// Object
+		}
+	});
+
+	return df;
+});
+},
+'dojox/lang/functional/fold':function(){
+define(["dojo/_base/lang", "dojo/_base/array", "dojo/_base/kernel", "./lambda"],
+	function(lang, arr, kernel, df){
+
+// This module adds high-level functions and related constructs:
+//	- "fold" family of functions
+
+// Notes:
+//	- missing high-level functions are provided with the compatible API:
+//		foldl, foldl1, foldr, foldr1
+//	- missing JS standard functions are provided with the compatible API:
+//		reduce, reduceRight
+//	- the fold's counterpart: unfold
+
+// Defined methods:
+//	- take any valid lambda argument as the functional argument
+//	- operate on dense arrays
+//	- take a string as the array argument
+//	- take an iterator objects as the array argument (only foldl, foldl1, and reduce)
+
+	var empty = {};
+
+	lang.mixin(df, {
+		// classic reduce-class functions
+		foldl: function(/*Array|String|Object*/ a, /*Function*/ f, /*Object*/ z, /*Object?*/ o){
+			// summary:
+			//		repeatedly applies a binary function to an array from left
+			//		to right using a seed value as a starting point; returns the final
+			//		value.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var i, n;
+			if(lang.isArray(a)){
+				// array
+				for(i = 0, n = a.length; i < n; z = f.call(o, z, a[i], i, a), ++i);
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				for(i = 0; a.hasNext(); z = f.call(o, z, a.next(), i++, a));
+			}else{
+				// object/dictionary
+				for(i in a){
+					if(!(i in empty)){
+						z = f.call(o, z, a[i], i, a);
+					}
+				}
+			}
+			return z;	// Object
+		},
+		foldl1: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		repeatedly applies a binary function to an array from left
+			//		to right; returns the final value.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var z, i, n;
+			if(lang.isArray(a)){
+				// array
+				z = a[0];
+				for(i = 1, n = a.length; i < n; z = f.call(o, z, a[i], i, a), ++i);
+			}else if(typeof a.hasNext == "function" && typeof a.next == "function"){
+				// iterator
+				if(a.hasNext()){
+					z = a.next();
+					for(i = 1; a.hasNext(); z = f.call(o, z, a.next(), i++, a));
+				}
+			}else{
+				// object/dictionary
+				var first = true;
+				for(i in a){
+					if(!(i in empty)){
+						if(first){
+							z = a[i];
+							first = false;
+						}else{
+							z = f.call(o, z, a[i], i, a);
+						}
+					}
+				}
+			}
+			return z;	// Object
+		},
+		foldr: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object*/ z, /*Object?*/ o){
+			// summary:
+			//		repeatedly applies a binary function to an array from right
+			//		to left using a seed value as a starting point; returns the final
+			//		value.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			for(var i = a.length; i > 0; --i, z = f.call(o, z, a[i], i, a));
+			return z;	// Object
+		},
+		foldr1: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		repeatedly applies a binary function to an array from right
+			//		to left; returns the final value.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var n = a.length, z = a[n - 1], i = n - 1;
+			for(; i > 0; --i, z = f.call(o, z, a[i], i, a));
+			return z;	// Object
+		},
+		// JS 1.8 standard array functions, which can take a lambda as a parameter.
+		reduce: function(/*Array|String|Object*/ a, /*Function|String|Array*/ f, /*Object?*/ z){
+			// summary:
+			//		apply a function simultaneously against two values of the array
+			//		(from left-to-right) as to reduce it to a single value.
+			return arguments.length < 3 ? df.foldl1(a, f) : df.foldl(a, f, z);	// Object
+		},
+		reduceRight: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ z){
+			// summary:
+			//		apply a function simultaneously against two values of the array
+			//		(from right-to-left) as to reduce it to a single value.
+			return arguments.length < 3 ? df.foldr1(a, f) : df.foldr(a, f, z);	// Object
+		},
+		// the fold's counterpart: unfold
+		unfold: function(/*Function|String|Array*/ pr, /*Function|String|Array*/ f,
+						/*Function|String|Array*/ g, /*Object*/ z, /*Object?*/ o){
+			// summary:
+			//		builds an array by unfolding a value
+			o = o || kernel.global; f = df.lambda(f); g = df.lambda(g); pr = df.lambda(pr);
+			var t = [];
+			for(; !pr.call(o, z); t.push(f.call(o, z)), z = g.call(o, z));
+			return t;	// Array
+		}
+	});
+});
+},
+'dojox/lang/functional/reversed':function(){
+define(["dojo/_base/lang", "dojo/_base/kernel" ,"./lambda"],
+	function(lang, kernel, df){
+// This module adds high-level functions and related constructs:
+//	- reversed versions of array-processing functions similar to standard JS functions
+
+// Notes:
+//	- this module provides reversed versions of standard array-processing functions:
+//		forEachRev, mapRev, filterRev
+
+// Defined methods:
+//	- take any valid lambda argument as the functional argument
+//	- operate on dense arrays
+//	- take a string as the array argument
+
+	lang.mixin(df, {
+		// JS 1.6 standard array functions, which can take a lambda as a parameter.
+		// Consider using dojo._base.array functions, if you don't need the lambda support.
+		filterRev: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates a new array with all elements that pass the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var t = [], v, i = a.length - 1;
+			for(; i >= 0; --i){
+				v = a[i];
+				if(f.call(o, v, i, a)){ t.push(v); }
+			}
+			return t;	// Array
+		},
+		forEachRev: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		executes a provided function once per array element.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			for(var i = a.length - 1; i >= 0; f.call(o, a[i], i, a), --i);
+		},
+		mapRev: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		creates a new array with the results of calling
+			//		a provided function on every element in this array.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			var n = a.length, t = new Array(n), i = n - 1, j = 0;
+			for(; i >= 0; t[j++] = f.call(o, a[i], i, a), --i);
+			return t;	// Array
+		},
+		everyRev: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		tests whether all elements in the array pass the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			for(var i = a.length - 1; i >= 0; --i){
+				if(!f.call(o, a[i], i, a)){
+					return false;	// Boolean
+				}
+			}
+			return true;	// Boolean
+		},
+		someRev: function(/*Array|String*/ a, /*Function|String|Array*/ f, /*Object?*/ o){
+			// summary:
+			//		tests whether some element in the array passes the test
+			//		implemented by the provided function.
+			if(typeof a == "string"){ a = a.split(""); }
+			o = o || kernel.global; f = df.lambda(f);
+			for(var i = a.length - 1; i >= 0; --i){
+				if(f.call(o, a[i], i, a)){
+					return true;	// Boolean
+				}
+			}
+			return false;	// Boolean
+		}
+	});
+
+	return df;
+});
+},
+'dojox/lang/functional':function(){
+define(["./functional/lambda", "./functional/array", "./functional/object"], function(df){
+	return df;
+});
+},
+'dojox/gfx/gradutils':function(){
+// Various generic utilities to deal with a linear gradient
+
+define(["./_base", "dojo/_base/lang", "./matrix", "dojo/_base/Color"],
+  function(g, lang, m, Color){
+
+	var gradutils = g.gradutils = {};
+
+	function findColor(o, c){
+		if(o <= 0){
+			return c[0].color;
+		}
+		var len = c.length;
+		if(o >= 1){
+			return c[len - 1].color;
+		}
+		//TODO: use binary search
+		for(var i = 0; i < len; ++i){
+			var stop = c[i];
+			if(stop.offset >= o){
+				if(i){
+					var prev = c[i - 1];
+					return Color.blendColors(new Color(prev.color), new Color(stop.color),
+						(o - prev.offset) / (stop.offset - prev.offset));
+				}
+				return stop.color;
+			}
+		}
+		return c[len - 1].color;
+	}
+
+	gradutils.getColor = function(fill, pt){
+		// summary:
+		//		sample a color from a gradient using a point
+		// fill: Object
+		//		fill object
+		// pt: dojox/gfx.Point
+		//		point where to sample a color
+		var o;
+		if(fill){
+			switch(fill.type){
+				case "linear":
+					var angle = Math.atan2(fill.y2 - fill.y1, fill.x2 - fill.x1),
+						rotation = m.rotate(-angle),
+						projection = m.project(fill.x2 - fill.x1, fill.y2 - fill.y1),
+						p = m.multiplyPoint(projection, pt),
+						pf1 = m.multiplyPoint(projection, fill.x1, fill.y1),
+						pf2 = m.multiplyPoint(projection, fill.x2, fill.y2),
+						scale = m.multiplyPoint(rotation, pf2.x - pf1.x, pf2.y - pf1.y).x;
+					o = m.multiplyPoint(rotation, p.x - pf1.x, p.y - pf1.y).x / scale;
+					break;
+				case "radial":
+					var dx = pt.x - fill.cx, dy = pt.y - fill.cy;
+					o = Math.sqrt(dx * dx + dy * dy) / fill.r;
+					break;
+			}
+			return findColor(o, fill.colors);	// dojo/_base/Color
+		}
+		// simple color
+		return new Color(fill || [0, 0, 0, 0]);	// dojo/_base/Color
+	};
+
+	gradutils.reverse = function(fill){
+		// summary:
+		//		reverses a gradient
+		// fill: Object
+		//		fill object
+		if(fill){
+			switch(fill.type){
+				case "linear":
+				case "radial":
+					fill = lang.delegate(fill);
+					if(fill.colors){
+						var c = fill.colors, l = c.length, i = 0, stop,
+							n = fill.colors = new Array(c.length);
+						for(; i < l; ++i){
+							stop = c[i];
+							n[i] = {
+								offset: 1 - stop.offset,
+								color:  stop.color
+							};
+						}
+						n.sort(function(a, b){ return a.offset - b.offset; });
+					}
+					break;
+			}
+		}
+		return fill;	// Object
+	};
+
+	return gradutils;
+});
+},
+'dojox/charting/SimpleTheme':function(){
+define(["dojo/_base/lang", "dojo/_base/array","dojo/_base/declare","dojo/_base/Color", "dojox/lang/utils", "dojox/gfx/gradutils"],
+	function(lang, arr, declare, Color, dlu, dgg){
+
+	var SimpleTheme = declare("dojox.charting.SimpleTheme", null, {
+	// summary:
+	//		A SimpleTheme or Theme is a pre-defined object, primarily JSON-based, that makes up the definitions to
+	//		style a chart.
+	//
+	// description:
+	//		While you can set up style definitions on a chart directly (usually through the various add methods
+	//		on a dojox.charting.Chart object), a Theme simplifies this manual setup by allowing you to
+	//		pre-define all of the various visual parameters of each element in a chart.
+	//
+	//		Most of the properties of a Theme are straight-forward; if something is line-based (such as
+	//		an axis or the ticks on an axis), they will be defined using basic stroke parameters.  Likewise,
+	//		if an element is primarily block-based (such as the background of a chart), it will be primarily
+	//		fill-based.
+	//
+	//		In addition (for convenience), a Theme definition does not have to contain the entire JSON-based
+	//		structure.  Each theme is built on top of a default theme (which serves as the basis for the theme
+	//		"GreySkies"), and is mixed into the default theme object.  This allows you to create a theme based,
+	//		say, solely on colors for data series.
+	//
+	//		Defining a new theme is relatively easy; see any of the themes in dojox.charting.themes for examples
+	//		on how to define your own.
+	//
+	//		When you set a theme on a chart, the theme itself is deep-cloned.  This means that you cannot alter
+	//		the theme itself after setting the theme value on a chart, and expect it to change your chart.  If you
+	//		are looking to make alterations to a theme for a chart, the suggestion would be to create your own
+	//		theme, based on the one you want to use, that makes those alterations before it is applied to a chart.
+	//
+	//		Finally, a Theme contains a number of functions to facilitate rendering operations on a chart--the main
+	//		helper of which is the ~next~ method, in which a chart asks for the information for the next data series
+	//		to be rendered.
+	//
+	//		A note on colors:
+	//		A theme palette is usually comprised of 5 different color definitions, and
+	//		no more.  If you have a need to render a chart with more than 5 data elements, you can simply "push"
+	//		new color definitions into the theme's .color array.  Make sure that you do that with the actual
+	//		theme object from a Chart, and not in the theme itself (i.e. either do that before using .setTheme
+	//		on a chart).
+	//
+	// example:
+	//		The default theme (and structure) looks like so:
+	//	|	// all objects are structs used directly in dojox.gfx
+	//	|	chart:{
+	//	|		stroke: null,
+	//	|		fill: "white",
+	//	|		pageStyle: null // suggested page style as an object suitable for dojo.style()
+	//	|	},
+	//	|	plotarea:{
+	//	|		stroke: null,
+	//	|		fill: "white"
+	//	|	},
+	//	|	axis:{
+	//	|		stroke:	{ // the axis itself
+	//	|			color: "#333",
+	//	|			width: 1
+	//	|		},
+	//	|		tick: {	// used as a foundation for all ticks
+	//	|			color:     "#666",
+	//	|			position:  "center",
+	//	|			font:      "normal normal normal 7pt Tahoma",	// labels on axis
+	//	|			fontColor: "#333"								// color of labels
+	//	|		},
+	//	|		majorTick:	{ // major ticks on axis, and used for major gridlines
+	//	|			width:  1,
+	//	|			length: 6
+	//	|		},
+	//	|		minorTick:	{ // minor ticks on axis, and used for minor gridlines
+	//	|			width:  0.8,
+	//	|			length: 3
+	//	|		},
+	//	|		microTick:	{ // minor ticks on axis, and used for minor gridlines
+	//	|			width:  0.5,
+	//	|			length: 1
+	//	|		},
+	//	|		title: {
+	//	|			gap:  15,
+	//	|			font: "normal normal normal 11pt Tahoma",	// title font
+	//	|			fontColor: "#333",							// title font color
+	//	|			orientation: "axis"						// "axis": facing the axis, "away": facing away
+	//	|		}
+	//	|	},
+	//	|	series: {
+	//	|		stroke:  {width: 1.5, color: "#333"},		// line
+	//	|		outline: {width: 0.1, color: "#ccc"},		// outline
+	//	|		//shadow:  {dx: 1, dy: 1, width: 2, color: [0, 0, 0, 0.3]},
+	//	|		shadow: null,								// no shadow
+	//	|		//filter:  dojox/gfx/filters.createFilter(),
+	//	|		filter: null,								// no filter, to use a filter you must use gfx SVG render and require dojox/gfx/svgext
+	//	|		fill:    "#ccc",							// fill, if appropriate
+	//	|		font:    "normal normal normal 8pt Tahoma",	// if there's a label
+	//	|		fontColor: "#000"							// color of labels
+	//	|		labelWiring: {width: 1, color: "#ccc"},		// connect marker and target data item(slice, column, bar...)
+	//	|	},
+	//	|	marker: {	// any markers on a series
+	//	|		symbol:  "m-3,3 l3,-6 3,6 z",				// symbol
+	//	|		stroke:  {width: 1.5, color: "#333"},		// stroke
+	//	|		outline: {width: 0.1, color: "#ccc"},		// outline
+	//	|		shadow: null,								// no shadow
+	//	|		fill:    "#ccc",							// fill if needed
+	//	|		font:    "normal normal normal 8pt Tahoma",	// label
+	//	|		fontColor: "#000"
+	//	|	},
+	//	|	grid: {	// grid, when not present axis tick strokes are used instead
+	//	|		majorLine: {	// major grid line
+	//	|			color:     "#666",
+	//	|			width:  1,
+	//	|			length: 6
+	//	|		},
+	//	|		minorLine: {	// minor grid line
+	//	|			color:     "#666",
+	//	|			width:  0.8,
+	//	|			length: 3
+	//	|		},
+	//	|		fill: "grey",  // every other stripe
+	//	|		alternateFill: "grey" // alternate stripe
+	//	|	},
+	//	|	indicator: {
+	//	|		lineStroke:  {width: 1.5, color: "#333"},		// line
+	//	|		lineOutline: {width: 0.1, color: "#ccc"},		// line outline
+	//	|		lineShadow: null,								// no line shadow
+	//	|		lineFill: null,									// fill between lines for dual indicators
+	//	|		stroke:  {width: 1.5, color: "#333"},			// label background stroke
+	//	|		outline: {width: 0.1, color: "#ccc"},			// label background outline
+	//	|		shadow: null,									// no label background shadow
+	//	|		fill:  "#ccc",									// label background fill
+	//	|		radius: 3,										// radius of the label background
+	//	|		font:    "normal normal normal 10pt Tahoma",	// label font
+	//	|		fontColor: "#000"								// label color
+	//	|		markerFill:    "#ccc",							// marker fill
+	//	|		markerSymbol:  "m-3,0 c0,-4 6,-4 6,0 m-6,0 c0,4 6,4 6,0",	// marker symbol
+	//	|		markerStroke:  {width: 1.5, color: "#333"},		// marker stroke
+	//	|		markerOutline: {width: 0.1, color: "#ccc"},		// marker outline
+	//	|		markerShadow: null,								// no marker shadow
+	//	|	}
+	//
+	// example:
+	//		Defining a new theme is pretty simple:
+	//	|	var Grasslands = new SimpleTheme({
+	//	|		colors: [ "#70803a", "#dde574", "#788062", "#b1cc5d", "#eff2c2" ]
+	//	|	});
+	//	|
+	//	|	myChart.setTheme(Grasslands);
+
+	shapeSpaces: {shape: 1, shapeX: 1, shapeY: 1},
+
+	constructor: function(kwArgs){
+		// summary:
+		//		Initialize a theme using the keyword arguments.  Note that the arguments
+		//		look like the example (above), and may include a few more parameters.
+		kwArgs = kwArgs || {};
+
+		// populate theme with defaults updating them if needed
+		var def = SimpleTheme.defaultTheme;
+		arr.forEach(["chart", "plotarea", "axis", "grid", "series", "marker", "indicator"], function(name){
+			this[name] = lang.delegate(def[name], kwArgs[name]);
+		}, this);
+
+		// personalize theme
+		if(kwArgs.seriesThemes && kwArgs.seriesThemes.length){
+			this.colors  = null;
+			this.seriesThemes = kwArgs.seriesThemes.slice(0);
+		}else{
+			this.seriesThemes = null;
+			this.colors = (kwArgs.colors || SimpleTheme.defaultColors).slice(0);
+		}
+		this.markerThemes = null;
+		if(kwArgs.markerThemes && kwArgs.markerThemes.length){
+			this.markerThemes = kwArgs.markerThemes.slice(0);
+		}
+		this.markers = kwArgs.markers ? lang.clone(kwArgs.markers) : lang.delegate(SimpleTheme.defaultMarkers);
+
+		// set flags
+		this.noGradConv = kwArgs.noGradConv;
+		this.noRadialConv = kwArgs.noRadialConv;
+		if(kwArgs.reverseFills){
+			this.reverseFills();
+		}
+
+		//	private housekeeping
+		this._current = 0;
+		this._buildMarkerArray();
+	},
+
+	clone: function(){
+		// summary:
+		//		Clone the current theme.
+		// returns: dojox.charting.SimpleTheme
+		//		The cloned theme; any alterations made will not affect the original.
+		var theme = new this.constructor({
+			// theme components
+			chart: this.chart,
+			plotarea: this.plotarea,
+			axis: this.axis,
+			grid: this.grid,
+			series: this.series,
+			marker: this.marker,
+			// individual arrays
+			colors: this.colors,
+			markers: this.markers,
+			indicator: this.indicator,
+			seriesThemes: this.seriesThemes,
+			markerThemes: this.markerThemes,
+			// flags
+			noGradConv: this.noGradConv,
+			noRadialConv: this.noRadialConv
+		});
+		// copy custom methods
+		arr.forEach(
+			["clone", "clear", "next", "skip", "addMixin", "post", "getTick"],
+			function(name){
+				if(this.hasOwnProperty(name)){
+					theme[name] = this[name];
+				}
+			},
+			this
+		);
+		return theme;	//	dojox.charting.SimpleTheme
+	},
+
+	clear: function(){
+		// summary:
+		//		Clear and reset the internal pointer to start fresh.
+		this._current = 0;
+	},
+
+	next: function(elementType, mixin, doPost){
+		// summary:
+		//		Get the next color or series theme.
+		// elementType: String?
+		//		An optional element type (for use with series themes)
+		// mixin: Object?
+		//		An optional object to mix into the theme.
+		// doPost: Boolean?
+		//		A flag to post-process the results.
+		// returns: Object
+		//		An object of the structure { series, marker, symbol }
+		var merge = dlu.merge, series, marker;
+		if(this.colors){
+			series = lang.delegate(this.series);
+			marker = lang.delegate(this.marker);
+			var color = new Color(this.colors[this._current % this.colors.length]), old;
+			// modify the stroke
+			if(series.stroke && series.stroke.color){
+				series.stroke = lang.delegate(series.stroke);
+				old = new Color(series.stroke.color);
+				series.stroke.color = new Color(color);
+				series.stroke.color.a = old.a;
+			}else{
+				series.stroke = {color: color};
+			}
+			if(marker.stroke && marker.stroke.color){
+				marker.stroke = lang.delegate(marker.stroke);
+				old = new Color(marker.stroke.color);
+				marker.stroke.color = new Color(color);
+				marker.stroke.color.a = old.a;
+			}else{
+				marker.stroke = {color: color};
+			}
+			// modify the fill
+			if(!series.fill || series.fill.type){
+				series.fill = color;
+			}else{
+				old = new Color(series.fill);
+				series.fill = new Color(color);
+				series.fill.a = old.a;
+			}
+			if(!marker.fill || marker.fill.type){
+				marker.fill = color;
+			}else{
+				old = new Color(marker.fill);
+				marker.fill = new Color(color);
+				marker.fill.a = old.a;
+			}
+		}else{
+			series = this.seriesThemes ?
+				merge(this.series, this.seriesThemes[this._current % this.seriesThemes.length]) :
+				this.series;
+			marker = this.markerThemes ?
+				merge(this.marker, this.markerThemes[this._current % this.markerThemes.length]) :
+				series;
+		}
+
+		var symbol = marker && marker.symbol || this._markers[this._current % this._markers.length];
+
+		var theme = {series: series, marker: marker, symbol: symbol};
+
+		// advance the counter
+		++this._current;
+
+		if(mixin){
+			theme = this.addMixin(theme, elementType, mixin);
+		}
+		if(doPost){
+			theme = this.post(theme, elementType);
+		}
+
+		return theme;	//	Object
+	},
+
+	skip: function(){
+		// summary:
+		//		Skip the next internal color.
+		++this._current;
+	},
+
+	addMixin: function(theme, elementType, mixin, doPost){
+		// summary:
+		//		Add a mixin object to the passed theme and process.
+		// theme: dojox/charting/SimpleTheme
+		//		The theme to mixin to.
+		// elementType: String
+		//		The type of element in question. Can be "line", "bar" or "circle"
+		// mixin: Object|Array
+		//		The object or objects to mix into the theme.
+		// doPost: Boolean
+		//		If true, run the new theme through the post-processor.
+		// returns: dojox/charting/SimpleTheme
+		//		The new theme.
+		if(lang.isArray(mixin)){
+			arr.forEach(mixin, function(m){
+				theme = this.addMixin(theme, elementType, m);
+			}, this);
+		}else{
+			var t = {};
+			if("color" in mixin){
+				if(elementType == "line" || elementType == "area"){
+					lang.setObject("series.stroke.color", mixin.color, t);
+					lang.setObject("marker.stroke.color", mixin.color, t);
+				}else{
+					lang.setObject("series.fill", mixin.color, t);
+				}
+			}
+			arr.forEach(["stroke", "outline", "shadow", "fill", "filter", "font", "fontColor", "labelWiring"], function(name){
+				var markerName = "marker" + name.charAt(0).toUpperCase() + name.substr(1),
+					b = markerName in mixin;
+				if(name in mixin){
+					lang.setObject("series." + name, mixin[name], t);
+					if(!b){
+						lang.setObject("marker." + name, mixin[name], t);
+					}
+				}
+				if(b){
+					lang.setObject("marker." + name, mixin[markerName], t);
+				}
+			});
+			if("marker" in mixin){
+				t.symbol = mixin.marker;
+				t.symbol = mixin.marker;
+			}
+			theme = dlu.merge(theme, t);
+		}
+		if(doPost){
+			theme = this.post(theme, elementType);
+		}
+		return theme;	//	dojox/charting/SimpleTheme
+	},
+
+	post: function(theme, elementType){
+		// summary:
+		//		Process any post-shape fills.
+		// theme: dojox/charting/SimpleTheme
+		//		The theme to post process with.
+		// elementType: String
+		//		The type of element being filled.  Can be "bar" or "circle".
+		// returns: dojox/charting/SimpleTheme
+		//		The post-processed theme.
+		var fill = theme.series.fill, t;
+		if(!this.noGradConv && this.shapeSpaces[fill.space] && fill.type == "linear"){
+			if(elementType == "bar"){
+				// transpose start and end points
+				t = {
+					x1: fill.y1,
+					y1: fill.x1,
+					x2: fill.y2,
+					y2: fill.x2
+				};
+			}else if(!this.noRadialConv && fill.space == "shape" && (elementType == "slice" || elementType == "circle")){
+				// switch to radial
+				t = {
+					type: "radial",
+					cx: 0,
+					cy: 0,
+					r:  100
+				};
+			}
+			if(t){
+				return dlu.merge(theme, {series: {fill: t}});
+			}
+		}
+		return theme;	//	dojox/charting/SimpleTheme
+	},
+
+	getTick: function(name, mixin){
+		// summary:
+		//		Calculates and merges tick parameters.
+		// name: String
+		//		Tick name, can be "major", "minor", or "micro".
+		// mixin: Object?
+		//		Optional object to mix in to the tick.
+		var tick = this.axis.tick, tickName = name + "Tick",
+			merge = dlu.merge;
+		if(tick){
+			if(this.axis[tickName]){
+				tick = merge(tick, this.axis[tickName]);
+			}
+		}else{
+			tick = this.axis[tickName];
+		}
+		if(mixin){
+			if(tick){
+				if(mixin[tickName]){
+					tick = merge(tick, mixin[tickName]);
+				}
+			}else{
+				tick = mixin[tickName];
+			}
+		}
+		return tick;	//	Object
+	},
+
+	inspectObjects: function(f){
+		arr.forEach(["chart", "plotarea", "axis", "grid", "series", "marker", "indicator"], function(name){
+			f(this[name]);
+		}, this);
+		if(this.seriesThemes){
+			arr.forEach(this.seriesThemes, f);
+		}
+		if(this.markerThemes){
+			arr.forEach(this.markerThemes, f);
+		}
+	},
+
+	reverseFills: function(){
+		this.inspectObjects(function(o){
+			if(o && o.fill){
+				o.fill = dgg.reverse(o.fill);
+			}
+		});
+	},
+
+	addMarker:function(/*String*/ name, /*String*/ segment){
+		// summary:
+		//		Add a custom marker to this theme.
+		// example:
+		//	|	myTheme.addMarker("Ellipse", foo);
+		this.markers[name] = segment;
+		this._buildMarkerArray();
+	},
+
+	setMarkers:function(/*Object*/ obj){
+		// summary:
+		//		Set all the markers of this theme at once.  obj should be a
+		//		dictionary of keys and path segments.
+		//
+		// example:
+		//	|	myTheme.setMarkers({ "CIRCLE": foo });
+		this.markers = obj;
+		this._buildMarkerArray();
+	},
+
+	_buildMarkerArray: function(){
+		this._markers = [];
+		for(var p in this.markers){
+			this._markers.push(this.markers[p]);
+		}
+	}
+});
+
+lang.mixin(SimpleTheme, {
+	defaultMarkers: {
+		CIRCLE:   "m-3,0 c0,-4 6,-4 6,0 m-6,0 c0,4 6,4 6,0",
+		SQUARE:   "m-3,-3 l0,6 6,0 0,-6 z",
+		DIAMOND:  "m0,-3 l3,3 -3,3 -3,-3 z",
+		CROSS:    "m0,-3 l0,6 m-3,-3 l6,0",
+		X:        "m-3,-3 l6,6 m0,-6 l-6,6",
+		TRIANGLE: "m-3,3 l3,-6 3,6 z",
+		TRIANGLE_INVERTED: "m-3,-3 l3,6 3,-6 z"
+	},
+
+	defaultColors:[
+		// gray skies
+		"#54544c", "#858e94", "#6e767a", "#948585", "#474747"
+	],
+
+	defaultTheme: {
+		// all objects are structs used directly in dojox.gfx
+		chart:{
+			stroke: null,
+			fill: "white",
+			pageStyle: null,
+			titleGap:		20,
+			titlePos:		"top",
+			titleFont:      "normal normal bold 14pt Tahoma",	// chart title
+			titleFontColor: "#333"
+		},
+		plotarea:{
+			stroke: null,
+			fill: "white"
+		},
+		// TODO: label rotation on axis
+		axis:{
+			stroke:	{ // the axis itself
+				color: "#333",
+				width: 1
+			},
+			tick: {	// used as a foundation for all ticks
+				color:     "#666",
+				position:  "center",
+				font:      "normal normal normal 7pt Tahoma",	// labels on axis
+				fontColor: "#333",								// color of labels
+				labelGap:  4                                    // gap between a tick and its label in pixels
+			},
+			majorTick:	{ // major ticks on axis, and used for major gridlines
+				width:  1,
+				length: 6
+			},
+			minorTick:	{ // minor ticks on axis, and used for minor gridlines
+				width:  0.8,
+				length: 3
+			},
+			microTick:	{ // minor ticks on axis, and used for minor gridlines
+				width:  0.5,
+				length: 1
+			},
+			title: {
+				gap:  15,
+				font: "normal normal normal 11pt Tahoma",	// title font
+				fontColor: "#333",							// title font color
+				orientation: "axis"						// "axis": facing the axis, "away": facing away
+			}
+		},
+		series: {
+			// used as a "main" theme for series, sThemes augment it
+			stroke:  {width: 1.5, color: "#333"},		// line
+			outline: {width: 0.1, color: "#ccc"},		// outline
+			//shadow:  {dx: 1, dy: 1, width: 2, color: [0, 0, 0, 0.3]},
+			shadow: null,								// no shadow
+			fill:    "#ccc",							// fill, if appropriate
+			font:    "normal normal normal 8pt Tahoma",	// if there's a label
+			fontColor: "#000",							// color of labels
+			labelWiring: {width: 1, color: "#ccc"}		// connect marker and target data item(slice, column, bar...)
+		},
+		marker: {	// any markers on a series
+			stroke:  {width: 1.5, color: "#333"},		// stroke
+			outline: {width: 0.1, color: "#ccc"},		// outline
+			//shadow:  {dx: 1, dy: 1, width: 2, color: [0, 0, 0, 0.3]},
+			shadow: null,								// no shadow
+			fill:    "#ccc",							// fill if needed
+			font:    "normal normal normal 8pt Tahoma",	// label
+			fontColor: "#000"
+		},
+		indicator: {
+			lineStroke:  {width: 1.5, color: "#333"},
+			lineOutline: {width: 0.1, color: "#ccc"},
+			lineShadow: null,
+			lineFill: null,
+			stroke:  {width: 1.5, color: "#333"},
+			outline: {width: 0.1, color: "#ccc"},
+			shadow: null,
+			fill : "#ccc",
+			radius: 3,
+			font:    "normal normal normal 10pt Tahoma",
+			fontColor: "#000",
+			markerFill:    "#ccc",
+			markerSymbol:  "m-3,0 c0,-4 6,-4 6,0 m-6,0 c0,4 6,4 6,0",
+			markerStroke:  {width: 1.5, color: "#333"},
+			markerOutline: {width: 0.1, color: "#ccc"},
+			markerShadow: null
+		}
+	}
+});
+
+return SimpleTheme;
+});
+},
+'dojox/charting/Series':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "./Element"],
+	function(lang, declare, Element){
+	/*=====
+	var __SeriesCtorArgs = {
+		// summary:
+		//		An optional arguments object that can be used in the Series constructor.
+		// plot: String?
+		//		The plot (by name) that this series belongs to.
+	};
+	=====*/
+	return declare("dojox.charting.Series", Element, {
+		// summary:
+		//		An object representing a series of data for plotting on a chart.
+		constructor: function(chart, data, kwArgs){
+			// summary:
+			//		Create a new data series object for use within charting.
+			// chart: dojox/charting/Chart
+			//		The chart that this series belongs to.
+			// data: Array|Object
+			//		The array of data points (either numbers or objects) that
+			//		represents the data to be drawn. Or it can be an object. In
+			//		the latter case, it should have a property "data" (an array),
+			//		destroy(), and setSeriesObject().
+			// kwArgs: __SeriesCtorArgs?
+			//		An optional keyword arguments object to set details for this series.
+			lang.mixin(this, kwArgs);
+			if(typeof this.plot != "string"){ this.plot = "default"; }
+			this.update(data);
+		},
+
+		clear: function(){
+			// summary:
+			//		Clear the calculated additional parameters set on this series.
+			this.dyn = {};
+		},
+
+		update: function(data){
+			// summary:
+			//		Set data and make this object dirty, so it can be redrawn.
+			// data: Array|Object
+			//		The array of data points (either numbers or objects) that
+			//		represents the data to be drawn. Or it can be an object. In
+			//		the latter case, it should have a property "data" (an array),
+			//		destroy(), and setSeriesObject().
+			if(lang.isArray(data)){
+				this.data = data;
+			}else{
+				this.source = data;
+				this.data = this.source.data;
+				if(this.source.setSeriesObject){
+					this.source.setSeriesObject(this);
+				}
+			}
+			this.dirty = true;
+			this.clear();
+		}
+	});
+});
+},
+'dojox/charting/axis2d/common':function(){
+define(["dojo/_base/lang", "dojo/_base/window", "dojo/dom-geometry", "dojox/gfx", "dojo/has"],
+	function(lang, win, domGeom, g, has){
+
+	var common = lang.getObject("dojox.charting.axis2d.common", true);
+
+	var clearNode = function(s){
+		s.marginLeft   = "0px";
+		s.marginTop    = "0px";
+		s.marginRight  = "0px";
+		s.marginBottom = "0px";
+		s.paddingLeft   = "0px";
+		s.paddingTop    = "0px";
+		s.paddingRight  = "0px";
+		s.paddingBottom = "0px";
+		s.borderLeftWidth   = "0px";
+		s.borderTopWidth    = "0px";
+		s.borderRightWidth  = "0px";
+		s.borderBottomWidth = "0px";
+	};
+
+	var getBoxWidth = function(n){
+		// marginBox is incredibly slow, so avoid it if we can
+		if(n["getBoundingClientRect"]){
+			var bcr = n.getBoundingClientRect();
+			return bcr.width || (bcr.right - bcr.left);
+		}else{
+			return domGeom.getMarginBox(n).w;
+		}
+	};
+
+	return lang.mixin(common, {
+		// summary:
+		//		Common methods to be used by any axis.  This is considered "static".
+		createText: {
+			gfx: function(chart, creator, x, y, align, text, font, fontColor){
+				// summary:
+				//		Use dojox.gfx to create any text.
+				// chart: dojox.charting.Chart
+				//		The chart to create the text into.
+				// creator: dojox.gfx.Surface
+				//		The graphics surface to use for creating the text.
+				// x: Number
+				//		Where to create the text along the x axis (CSS left).
+				// y: Number
+				//		Where to create the text along the y axis (CSS top).
+				// align: String
+				//		How to align the text.  Can be "left", "right", "center".
+				// text: String
+				//		The text to render.
+				// font: String
+				//		The font definition, a la CSS "font".
+				// fontColor: String|dojo.Color
+				//		The color of the resultant text.
+				// returns: dojox.gfx.Text
+				//		The resultant GFX object.
+				return creator.createText({
+					x: x, y: y, text: text, align: align
+				}).setFont(font).setFill(fontColor);	//	dojox.gfx.Text
+			},
+			html: function(chart, creator, x, y, align, text, font, fontColor, labelWidth){
+				// summary:
+				//		Use the HTML DOM to create any text.
+				// chart: dojox.charting.Chart
+				//		The chart to create the text into.
+				// creator: dojox.gfx.Surface
+				//		The graphics surface to use for creating the text.
+				// x: Number
+				//		Where to create the text along the x axis (CSS left).
+				// y: Number
+				//		Where to create the text along the y axis (CSS top).
+				// align: String
+				//		How to align the text.  Can be "left", "right", "center".
+				// text: String
+				//		The text to render.
+				// font: String
+				//		The font definition, a la CSS "font".
+				// fontColor: String|dojo.Color
+				//		The color of the resultant text.
+				// labelWidth: Number?
+				//		The maximum width of the resultant DOM node.
+				// returns: DOMNode
+				//		The resultant DOMNode (a "div" element).
+
+				// setup the text node
+				var p = win.doc.createElement("div"), s = p.style, boxWidth;
+				// bidi support, if this function exists the module was loaded
+				if(chart.getTextDir){
+					p.dir = chart.getTextDir(text);
+				}
+				clearNode(s);
+				s.font = font;
+				p.innerHTML = String(text).replace(/\s/g, "&nbsp;");
+				s.color = fontColor;
+				// measure the size
+				s.position = "absolute";
+				s.left = "-10000px";
+				win.body().appendChild(p);
+				var size = g.normalizedLength(g.splitFontString(font).size);
+
+				// do we need to calculate the label width?
+				if(!labelWidth){
+					boxWidth = getBoxWidth(p);
+				}
+				// when the textDir is rtl, but the UI ltr needs
+				// to recalculate the starting point
+				if(p.dir == "rtl"){
+					x += labelWidth ? labelWidth : boxWidth;
+				}
+
+				// new settings for the text node
+				win.body().removeChild(p);
+
+				s.position = "relative";
+				if(labelWidth){
+					s.width = labelWidth + "px";
+					// s.border = "1px dotted grey";
+					switch(align){
+						case "middle":
+							s.textAlign = "center";
+							s.left = (x - labelWidth / 2) + "px";
+							break;
+						case "end":
+							s.textAlign = "right";
+							s.left = (x - labelWidth) + "px";
+							break;
+						default:
+							s.left = x + "px";
+							s.textAlign = "left";
+							break;
+					}
+				}else{
+					switch(align){
+						case "middle":
+							s.left = Math.floor(x - boxWidth / 2) + "px";
+							// s.left = Math.floor(x - p.offsetWidth / 2) + "px";
+							break;
+						case "end":
+							s.left = Math.floor(x - boxWidth) + "px";
+							// s.left = Math.floor(x - p.offsetWidth) + "px";
+							break;
+						//case "start":
+						default:
+							s.left = Math.floor(x) + "px";
+							break;
+					}
+				}
+				s.top = Math.floor(y - size) + "px";
+				s.whiteSpace = "nowrap";	// hack for WebKit
+				// setup the wrapper node
+				var wrap = win.doc.createElement("div"), w = wrap.style;
+				clearNode(w);
+				w.width = "0px";
+				w.height = "0px";
+				// insert nodes
+				wrap.appendChild(p);
+				chart.node.insertBefore(wrap, chart.node.firstChild);
+				if(has("dojo-bidi")){
+					chart.htmlElementsRegistry.push([wrap, x, y, align, text, font, fontColor]);
+				}
+				return wrap;	//	DOMNode
+			}
+		}
+	});
+});
+},
+'dojox/charting/Chart':function(){
+define(["../../", "dojo/_base/lang", "dojo/_base/array","dojo/_base/declare", "dojo/dom-style",
+	"dojo/dom", "dojo/dom-geometry", "dojo/dom-construct","dojo/_base/Color", "dojo/sniff",
+	"./Element", "./SimpleTheme", "./Series", "./axis2d/common", "dojox/gfx/shape",
+	"dojox/gfx", "dojo/has!dojo-bidi?./bidi/Chart", "dojox/lang/functional", "dojox/lang/functional/fold", "dojox/lang/functional/reversed"],
+	function(dojox, lang, arr, declare, domStyle,
+	 		 dom, domGeom, domConstruct, Color, has,
+	 		 Element, SimpleTheme, Series, common, shape,
+	 		 g, BidiChart, func){
+	/*=====
+	var __ChartCtorArgs = {
+		// summary:
+		//		The keyword arguments that can be passed in a Chart constructor.
+		// margins: Object?
+		//		Optional margins for the chart, in the form of { l, t, r, b}.
+		// stroke: dojox.gfx.Stroke?
+		//		An optional outline/stroke for the chart.
+		// fill: dojox.gfx.Fill?
+		//		An optional fill for the chart.
+		// delayInMs: Number
+		//		Delay in ms for delayedRender(). Default: 200.
+	};
+	=====*/
+
+	/*=====
+	var __SeriesCtorArgs = {
+		// summary:
+		//		An optional arguments object that can be used in the Series constructor.
+		// plot: String?
+		//		The plot (by name) that this series belongs to.
+	};
+	=====*/
+
+	/*=====
+	var __BaseAxisCtorArgs = {
+		// summary:
+		//		Optional arguments used in the definition of an invisible axis.
+		// vertical: Boolean?
+		//		A flag that says whether an axis is vertical (i.e. y axis) or horizontal. Default is false (horizontal).
+		// min: Number?
+		//		The smallest value on an axis. Default is 0.
+		// max: Number?
+		//		The largest value on an axis. Default is 1.
+	};
+	=====*/
+
+	var dc = lang.getObject("charting", true, dojox),
+		clear = func.lambda("item.clear()"),
+		purge = func.lambda("item.purgeGroup()"),
+		destroy = func.lambda("item.destroy()"),
+		makeClean = func.lambda("item.dirty = false"),
+		makeDirty = func.lambda("item.dirty = true"),
+		getName = func.lambda("item.name");
+
+	var Chart = declare(has("dojo-bidi")? "dojox.charting.NonBidiChart" : "dojox.charting.Chart", null, {
+		// summary:
+		//		The main chart object in dojox.charting.  This will create a two dimensional
+		//		chart based on dojox.gfx.
+		//
+		// description:
+		//		dojox.charting.Chart is the primary object used for any kind of charts.  It
+		//		is simple to create--just pass it a node reference, which is used as the
+		//		container for the chart--and a set of optional keyword arguments and go.
+		//
+		//		Note that like most of dojox.gfx, most of dojox.charting.Chart's methods are
+		//		designed to return a reference to the chart itself, to allow for functional
+		//		chaining.  This makes defining everything on a Chart very easy to do.
+		//
+		// example:
+		//		Create an area chart, with smoothing.
+		//	|	require(["dojox/charting/Chart", "dojox/charting/themes/Shrooms", "dojox/charting/plot2d/Areas", ...],
+		// 	|		function(Chart, Shrooms, Areas, ...){
+		//	|		new Chart(node)
+		//	|			.addPlot("default", { type: Areas, tension: "X" })
+		//	|			.setTheme(Shrooms)
+		//	|			.addSeries("Series A", [1, 2, 0.5, 1.5, 1, 2.8, 0.4])
+		//	|			.addSeries("Series B", [2.6, 1.8, 2, 1, 1.4, 0.7, 2])
+		//	|			.addSeries("Series C", [6.3, 1.8, 3, 0.5, 4.4, 2.7, 2])
+		//	|			.render();
+		//	|	});
+		//
+		// example:
+		//		The form of data in a data series can take a number of forms: a simple array,
+		//		an array of objects {x,y}, or something custom (as determined by the plot).
+		//		Here's an example of a Candlestick chart, which expects an object of
+		//		{ open, high, low, close }.
+		//	|	require(["dojox/charting/Chart", "dojox/charting/plot2d/Candlesticks", ...],
+		// 	|		function(Chart, Candlesticks, ...){
+		//	|		new Chart(node)
+		//	|			.addPlot("default", {type: Candlesticks, gap: 1})
+		//	|			.addAxis("x", {fixLower: "major", fixUpper: "major", includeZero: true})
+		//	|			.addAxis("y", {vertical: true, fixLower: "major", fixUpper: "major", natural: true})
+		//	|			.addSeries("Series A", [
+		//	|					{ open: 20, close: 16, high: 22, low: 8 },
+		//	|					{ open: 16, close: 22, high: 26, low: 6, mid: 18 },
+		//	|					{ open: 22, close: 18, high: 22, low: 11, mid: 21 },
+		//	|					{ open: 18, close: 29, high: 32, low: 14, mid: 27 },
+		//	|					{ open: 29, close: 24, high: 29, low: 13, mid: 27 },
+		//	|					{ open: 24, close: 8, high: 24, low: 5 },
+		//	|					{ open: 8, close: 16, high: 22, low: 2 },
+		//	|					{ open: 16, close: 12, high: 19, low: 7 },
+		//	|					{ open: 12, close: 20, high: 22, low: 8 },
+		//	|					{ open: 20, close: 16, high: 22, low: 8 },
+		//	|					{ open: 16, close: 22, high: 26, low: 6, mid: 18 },
+		//	|					{ open: 22, close: 18, high: 22, low: 11, mid: 21 },
+		//	|					{ open: 18, close: 29, high: 32, low: 14, mid: 27 },
+		//	|					{ open: 29, close: 24, high: 29, low: 13, mid: 27 },
+		//	|					{ open: 24, close: 8, high: 24, low: 5 },
+		//	|					{ open: 8, close: 16, high: 22, low: 2 },
+		//	|					{ open: 16, close: 12, high: 19, low: 7 },
+		//	|					{ open: 12, close: 20, high: 22, low: 8 },
+		//	|					{ open: 20, close: 16, high: 22, low: 8 },
+		//	|					{ open: 16, close: 22, high: 26, low: 6 },
+		//	|					{ open: 22, close: 18, high: 22, low: 11 },
+		//	|					{ open: 18, close: 29, high: 32, low: 14 },
+		//	|					{ open: 29, close: 24, high: 29, low: 13 },
+		//	|					{ open: 24, close: 8, high: 24, low: 5 },
+		//	|					{ open: 8, close: 16, high: 22, low: 2 },
+		//	|					{ open: 16, close: 12, high: 19, low: 7 },
+		//	|					{ open: 12, close: 20, high: 22, low: 8 },
+		//	|					{ open: 20, close: 16, high: 22, low: 8 }
+		//	|				],
+		//	|				{ stroke: { color: "green" }, fill: "lightgreen" }
+		//	|			)
+		//	|			.render();
+		//	|	});
+
+		// theme: dojox/charting/SimpleTheme?
+		//		An optional theme to use for styling the chart.
+		// axes: dojox/charting/axis2d/Base{}?
+		//		A map of axes for use in plotting a chart.
+		// stack: dojox/charting/plot2d/Base[]
+		//		A stack of plotters.
+		// plots: dojox/charting/plot2d/Base{}
+		//		A map of plotter indices
+		// series: dojox/charting/Series[]
+		//		The stack of data runs used to create plots.
+		// runs: dojox/charting/Series{}
+		//		A map of series indices
+		// margins: Object?
+		//		The margins around the chart. Default is { l:10, t:10, r:10, b:10 }.
+		// stroke: dojox.gfx.Stroke?
+		//		The outline of the chart (stroke in vector graphics terms).
+		// fill: dojox.gfx.Fill?
+		//		The color for the chart.
+		// node: DOMNode
+		//		The container node passed to the constructor.
+		// surface: dojox/gfx/shape.Surface
+		//		The main graphics surface upon which a chart is drawn.
+		// dirty: Boolean
+		//		A boolean flag indicating whether or not the chart needs to be updated/re-rendered.
+		// htmlLabels: Boolean
+		//		A boolean flag indicating whether or not it should try to use HTML-based labels for the title or not.
+		//		The default is true.  The only caveat is IE and Opera browsers will always use GFX-based labels.
+
+		constructor: function(/* DOMNode */node, /* __ChartCtorArgs? */kwArgs){
+			// summary:
+			//		The constructor for a new Chart.  Initializes all parameters used for a chart.
+			// returns: dojox/charting/Chart
+			//		The newly created chart.
+
+			// initialize parameters
+			if(!kwArgs){ kwArgs = {}; }
+			this.margins   = kwArgs.margins ? kwArgs.margins : {l: 10, t: 10, r: 10, b: 10};
+			this.stroke    = kwArgs.stroke;
+			this.fill      = kwArgs.fill;
+			this.delayInMs = kwArgs.delayInMs || 200;
+			this.title     = kwArgs.title;
+			this.titleGap  = kwArgs.titleGap;
+			this.titlePos  = kwArgs.titlePos;
+			this.titleFont = kwArgs.titleFont;
+			this.titleFontColor = kwArgs.titleFontColor;
+			this.chartTitle = null;
+			this.htmlLabels = true;
+			if("htmlLabels" in kwArgs){
+				this.htmlLabels = kwArgs.htmlLabels;
+			}
+
+			// default initialization
+			this.theme = null;
+			this.axes = {};		// map of axes
+			this.stack = [];	// stack of plotters
+			this.plots = {};	// map of plotter indices
+			this.series = [];	// stack of data runs
+			this.runs = {};		// map of data run indices
+			this.dirty = true;
+
+			// create a surface
+			this.node = dom.byId(node);
+			var box = domGeom.getMarginBox(node);
+			this.surface = g.createSurface(this.node, box.w || 400, box.h || 300);
+			if(this.surface.declaredClass.indexOf("vml") == -1){
+				// except if vml use native clipping
+				this._nativeClip = true;
+			}
+		},
+		destroy: function(){
+			// summary:
+			//		Cleanup when a chart is to be destroyed.
+			// returns: void
+			arr.forEach(this.series, destroy);
+			arr.forEach(this.stack,  destroy);
+			func.forIn(this.axes, destroy);
+			this.surface.destroy();
+			if(this.chartTitle && this.chartTitle.tagName){
+				// destroy title if it is a DOM node
+				domConstruct.destroy(this.chartTitle);
+			}
+		},
+		getCoords: function(){
+			// summary:
+			//		Get the coordinates and dimensions of the containing DOMNode, as
+			//		returned by dojo.coords.
+			// returns: Object
+			//		The resulting coordinates of the chart.  See dojo.coords for details.
+			var node = this.node;
+			var s = domStyle.getComputedStyle(node), coords = domGeom.getMarginBox(node, s);
+			var abs = domGeom.position(node, true);
+			coords.x = abs.x;
+			coords.y = abs.y;
+			return coords;	//	Object
+		},
+		setTheme: function(theme){
+			// summary:
+			//		Set a theme of the chart.
+			// theme: dojox/charting/SimpleTheme
+			//		The theme to be used for visual rendering.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			this.theme = theme.clone();
+			this.dirty = true;
+			return this;	//	dojox/charting/Chart
+		},
+		addAxis: function(name, kwArgs){
+			// summary:
+			//		Add an axis to the chart, for rendering.
+			// name: String
+			//		The name of the axis.
+			// kwArgs: __BaseAxisCtorArgs?
+			//		An optional keyword arguments object for use in defining details of an axis.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var axis, axisType = kwArgs && kwArgs.type || "Default";
+			if(typeof axisType == "string"){
+				if(!dc.axis2d || !dc.axis2d[axisType]){
+					throw Error("Can't find axis: " + axisType + " - Check " + "require() dependencies.");
+				}
+				axis = new dc.axis2d[axisType](this, kwArgs);
+			}else{
+				axis = new axisType(this, kwArgs);
+			}
+			axis.name = name;
+			axis.dirty = true;
+			if(name in this.axes){
+				this.axes[name].destroy();
+			}
+			this.axes[name] = axis;
+			this.dirty = true;
+			return this;	//	dojox/charting/Chart
+		},
+		getAxis: function(name){
+			// summary:
+			//		Get the given axis, by name.
+			// name: String
+			//		The name the axis was defined by.
+			// returns: dojox/charting/axis2d/Default
+			//		The axis as stored in the chart's axis map.
+			return this.axes[name];	//	dojox/charting/axis2d/Default
+		},
+		removeAxis: function(name){
+			// summary:
+			//		Remove the axis that was defined using name.
+			// name: String
+			//		The axis name, as defined in addAxis.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.axes){
+				// destroy the axis
+				this.axes[name].destroy();
+				delete this.axes[name];
+				// mark the chart as dirty
+				this.dirty = true;
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		addPlot: function(name, kwArgs){
+			// summary:
+			//		Add a new plot to the chart, defined by name and using the optional keyword arguments object.
+			//		Note that dojox.charting assumes the main plot to be called "default"; if you do not have
+			//		a plot called "default" and attempt to add data series to the chart without specifying the
+			//		plot to be rendered on, you WILL get errors.
+			// name: String
+			//		The name of the plot to be added to the chart.  If you only plan on using one plot, call it "default".
+			// kwArgs: dojox.charting.plot2d.__PlotCtorArgs
+			//		An object with optional parameters for the plot in question.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var plot, plotType = kwArgs && kwArgs.type || "Default";
+			if(typeof plotType == "string"){
+				if(!dc.plot2d || !dc.plot2d[plotType]){
+					throw Error("Can't find plot: " + plotType + " - didn't you forget to dojo" + ".require() it?");
+				}
+				plot = new dc.plot2d[plotType](this, kwArgs);
+			}else{
+				plot = new plotType(this, kwArgs);
+			}
+			plot.name = name;
+			plot.dirty = true;
+			if(name in this.plots){
+				this.stack[this.plots[name]].destroy();
+				this.stack[this.plots[name]] = plot;
+			}else{
+				this.plots[name] = this.stack.length;
+				this.stack.push(plot);
+			}
+			this.dirty = true;
+			return this;	//	dojox/charting/Chart
+		},
+		getPlot: function(name){
+			// summary:
+			//		Get the given plot, by name.
+			// name: String
+			//		The name the plot was defined by.
+			// returns: dojox/charting/plot2d/Base
+			//		The plot.
+			return this.stack[this.plots[name]];
+		},
+		removePlot: function(name){
+			// summary:
+			//		Remove the plot defined using name from the chart's plot stack.
+			// name: String
+			//		The name of the plot as defined using addPlot.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.plots){
+				// get the index and remove the name
+				var index = this.plots[name];
+				delete this.plots[name];
+				// destroy the plot
+				this.stack[index].destroy();
+				// remove the plot from the stack
+				this.stack.splice(index, 1);
+				// update indices to reflect the shift
+				func.forIn(this.plots, function(idx, name, plots){
+					if(idx > index){
+						plots[name] = idx - 1;
+					}
+				});
+				// remove all related series
+				var ns = arr.filter(this.series, function(run){ return run.plot != name; });
+				if(ns.length < this.series.length){
+					// kill all removed series
+					arr.forEach(this.series, function(run){
+						if(run.plot == name){
+							run.destroy();
+						}
+					});
+					// rebuild all necessary data structures
+					this.runs = {};
+					arr.forEach(ns, function(run, index){
+						this.runs[run.plot] = index;
+					}, this);
+					this.series = ns;
+				}
+				// mark the chart as dirty
+				this.dirty = true;
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		getPlotOrder: function(){
+			// summary:
+			//		Returns an array of plot names in the current order
+			//		(the top-most plot is the first).
+			// returns: Array
+			return func.map(this.stack, getName); // Array
+		},
+		setPlotOrder: function(newOrder){
+			// summary:
+			//		Sets new order of plots. newOrder cannot add or remove
+			//		plots. Wrong names, or dups are ignored.
+			// newOrder: Array
+			//		Array of plot names compatible with getPlotOrder().
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var names = {},
+				order = func.filter(newOrder, function(name){
+					if(!(name in this.plots) || (name in names)){
+						return false;
+					}
+					names[name] = 1;
+					return true;
+				}, this);
+			if(order.length < this.stack.length){
+				func.forEach(this.stack, function(plot){
+					var name = plot.name;
+					if(!(name in names)){
+						order.push(name);
+					}
+				});
+			}
+			var newStack = func.map(order, function(name){
+					return this.stack[this.plots[name]];
+				}, this);
+			func.forEach(newStack, function(plot, i){
+				this.plots[plot.name] = i;
+			}, this);
+			this.stack = newStack;
+			this.dirty = true;
+			return this;	//	dojox/charting/Chart
+		},
+		movePlotToFront: function(name){
+			// summary:
+			//		Moves a given plot to front.
+			// name: String
+			//		Plot's name to move.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.plots){
+				var index = this.plots[name];
+				if(index){
+					var newOrder = this.getPlotOrder();
+					newOrder.splice(index, 1);
+					newOrder.unshift(name);
+					return this.setPlotOrder(newOrder);	//	dojox/charting/Chart
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		movePlotToBack: function(name){
+			// summary:
+			//		Moves a given plot to back.
+			// name: String
+			//		Plot's name to move.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.plots){
+				var index = this.plots[name];
+				if(index < this.stack.length - 1){
+					var newOrder = this.getPlotOrder();
+					newOrder.splice(index, 1);
+					newOrder.push(name);
+					return this.setPlotOrder(newOrder);	//	dojox/charting/Chart
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		addSeries: function(name, data, kwArgs){
+			// summary:
+			//		Add a data series to the chart for rendering.
+			// name: String
+			//		The name of the data series to be plotted.
+			// data: Array|Object
+			//		The array of data points (either numbers or objects) that
+			//		represents the data to be drawn. Or it can be an object. In
+			//		the latter case, it should have a property "data" (an array),
+			//		destroy(), and setSeriesObject().
+			// kwArgs: __SeriesCtorArgs?
+			//		An optional keyword arguments object that will be mixed into
+			//		the resultant series object.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var run = new Series(this, data, kwArgs);
+			run.name = name;
+			if(name in this.runs){
+				this.series[this.runs[name]].destroy();
+				this.series[this.runs[name]] = run;
+			}else{
+				this.runs[name] = this.series.length;
+				this.series.push(run);
+			}
+			this.dirty = true;
+			// fix min/max
+			if(!("ymin" in run) && "min" in run){ run.ymin = run.min; }
+			if(!("ymax" in run) && "max" in run){ run.ymax = run.max; }
+			return this;	//	dojox/charting/Chart
+		},
+		getSeries: function(name){
+			// summary:
+			//		Get the given series, by name.
+			// name: String
+			//		The name the series was defined by.
+			// returns: dojox/charting/Series
+			//		The series.
+			return this.series[this.runs[name]];
+		},
+		removeSeries: function(name){
+			// summary:
+			//		Remove the series defined by name from the chart.
+			// name: String
+			//		The name of the series as defined by addSeries.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.runs){
+				// get the index and remove the name
+				var index = this.runs[name];
+				delete this.runs[name];
+				// destroy the run
+				this.series[index].destroy();
+				// remove the run from the stack of series
+				this.series.splice(index, 1);
+				// update indices to reflect the shift
+				func.forIn(this.runs, function(idx, name, runs){
+					if(idx > index){
+						runs[name] = idx - 1;
+					}
+				});
+				this.dirty = true;
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		updateSeries: function(name, data, offsets){
+			// summary:
+			//		Update the given series with a new set of data points.
+			// name: String
+			//		The name of the series as defined in addSeries.
+			// data: Array|Object
+			//		The array of data points (either numbers or objects) that
+			//		represents the data to be drawn. Or it can be an object. In
+			//		the latter case, it should have a property "data" (an array),
+			//		destroy(), and setSeriesObject().
+			// offsets: Boolean?
+			//		If true recomputes the offsets of the chart based on the new
+			//		data. This is useful if the range of data is drastically changing
+			//		and offsets need to be recomputed.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.runs){
+				var run = this.series[this.runs[name]];
+				run.update(data);
+				if(offsets){
+					this.dirty = true;
+				}else{
+					this._invalidateDependentPlots(run.plot, false);
+					this._invalidateDependentPlots(run.plot, true);
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		getSeriesOrder: function(plotName){
+			// summary:
+			//		Returns an array of series names in the current order
+			//		(the top-most series is the first) within a plot.
+			// plotName: String
+			//		Plot's name.
+			// returns: Array
+			return func.map(func.filter(this.series, function(run){
+					return run.plot == plotName;
+				}), getName);
+		},
+		setSeriesOrder: function(newOrder){
+			// summary:
+			//		Sets new order of series within a plot. newOrder cannot add
+			//		or remove series. Wrong names, or dups are ignored.
+			// newOrder: Array
+			//		Array of series names compatible with getPlotOrder(). All
+			//		series should belong to the same plot.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var plotName, names = {},
+				order = func.filter(newOrder, function(name){
+					if(!(name in this.runs) || (name in names)){
+						return false;
+					}
+					var run = this.series[this.runs[name]];
+					if(plotName){
+						if(run.plot != plotName){
+							return false;
+						}
+					}else{
+						plotName = run.plot;
+					}
+					names[name] = 1;
+					return true;
+				}, this);
+			func.forEach(this.series, function(run){
+				var name = run.name;
+				if(!(name in names) && run.plot == plotName){
+					order.push(name);
+				}
+			});
+			var newSeries = func.map(order, function(name){
+					return this.series[this.runs[name]];
+				}, this);
+			this.series = newSeries.concat(func.filter(this.series, function(run){
+				return run.plot != plotName;
+			}));
+			func.forEach(this.series, function(run, i){
+				this.runs[run.name] = i;
+			}, this);
+			this.dirty = true;
+			return this;	//	dojox/charting/Chart
+		},
+		moveSeriesToFront: function(name){
+			// summary:
+			//		Moves a given series to front of a plot.
+			// name: String
+			//		Series' name to move.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.runs){
+				var index = this.runs[name],
+					newOrder = this.getSeriesOrder(this.series[index].plot);
+				if(name != newOrder[0]){
+					newOrder.splice(index, 1);
+					newOrder.unshift(name);
+					return this.setSeriesOrder(newOrder);	//	dojox/charting/Chart
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		moveSeriesToBack: function(name){
+			// summary:
+			//		Moves a given series to back of a plot.
+			// name: String
+			//		Series' name to move.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(name in this.runs){
+				var index = this.runs[name],
+					newOrder = this.getSeriesOrder(this.series[index].plot);
+				if(name != newOrder[newOrder.length - 1]){
+					newOrder.splice(index, 1);
+					newOrder.push(name);
+					return this.setSeriesOrder(newOrder);	//	dojox/charting/Chart
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		resize: function(width, height){
+			// summary:
+			//		Resize the chart to the dimensions of width and height.
+			// description:
+			//		Resize the chart and its surface to the width and height dimensions.
+			//		If a single argument of the form {w: value1, h: value2} is provided take that argument as the dimensions to use.
+			//		Finally if no argument is provided, resize the surface to the marginBox of the chart.
+			// width: Number|Object?
+			//		The new width of the chart or the box definition.
+			// height: Number?
+			//		The new height of the chart.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			switch(arguments.length){
+				// case 0, do not resize the div, just the surface
+				case 1:
+					// argument, override node box
+					domGeom.setMarginBox(this.node, width);
+					break;
+				case 2:
+					// argument, override node box
+					domGeom.setMarginBox(this.node, {w: width, h: height});
+					break;
+			}
+			// in all cases take back the computed box
+			var box = domGeom.getMarginBox(this.node);
+			var d = this.surface.getDimensions();
+			if(d.width != box.w || d.height != box.h){
+				// and set it on the surface
+				this.surface.setDimensions(box.w, box.h);
+				this.dirty = true;
+				return this.render();	//	dojox/charting/Chart
+			}else{
+				return this;
+			}
+		},
+		getGeometry: function(){
+			// summary:
+			//		Returns a map of information about all axes in a chart and what they represent
+			//		in terms of scaling (see dojox.charting.axis2d.Default.getScaler).
+			// returns: Object
+			//		An map of geometry objects, a one-to-one mapping of axes.
+			var ret = {};
+			func.forIn(this.axes, function(axis){
+				if(axis.initialized()){
+					ret[axis.name] = {
+						name:		axis.name,
+						vertical:	axis.vertical,
+						scaler:		axis.scaler,
+						ticks:		axis.ticks
+					};
+				}
+			});
+			return ret;	//	Object
+		},
+		setAxisWindow: function(name, scale, offset, zoom){
+			// summary:
+			//		Zooms an axis and all dependent plots. Can be used to zoom in 1D.
+			// name: String
+			//		The name of the axis as defined by addAxis.
+			// scale: Number
+			//		The scale on the target axis.
+			// offset: Number
+			//		Any offest, as measured by axis tick
+			// zoom: Boolean|Object?
+			//		The chart zooming animation trigger.  This is null by default,
+			//		e.g. {duration: 1200}, or just set true.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			var axis = this.axes[name];
+			if(axis){
+				axis.setWindow(scale, offset);
+				arr.forEach(this.stack,function(plot){
+					if(plot.hAxis == name || plot.vAxis == name){
+						plot.zoom = zoom;
+					}
+				});
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		setWindow: function(sx, sy, dx, dy, zoom){
+			// summary:
+			//		Zooms in or out any plots in two dimensions.
+			// sx: Number
+			//		The scale for the x axis.
+			// sy: Number
+			//		The scale for the y axis.
+			// dx: Number
+			//		The pixel offset on the x axis.
+			// dy: Number
+			//		The pixel offset on the y axis.
+			// zoom: Boolean|Object?
+			//		The chart zooming animation trigger.  This is null by default,
+			//		e.g. {duration: 1200}, or just set true.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(!("plotArea" in this)){
+				this.calculateGeometry();
+			}
+			func.forIn(this.axes, function(axis){
+				var scale, offset, bounds = axis.getScaler().bounds,
+					s = bounds.span / (bounds.upper - bounds.lower);
+				if(axis.vertical){
+					scale  = sy;
+					offset = dy / s / scale;
+				}else{
+					scale  = sx;
+					offset = dx / s / scale;
+				}
+				axis.setWindow(scale, offset);
+			});
+			arr.forEach(this.stack, function(plot){ plot.zoom = zoom; });
+			return this;	//	dojox/charting/Chart
+		},
+		zoomIn:	function(name, range, delayed){
+			// summary:
+			//		Zoom the chart to a specific range on one axis.  This calls render()
+			//		directly as a convenience method.
+			// name: String
+			//		The name of the axis as defined by addAxis.
+			// range: Array
+			//		The end points of the zoom range, measured in axis ticks.
+			var axis = this.axes[name];
+			if(axis){
+				var scale, offset, bounds = axis.getScaler().bounds;
+				var lower = Math.min(range[0],range[1]);
+				var upper = Math.max(range[0],range[1]);
+				lower = range[0] < bounds.lower ? bounds.lower : lower;
+				upper = range[1] > bounds.upper ? bounds.upper : upper;
+				scale = (bounds.upper - bounds.lower) / (upper - lower);
+				offset = lower - bounds.lower;
+				this.setAxisWindow(name, scale, offset);
+				if(delayed){
+					this.delayedRender();
+				}else{
+					this.render();
+				}
+			}
+		},
+		calculateGeometry: function(){
+			// summary:
+			//		Calculate the geometry of the chart based on the defined axes of
+			//		a chart.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(this.dirty){
+				return this.fullGeometry();
+			}
+
+			// calculate geometry
+			var dirty = arr.filter(this.stack, function(plot){
+					return plot.dirty ||
+						(plot.hAxis && this.axes[plot.hAxis].dirty) ||
+						(plot.vAxis && this.axes[plot.vAxis].dirty);
+				}, this);
+			calculateAxes(dirty, this.plotArea);
+
+			return this;	//	dojox/charting/Chart
+		},
+		fullGeometry: function(){
+			// summary:
+			//		Calculate the full geometry of the chart.  This includes passing
+			//		over all major elements of a chart (plots, axes, series, container)
+			//		in order to ensure proper rendering.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			this._makeDirty();
+
+			// clear old values
+			arr.forEach(this.stack, clear);
+
+			// rebuild new connections, and add defaults
+
+			// set up a theme
+			if(!this.theme){
+				this.setTheme(new SimpleTheme());
+			}
+
+			// assign series
+			arr.forEach(this.series, function(run){
+				if(!(run.plot in this.plots)){
+					// TODO remove auto-assignment
+					if(!dc.plot2d || !dc.plot2d.Default){
+						throw Error("Can't find plot: Default - didn't you forget to dojo" + ".require() it?");
+					}
+					var plot = new dc.plot2d.Default(this, {});
+					plot.name = run.plot;
+					this.plots[run.plot] = this.stack.length;
+					this.stack.push(plot);
+				}
+				this.stack[this.plots[run.plot]].addSeries(run);
+			}, this);
+			// assign axes
+			arr.forEach(this.stack, function(plot){
+				if(plot.assignAxes){
+					plot.assignAxes(this.axes);
+				}
+			}, this);
+
+			// calculate geometry
+
+			// 1st pass
+			var dim = this.dim = this.surface.getDimensions();
+			dim.width  = g.normalizedLength(dim.width);
+			dim.height = g.normalizedLength(dim.height);
+			func.forIn(this.axes, clear);
+			calculateAxes(this.stack, dim);
+
+			// assumption: we don't have stacked axes yet
+			var offsets = this.offsets = {l: 0, r: 0, t: 0, b: 0};
+			// chart mirroring starts
+			var self = this;
+			func.forIn(this.axes, function(axis){
+				if(has("dojo-bidi")){
+					self._resetLeftBottom(axis);
+				}
+				func.forIn(axis.getOffsets(), function(o, i){ offsets[i] = Math.max(o, offsets[i]); });
+			});
+			// chart mirroring ends
+			// add title area
+			if(this.title){
+				this.titleGap = (this.titleGap==0) ? 0 : this.titleGap || this.theme.chart.titleGap || 20;
+				this.titlePos = this.titlePos || this.theme.chart.titlePos || "top";
+				this.titleFont = this.titleFont || this.theme.chart.titleFont;
+				this.titleFontColor = this.titleFontColor || this.theme.chart.titleFontColor || "black";
+				var tsize = g.normalizedLength(g.splitFontString(this.titleFont).size);
+				offsets[this.titlePos == "top" ? "t" : "b"] += (tsize + this.titleGap);
+			}
+			// add margins
+			func.forIn(this.margins, function(o, i){ offsets[i] += o; });
+
+			// 2nd pass with realistic dimensions
+			this.plotArea = {
+				width: dim.width - offsets.l - offsets.r,
+				height: dim.height - offsets.t - offsets.b
+			};
+			func.forIn(this.axes, clear);
+			calculateAxes(this.stack, this.plotArea);
+
+			return this;	//	dojox/charting/Chart
+		},
+		render: function(){
+			// summary:
+			//		Render the chart according to the current information defined.  This should
+			//		be the last call made when defining/creating a chart, or if data within the
+			//		chart has been changed.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+
+			// do we have a delayed renderer pending? If yes we need to clear it
+			if(this._delayedRenderHandle){
+				clearTimeout(this._delayedRenderHandle);
+				this._delayedRenderHandle = null;
+			}
+
+			if(this.theme){
+				this.theme.clear();
+			}
+
+			if(this.dirty){
+				return this.fullRender();
+			}
+
+			this.calculateGeometry();
+
+			// go over the stack backwards
+			func.forEachRev(this.stack, function(plot){ plot.render(this.dim, this.offsets); }, this);
+
+			// go over axes
+			func.forIn(this.axes, function(axis){ axis.render(this.dim, this.offsets); }, this);
+
+			this._makeClean();
+
+			return this;	//	dojox/charting/Chart
+		},
+		fullRender: function(){
+			// summary:
+			//		Force a full rendering of the chart, including full resets on the chart itself.
+			//		You should not call this method directly unless absolutely necessary.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+
+			// calculate geometry
+			this.fullGeometry();
+			var offsets = this.offsets, dim = this.dim;
+			var w = Math.max(0, dim.width  - offsets.l - offsets.r),
+				h = Math.max(0, dim.height - offsets.t - offsets.b);
+
+			// get required colors
+			//var requiredColors = func.foldl(this.stack, "z + plot.getRequiredColors()", 0);
+			//this.theme.defineColors({num: requiredColors, cache: false});
+
+			// clear old shapes
+			arr.forEach(this.series, purge);
+			func.forIn(this.axes, purge);
+			arr.forEach(this.stack,  purge);
+			var children = this.surface.children;
+			// starting with 1.9 the registry is optional and thus dispose is
+			if(shape.dispose){
+				for(var i = 0; i < children.length;++i){
+					shape.dispose(children[i]);
+				}
+			}
+			if(this.chartTitle && this.chartTitle.tagName){
+				// destroy title if it is a DOM node
+			    domConstruct.destroy(this.chartTitle);
+			}
+			this.surface.clear();
+			this.chartTitle = null;
+
+			this._renderChartBackground(dim, offsets);
+			if(this._nativeClip){
+				this._renderPlotBackground(dim, offsets, w, h);
+			}else{
+				// VML
+				this._renderPlotBackground(dim, offsets, w, h);
+			}
+
+			// go over the stack backwards
+			func.foldr(this.stack, function(z, plot){ return plot.render(dim, offsets), 0; }, 0);
+
+			if(!this._nativeClip){
+				// VML, matting-clipping
+				this._renderChartBackground(dim, offsets);
+			}
+
+			//create title: Whether to make chart title as a widget which extends dojox.charting.Element?
+			if(this.title){
+				var forceHtmlLabels = (g.renderer == "canvas") && this.htmlLabels,
+					labelType = forceHtmlLabels || !has("ie") && !has("opera") && this.htmlLabels ? "html" : "gfx",
+					tsize = g.normalizedLength(g.splitFontString(this.titleFont).size);
+				this.chartTitle = common.createText[labelType](
+					this,
+					this.surface,
+					dim.width/2,
+					this.titlePos=="top" ? tsize + this.margins.t : dim.height - this.margins.b,
+					"middle",
+					this.title,
+					this.titleFont,
+					this.titleFontColor
+				);
+			}
+
+			// go over axes
+			func.forIn(this.axes, function(axis){ axis.render(dim, offsets); });
+
+			this._makeClean();
+
+			return this;	//	dojox/charting/Chart
+		},
+		_renderChartBackground: function(dim, offsets){
+			var t = this.theme, rect;
+			// chart background
+			var fill   = this.fill   !== undefined ? this.fill   : (t.chart && t.chart.fill);
+			var stroke = this.stroke !== undefined ? this.stroke : (t.chart && t.chart.stroke);
+
+			// TRT: support for "inherit" as a named value in a theme.
+			if(fill == "inherit"){
+				//	find the background color of the nearest ancestor node, and use that explicitly.
+				var node = this.node;
+				fill = new Color(domStyle.get(node, "backgroundColor"));
+				while(fill.a==0 && node!=document.documentElement){
+					fill = new Color(domStyle.get(node, "backgroundColor"));
+					node = node.parentNode;
+				}
+			}
+
+			if(fill){
+				if(this._nativeClip){
+					fill = Element.prototype._shapeFill(Element.prototype._plotFill(fill, dim),
+						{ x:0, y: 0, width: dim.width + 1, height: dim.height + 1 });
+					this.surface.createRect({ width: dim.width + 1, height: dim.height + 1 }).setFill(fill);
+				}else{
+					// VML
+					fill = Element.prototype._plotFill(fill, dim, offsets);
+					if(offsets.l){	// left
+						rect = {
+							x: 0,
+							y: 0,
+							width:  offsets.l,
+							height: dim.height + 1
+						};
+						this.surface.createRect(rect).setFill(Element.prototype._shapeFill(fill, rect));
+					}
+					if(offsets.r){	// right
+						rect = {
+							x: dim.width - offsets.r,
+							y: 0,
+							width:  offsets.r + 1,
+							height: dim.height + 2
+						};
+						this.surface.createRect(rect).setFill(Element.prototype._shapeFill(fill, rect));
+					}
+					if(offsets.t){	// top
+						rect = {
+							x: 0,
+							y: 0,
+							width:  dim.width + 1,
+							height: offsets.t
+						};
+						this.surface.createRect(rect).setFill(Element.prototype._shapeFill(fill, rect));
+					}
+					if(offsets.b){	// bottom
+						rect = {
+							x: 0,
+							y: dim.height - offsets.b,
+							width:  dim.width + 1,
+							height: offsets.b + 2
+						};
+						this.surface.createRect(rect).setFill(Element.prototype._shapeFill(fill, rect));
+					}
+				}
+			}
+			if(stroke){
+				this.surface.createRect({
+					width:  dim.width - 1,
+					height: dim.height - 1
+				}).setStroke(stroke);
+			}
+		},
+		_renderPlotBackground: function(dim, offsets, w, h){
+			var t = this.theme;
+
+			// draw a plot background
+			var fill   = t.plotarea && t.plotarea.fill;
+			var stroke = t.plotarea && t.plotarea.stroke;
+			// size might be neg if offsets are bigger that chart size this happens quite often at
+			// initialization time if the chart widget is used in a BorderContainer
+			// this will fail on IE/VML
+			var rect = {
+				x: offsets.l - 1, y: offsets.t - 1,
+				width:  w + 2,
+				height: h + 2
+			};
+			if(fill){
+				fill = Element.prototype._shapeFill(Element.prototype._plotFill(fill, dim, offsets), rect);
+				this.surface.createRect(rect).setFill(fill);
+			}
+			if(stroke){
+				this.surface.createRect({
+					x: offsets.l, y: offsets.t,
+					width:  w + 1,
+					height: h + 1
+				}).setStroke(stroke);
+			}
+		},
+		delayedRender: function(){
+			// summary:
+			//		Delayed render, which is used to collect multiple updates
+			//		within a delayInMs time window.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+
+			if(!this._delayedRenderHandle){
+				this._delayedRenderHandle = setTimeout(
+					lang.hitch(this, function(){
+						this.render();
+					}),
+					this.delayInMs
+				);
+			}
+
+			return this;	//	dojox/charting/Chart
+		},
+		connectToPlot: function(name, object, method){
+			// summary:
+			//		A convenience method to connect a function to a plot.
+			// name: String
+			//		The name of the plot as defined by addPlot.
+			// object: Object
+			//		The object to be connected.
+			// method: Function
+			//		The function to be executed.
+			// returns: Array
+			//		A handle to the connection, as defined by dojo.connect (see dojo.connect).
+			return name in this.plots ? this.stack[this.plots[name]].connect(object, method) : null;	//	Array
+		},
+		fireEvent: function(seriesName, eventName, index){
+			// summary:
+			//		Fires a synthetic event for a series item.
+			// seriesName: String
+			//		Series name.
+			// eventName: String
+			//		Event name to simulate: onmouseover, onmouseout, onclick.
+			// index: Number
+			//		Valid data value index for the event.
+			// returns: dojox/charting/Chart
+			//		A reference to the current chart for functional chaining.
+			if(seriesName in this.runs){
+				var plotName = this.series[this.runs[seriesName]].plot;
+				if(plotName in this.plots){
+					var plot = this.stack[this.plots[plotName]];
+					if(plot){
+						plot.fireEvent(seriesName, eventName, index);
+					}
+				}
+			}
+			return this;	//	dojox/charting/Chart
+		},
+		_makeClean: function(){
+			// reset dirty flags
+			arr.forEach(this.axes,   makeClean);
+			arr.forEach(this.stack,  makeClean);
+			arr.forEach(this.series, makeClean);
+			this.dirty = false;
+		},
+		_makeDirty: function(){
+			// reset dirty flags
+			arr.forEach(this.axes,   makeDirty);
+			arr.forEach(this.stack,  makeDirty);
+			arr.forEach(this.series, makeDirty);
+			this.dirty = true;
+		},
+		_invalidateDependentPlots: function(plotName, /* Boolean */ verticalAxis){
+			if(plotName in this.plots){
+				var plot = this.stack[this.plots[plotName]], axis,
+					axisName = verticalAxis ? "vAxis" : "hAxis";
+				if(plot[axisName]){
+					axis = this.axes[plot[axisName]];
+					if(axis && axis.dependOnData()){
+						axis.dirty = true;
+						// find all plots and mark them dirty
+						arr.forEach(this.stack, function(p){
+							if(p[axisName] && p[axisName] == plot[axisName]){
+								p.dirty = true;
+							}
+						});
+					}
+				}else{
+					plot.dirty = true;
+				}
+			}
+		},
+		setDir : function(dir){
+			return this;
+		},
+		_resetLeftBottom: function(axis){
+		},
+		formatTruncatedLabel: function(element, label, labelType){
+		}
+	});
+
+	function hSection(stats){
+		return {min: stats.hmin, max: stats.hmax};
+	}
+
+	function vSection(stats){
+		return {min: stats.vmin, max: stats.vmax};
+	}
+
+	function hReplace(stats, h){
+		stats.hmin = h.min;
+		stats.hmax = h.max;
+	}
+
+	function vReplace(stats, v){
+		stats.vmin = v.min;
+		stats.vmax = v.max;
+	}
+
+	function combineStats(target, source){
+		if(target && source){
+			target.min = Math.min(target.min, source.min);
+			target.max = Math.max(target.max, source.max);
+		}
+		return target || source;
+	}
+
+	function calculateAxes(stack, plotArea){
+		var plots = {}, axes = {};
+		arr.forEach(stack, function(plot){
+			var stats = plots[plot.name] = plot.getSeriesStats();
+			if(plot.hAxis){
+				axes[plot.hAxis] = combineStats(axes[plot.hAxis], hSection(stats));
+			}
+			if(plot.vAxis){
+				axes[plot.vAxis] = combineStats(axes[plot.vAxis], vSection(stats));
+			}
+		});
+		arr.forEach(stack, function(plot){
+			var stats = plots[plot.name];
+			if(plot.hAxis){
+				hReplace(stats, axes[plot.hAxis]);
+			}
+			if(plot.vAxis){
+				vReplace(stats, axes[plot.vAxis]);
+			}
+			plot.initializeScalers(plotArea, stats);
+		});
+	}
+
+	return has("dojo-bidi")? declare("dojox.charting.Chart", [Chart, BidiChart]) : Chart;
+});
+},
+'dojox/charting/themes/common':function(){
+define(["dojo/_base/lang"], function(lang){
+	return lang.getObject("dojox.charting.themes", true);
+});
+},
+'dojox/charting/themes/MiamiNice':function(){
+define(["../SimpleTheme", "./common"], function(SimpleTheme, themes){
+	themes.MiamiNice = new SimpleTheme({
+		colors: [
+			"#7f9599",
+			"#45b8cc",
+			"#8ecfb0",
+			"#f8acac",
+			"#cc4482"
+		]
+	});
+	return themes.MiamiNice;
+});
+},
+'dojox/charting/plot2d/Columns':function(){
+
+},
 'dojo/errors/CancelError':function(){
 define(["./create"], function(create){
 	// module:
