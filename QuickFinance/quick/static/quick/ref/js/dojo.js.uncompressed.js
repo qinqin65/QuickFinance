@@ -24711,9 +24711,6 @@ define(["../SimpleTheme", "./common"], function(SimpleTheme, themes){
 	return themes.MiamiNice;
 });
 },
-'dojox/charting/plot2d/Columns':function(){
-
-},
 'dojo/errors/CancelError':function(){
 define(["./create"], function(create){
 	// module:
