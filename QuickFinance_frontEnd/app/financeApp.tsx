@@ -3,6 +3,7 @@ import {LeftPanel} from 'leftPanel';
 import {AccountBook, Account} from 'accountInfo';
 import {BlockPanel} from 'blockPanel';
 import {AccountTool, accountToolSelect, accountPanel, Accounting} from 'accountDetail';
+import {FinancePreview} from 'financePreview'
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
 
@@ -56,6 +57,7 @@ export default class Finance extends React.Component<any, any> {
               }
             </BlockPanel>
             <BlockPanel title={ lang.financePreview }>
+              <FinancePreview />
             </BlockPanel>
           </div>
         </div>

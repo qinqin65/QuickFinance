@@ -43,7 +43,7 @@ export class FinancePreview extends React.Component<any, any> {
 
   render() {
     return (
-        <div id="financeChartNode" style="width:800px;height:400px;"></div>
+        <div id="financeChartNode" style={{ width: '800px', height: '400px' }}></div>
     )
   }
 }
