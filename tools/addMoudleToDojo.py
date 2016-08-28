@@ -15,7 +15,7 @@ def parseArgs():
     
     if not os.path.exists(dojoSrcPath):
         raise Exception('the dojo src path does not exist!')
-    elif not os.path.exists(desFilePath) and not os.path.isfile(desFilePath):
+    elif not os.path.exists(desFilePath) or not os.path.isfile(desFilePath):
         raise Exception('the destination file path does not exist or it is not a file!')
     
     return (dojoSrcPath, desFilePath, dojoMoudle)
@@ -23,9 +23,9 @@ def parseArgs():
 class fileHandler():
     def __init__(self, fileName, write=False):
         if write:
-            self.file = open(fileName)
+            self.file = open(fileName, 'r+')
         else:
-            self.file = open(fileName, 'w')
+            self.file = open(fileName)
         self.writable = write
         self.content = self.file.read()
 
@@ -38,7 +38,7 @@ class fileHandler():
 
 class destFileHandler(fileHandler):
     def __init__(self, fileName):
-        fileHandler.__init__(fileName, True)
+        fileHandler.__init__(self, fileName, True)
 
     def addMoudle(self, moudleName, moudleContent):
         if self.content.find(moudleName) == -1:
@@ -46,7 +46,12 @@ class destFileHandler(fileHandler):
             partHead = self.content[:splitPos]
             partEnd = self.content[splitPos:]
             partAdd = "'{moudleName}':function(){{{linesep}{moudleContent}}},{linesep}".format(moudleName = moudleName, moudleContent = moudleContent, linesep = LINESEP)
-            self.write(partHead + partAdd + partEnd)
+            self.content = partHead + partAdd + partEnd
+            print('moudles added:', moudleName)
+
+    def writeToFile(self):
+        self.file.seek(0, 0)
+        self.write(self.content)
 
 class moudleFileHandler(fileHandler):
     def __init__(self, dojoSrcPath, dojoMoudle):
@@ -61,27 +66,31 @@ class moudleFileHandler(fileHandler):
                 raise Exception('the moudle({0}) you want to import is a root moudle but the main.js does not exist!'.format(dojoMoudle))
         fileHandler.__init__(self, moudlePath)
 
+    def getRightMoudleName(self, moudleName):
+        return '/'.join(filter(lambda item:not item.startswith('.'),moudleName.split('/')))
+
     def getDependencyMoudles(self):
         moudles = []
         startString = 'define(['
-        endString = '],function'
+        endString = '],'
         startPos = self.content.find(startString)
         endPos = self.content.find(endString)
-        dependcyMoudles = self.content[startPos:endPos]
+        dependcyMoudles = self.content[startPos + len(startString):endPos]
         tmpMoudles = dependcyMoudles.split(',')
         for tmpMoudle in tmpMoudles:
-            moudle = tmpMoudle.strip(LINESEP).strip(' ').strip('"')
+            moudle = tmpMoudle.strip().strip('"')
             if moudle.startswith(IGNORE_KEYWORD):
                 continue
             elif moudle.startswith('./'):
-                moudle = os.path.join(dojoMoudle.split('/')[:-1], moudle.split('/')[-1])
+                moudle = os.path.join('/'.join(dojoMoudle.split('/')[:-1]), self.getRightMoudleName(moudle))
             elif moudle.startswith('../'):
-                moudle = os.path.join(dojoMoudle.split('/')[:moudle.count('../')], moudle.split('/')[-1])
+                moudle = os.path.join('/'.join(dojoMoudle.split('/')[:(-moudle.count('../'))-1]), self.getRightMoudleName(moudle))
             moudles.append(moudle)
         return moudles
 
 
 def addModle(moudleName, dojoSrcPath, desFileHandler):
+    print('moudles want to add:', moudleName)
     moudleFIle = moudleFileHandler(dojoSrcPath, moudleName)
     moudleDependencies = moudleFIle.getDependencyMoudles()
     if moudleDependencies:
@@ -95,4 +104,5 @@ if __name__ == '__main__':
     dojoSrcPath, desFilePath, dojoMoudle = parseArgs()
     destFile = destFileHandler(desFilePath)
     addModle(dojoMoudle, dojoSrcPath, destFile)
+    destFile.writeToFile()
     destFile.close()
