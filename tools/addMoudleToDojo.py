@@ -1,9 +1,10 @@
 import sys
 import os
 
-IGNORE_KEYWORD = 'dojo'
+IGNORE_KEYWORD = '/dojo/'
 SPLIT_KEYWORD = "'dojo/errors/CancelError'"
 LINESEP = '\n'
+LOADED = []
 
 def parseArgs():
     if len(sys.argv) < 4:
@@ -40,8 +41,11 @@ class destFileHandler(fileHandler):
     def __init__(self, fileName):
         fileHandler.__init__(self, fileName, True)
 
+    def isMoudleExist(self, moudleName):
+        return self.content.find("'{0}':function()".format(moudleName)) != -1
+
     def addMoudle(self, moudleName, moudleContent):
-        if self.content.find(moudleName) == -1:
+        if self.content.find("'{0}':function()".format(moudleName)) == -1:
             splitPos = self.content.find(SPLIT_KEYWORD)
             partHead = self.content[:splitPos]
             partEnd = self.content[splitPos:]
@@ -65,9 +69,18 @@ class moudleFileHandler(fileHandler):
             else:
                 raise Exception('the moudle({0}) you want to import is a root moudle but the main.js does not exist!'.format(dojoMoudle))
         fileHandler.__init__(self, moudlePath)
+        self.dojoMoudle = dojoMoudle
+        self.loadedMoudles = []
 
     def getRightMoudleName(self, moudleName):
-        return '/'.join(filter(lambda item:not item.startswith('.'),moudleName.split('/')))
+        moudles = moudleName.split('/')
+        if moudles[-1] == '':
+            rightMoudleName = 'main'
+        elif moudles[-1] == '..':
+            rightMoudleName = ''.join(self.dojoMoudle.split('/')[-2:-1])
+        else:
+            rightMoudleName = '/'.join(filter(lambda item:not item.startswith('.'), moudles))
+        return rightMoudleName.strip('!')
 
     def getDependencyMoudles(self):
         moudles = []
@@ -81,15 +94,23 @@ class moudleFileHandler(fileHandler):
             moudle = tmpMoudle.strip().strip('"')
             if moudle.startswith(IGNORE_KEYWORD):
                 continue
+            if moudle == '..':
+                moudle = os.path.join(''.join(self.dojoMoudle.split('/')[0:1]), self.getRightMoudleName(''))
             elif moudle.startswith('./'):
-                moudle = os.path.join('/'.join(dojoMoudle.split('/')[:-1]), self.getRightMoudleName(moudle))
+                moudle = os.path.join('/'.join(self.dojoMoudle.split('/')[:-1]), self.getRightMoudleName(moudle))
             elif moudle.startswith('../'):
-                moudle = os.path.join('/'.join(dojoMoudle.split('/')[:(-moudle.count('../'))-1]), self.getRightMoudleName(moudle))
+                moudle = os.path.join('/'.join(self.dojoMoudle.split('/')[:(-moudle.count('../'))-1]), self.getRightMoudleName(moudle))
+            if moudle in LOADED:
+                continue
             moudles.append(moudle)
+            LOADED.append(moudle)
         return moudles
 
 
 def addModle(moudleName, dojoSrcPath, desFileHandler):
+    if desFileHandler.isMoudleExist(moudleName):
+        print('moudle exist:', moudleName)
+        return
     print('moudles want to add:', moudleName)
     moudleFIle = moudleFileHandler(dojoSrcPath, moudleName)
     moudleDependencies = moudleFIle.getDependencyMoudles()

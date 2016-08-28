@@ -21854,7 +21854,7 @@ define(["dojo/_base/array", "dojo/dom-construct","dojo/_base/declare", "dojox/gf
 });
 },
 'dojox/lang/utils':function(){
-define(["../../", "dojo/_base/lang"],
+define(["dojox/main", "dojo/_base/lang"],
   function(dojox, lang){
 	var du = lang.getObject("lang.utils", true, dojox);
 
@@ -23471,7 +23471,7 @@ define(["dojo/_base/lang", "dojo/_base/window", "dojo/dom-geometry", "dojox/gfx"
 });
 },
 'dojox/charting/Chart':function(){
-define(["../../", "dojo/_base/lang", "dojo/_base/array","dojo/_base/declare", "dojo/dom-style",
+define(["dojox/main", "dojo/_base/lang", "dojo/_base/array","dojo/_base/declare", "dojo/dom-style",
 	"dojo/dom", "dojo/dom-geometry", "dojo/dom-construct","dojo/_base/Color", "dojo/sniff",
 	"./Element", "./SimpleTheme", "./Series", "./axis2d/common", "dojox/gfx/shape",
 	"dojox/gfx", "dojo/has!dojo-bidi?./bidi/Chart", "dojox/lang/functional", "dojox/lang/functional/fold", "dojox/lang/functional/reversed"],
@@ -24711,8 +24711,6003 @@ define(["../SimpleTheme", "./common"], function(SimpleTheme, themes){
 	return themes.MiamiNice;
 });
 },
-'dojox/charting/plot2d/Columns':function(){
+'dojox/charting/scaler/common':function(){
+define(["dojo/_base/lang"], function(lang){
 
+	var eq = function(/*Number*/ a, /*Number*/ b){
+		// summary:
+		//		compare two FP numbers for equality
+		return Math.abs(a - b) <= 1e-6 * (Math.abs(a) + Math.abs(b));	// Boolean
+	};
+	
+	var common = lang.getObject("dojox.charting.scaler.common", true);
+	
+	var testedModules = {};
+
+	return lang.mixin(common, {
+		doIfLoaded: function(moduleName, ifloaded, ifnotloaded){
+			if(testedModules[moduleName] == undefined){
+				try{
+					testedModules[moduleName] = require(moduleName);
+				}catch(e){
+					testedModules[moduleName] = null;
+				}
+			}
+			if(testedModules[moduleName]){
+				return ifloaded(testedModules[moduleName]);
+			}else{
+				return ifnotloaded();
+			}
+		},
+		getNumericLabel: function(/*Number*/ number, /*Number*/ precision, /*Object*/ kwArgs){
+			var def = "";
+			common.doIfLoaded("dojo/number", function(numberLib){
+				def = (kwArgs.fixed ? numberLib.format(number, {places : precision < 0 ? -precision : 0}) :
+					numberLib.format(number)) || "";
+			}, function(){
+				def = kwArgs.fixed ? number.toFixed(precision < 0 ? -precision : 0) : number.toString();
+			});
+			if(kwArgs.labelFunc){
+				var r = kwArgs.labelFunc(def, number, precision);
+				if(r){ return r; }
+				// else fall through to the regular labels search
+			}
+			if(kwArgs.labels){
+				// classic binary search
+				// TODO: working only if the array is sorted per value should be better documented or sorted automatically
+				var l = kwArgs.labels, lo = 0, hi = l.length;
+				while(lo < hi){
+					var mid = Math.floor((lo + hi) / 2), val = l[mid].value;
+					if(val < number){
+						lo = mid + 1;
+					}else{
+						hi = mid;
+					}
+				}
+				// lets take into account FP errors
+				if(lo < l.length && eq(l[lo].value, number)){
+					return l[lo].text;
+				}
+				--lo;
+				if(lo >= 0 && lo < l.length && eq(l[lo].value, number)){
+					return l[lo].text;
+				}
+				lo += 2;
+				if(lo < l.length && eq(l[lo].value, number)){
+					return l[lo].text;
+				}
+				// otherwise we will produce a number
+			}
+			return def;
+		}
+	});
+});
+},
+'dojox/charting/plot2d/common':function(){
+define(["dojo/_base/lang", "dojo/_base/array", "dojo/_base/Color", 
+		"dojox/gfx", "dojox/lang/functional", "../scaler/common"], 
+	function(lang, arr, Color, g, df, sc){
+	
+	var common = lang.getObject("dojox.charting.plot2d.common", true);
+	
+	return lang.mixin(common, {	
+		doIfLoaded: sc.doIfLoaded,
+		makeStroke: function(stroke){
+			if(!stroke){ return stroke; }
+			if(typeof stroke == "string" || stroke instanceof Color){
+				stroke = {color: stroke};
+			}
+			return g.makeParameters(g.defaultStroke, stroke);
+		},
+		augmentColor: function(target, color){
+			var t = new Color(target),
+				c = new Color(color);
+			c.a = t.a;
+			return c;
+		},
+		augmentStroke: function(stroke, color){
+			var s = common.makeStroke(stroke);
+			if(s){
+				s.color = common.augmentColor(s.color, color);
+			}
+			return s;
+		},
+		augmentFill: function(fill, color){
+			var fc, c = new Color(color);
+			if(typeof fill == "string" || fill instanceof Color){
+				return common.augmentColor(fill, color);
+			}
+			return fill;
+		},
+
+		defaultStats: {
+			vmin: Number.POSITIVE_INFINITY, vmax: Number.NEGATIVE_INFINITY,
+			hmin: Number.POSITIVE_INFINITY, hmax: Number.NEGATIVE_INFINITY
+		},
+
+		collectSimpleStats: function(series){
+			var stats = lang.delegate(common.defaultStats);
+			for(var i = 0; i < series.length; ++i){
+				var run = series[i];
+				for(var j = 0; j < run.data.length; j++){
+					if(run.data[j] !== null){
+						if(typeof run.data[j] == "number"){
+							// 1D case
+							var old_vmin = stats.vmin, old_vmax = stats.vmax;
+							arr.forEach(run.data, function(val, i){
+								if(val !== null){
+									var x = i + 1, y = val;
+									if(isNaN(y)){ y = 0; }
+									stats.hmin = Math.min(stats.hmin, x);
+									stats.hmax = Math.max(stats.hmax, x);
+									stats.vmin = Math.min(stats.vmin, y);
+									stats.vmax = Math.max(stats.vmax, y);
+								}
+							});
+							if("ymin" in run){ stats.vmin = Math.min(old_vmin, run.ymin); }
+							if("ymax" in run){ stats.vmax = Math.max(old_vmax, run.ymax); }
+						}else{
+							// 2D case
+							var old_hmin = stats.hmin, old_hmax = stats.hmax,
+								old_vmin = stats.vmin, old_vmax = stats.vmax;
+							if(!("xmin" in run) || !("xmax" in run) || !("ymin" in run) || !("ymax" in run)){
+								arr.forEach(run.data, function(val, i){
+									if(val !== null){
+										var x = "x" in val ? val.x : i + 1, y = val.y;
+										if(isNaN(x)){ x = 0; }
+										if(isNaN(y)){ y = 0; }
+										stats.hmin = Math.min(stats.hmin, x);
+										stats.hmax = Math.max(stats.hmax, x);
+										stats.vmin = Math.min(stats.vmin, y);
+										stats.vmax = Math.max(stats.vmax, y);
+									}
+								});
+							}
+							if("xmin" in run){ stats.hmin = Math.min(old_hmin, run.xmin); }
+							if("xmax" in run){ stats.hmax = Math.max(old_hmax, run.xmax); }
+							if("ymin" in run){ stats.vmin = Math.min(old_vmin, run.ymin); }
+							if("ymax" in run){ stats.vmax = Math.max(old_vmax, run.ymax); }
+						}
+
+						break;
+					}
+				}
+			}
+			return stats;
+		},
+
+		calculateBarSize: function(/* Number */ availableSize, /* Object */ opt, /* Number? */ clusterSize){
+			if(!clusterSize){
+				clusterSize = 1;
+			}
+			var gap = opt.gap, size = (availableSize - 2 * gap) / clusterSize;
+			if("minBarSize" in opt){
+				size = Math.max(size, opt.minBarSize);
+			}
+			if("maxBarSize" in opt){
+				size = Math.min(size, opt.maxBarSize);
+			}
+			size = Math.max(size, 1);
+			gap = (availableSize - size * clusterSize) / 2;
+			return {size: size, gap: gap};	// Object
+		},
+
+		collectStackedStats: function(series){
+			// collect statistics
+			var stats = lang.clone(common.defaultStats);
+			if(series.length){
+				// 1st pass: find the maximal length of runs
+				stats.hmin = Math.min(stats.hmin, 1);
+				stats.hmax = df.foldl(series, "seed, run -> Math.max(seed, run.data.length)", stats.hmax);
+				// 2nd pass: stack values
+				for(var i = 0; i < stats.hmax; ++i){
+					var v = series[0].data[i];
+					v = v && (typeof v == "number" ? v : v.y);
+					if(isNaN(v)){ v = 0; }
+					stats.vmin = Math.min(stats.vmin, v);
+					for(var j = 1; j < series.length; ++j){
+						var t = series[j].data[i];
+						t = t && (typeof t == "number" ? t : t.y);
+						if(isNaN(t)){ t = 0; }
+						v += t;
+					}
+					stats.vmax = Math.max(stats.vmax, v);
+				}
+			}
+			return stats;
+		},
+
+		curve: function(/* Number[] */a, /* Number|String */tension){
+			//	FIX for #7235, submitted by Enzo Michelangeli.
+			//	Emulates the smoothing algorithms used in a famous, unnamed spreadsheet
+			//		program ;)
+			var array = a.slice(0);
+			if(tension == "x") {
+				array[array.length] = array[0];   // add a last element equal to the first, closing the loop
+			}
+			var p=arr.map(array, function(item, i){
+				if(i==0){ return "M" + item.x + "," + item.y; }
+				if(!isNaN(tension)) { // use standard Dojo smoothing in tension is numeric
+					var dx=item.x-array[i-1].x, dy=array[i-1].y;
+					return "C"+(item.x-(tension-1)*(dx/tension))+","+dy+" "+(item.x-(dx/tension))+","+item.y+" "+item.x+","+item.y;
+				} else if(tension == "X" || tension == "x" || tension == "S") {
+					// use Excel "line smoothing" algorithm (http://xlrotor.com/resources/files.shtml)
+					var p0, p1 = array[i-1], p2 = array[i], p3;
+					var bz1x, bz1y, bz2x, bz2y;
+					var f = 1/6;
+					if(i==1) {
+						if(tension == "x") {
+							p0 = array[array.length-2];
+						} else { // "tension == X || tension == "S"
+							p0 = p1;
+						}
+						f = 1/3;
+					} else {
+						p0 = array[i-2];
+					}
+					if(i==(array.length-1)) {
+						if(tension == "x") {
+							p3 = array[1];
+						} else { // "tension == X || tension == "S"
+							p3 = p2;
+						}
+						f = 1/3;
+					} else {
+						p3 = array[i+1];
+					}
+					var p1p2 = Math.sqrt((p2.x-p1.x)*(p2.x-p1.x)+(p2.y-p1.y)*(p2.y-p1.y));
+					var p0p2 = Math.sqrt((p2.x-p0.x)*(p2.x-p0.x)+(p2.y-p0.y)*(p2.y-p0.y));
+					var p1p3 = Math.sqrt((p3.x-p1.x)*(p3.x-p1.x)+(p3.y-p1.y)*(p3.y-p1.y));
+
+					var p0p2f = p0p2 * f;
+					var p1p3f = p1p3 * f;
+
+					if(p0p2f > p1p2/2 && p1p3f > p1p2/2) {
+						p0p2f = p1p2/2;
+						p1p3f = p1p2/2;
+					} else if(p0p2f > p1p2/2) {
+						p0p2f = p1p2/2;
+						p1p3f = p1p2/2 * p1p3/p0p2;
+					} else if(p1p3f > p1p2/2) {
+						p1p3f = p1p2/2;
+						p0p2f = p1p2/2 * p0p2/p1p3;
+					}
+
+					if(tension == "S") {
+						if(p0 == p1) { p0p2f = 0; }
+						if(p2 == p3) { p1p3f = 0; }
+					}
+
+					bz1x = p1.x + p0p2f*(p2.x - p0.x)/p0p2;
+					bz1y = p1.y + p0p2f*(p2.y - p0.y)/p0p2;
+					bz2x = p2.x - p1p3f*(p3.x - p1.x)/p1p3;
+					bz2y = p2.y - p1p3f*(p3.y - p1.y)/p1p3;
+				}
+				return "C"+(bz1x+","+bz1y+" "+bz2x+","+bz2y+" "+p2.x+","+p2.y);
+			});
+			return p.join(" ");
+		},
+		
+		getLabel: function(/*Number*/number, /*Boolean*/fixed, /*Number*/precision){
+			return sc.doIfLoaded("dojo/number", function(numberLib){
+				return (fixed ? numberLib.format(number, {places : precision}) :
+					numberLib.format(number)) || "";
+			}, function(){
+				return fixed ? number.toFixed(precision) : number.toString();
+			});
+		}
+	});
+});
+},
+'dojox/charting/scaler/primitive':function(){
+define(["dojo/_base/lang"], 
+  function(lang){
+	var primitive = lang.getObject("dojox.charting.scaler.primitive", true);
+	return lang.mixin(primitive, {
+		buildScaler: function(/*Number*/ min, /*Number*/ max, /*Number*/ span, /*Object*/ kwArgs){
+			if(min == max){
+				// artificially extend bounds
+				min -= 0.5;
+				max += 0.5;
+				// now the line will be centered
+			}
+			return {
+				bounds: {
+					lower: min,
+					upper: max,
+					from:  min,
+					to:    max,
+					scale: span / (max - min),
+					span:  span
+				},
+				scaler: primitive
+			};
+		},
+		buildTicks: function(/*Object*/ scaler, /*Object*/ kwArgs){
+			return {major: [], minor: [], micro: []};	// Object
+		},
+		getTransformerFromModel: function(/*Object*/ scaler){
+			var offset = scaler.bounds.from, scale = scaler.bounds.scale;
+			return function(x){ return (x - offset) * scale; };	// Function
+		},
+		getTransformerFromPlot: function(/*Object*/ scaler){
+			var offset = scaler.bounds.from, scale = scaler.bounds.scale;
+			return function(x){ return x / scale + offset; };	// Function
+		}
+	});
+});
+},
+'dojox/charting/plot2d/CartesianBase':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "dojo/_base/connect", "dojo/has",
+		"./Base", "../scaler/primitive", "dojox/gfx", "dojox/gfx/fx", "dojox/lang/utils"], 
+	function(lang, declare, hub, has, Base, primitive, gfx, fx, du){
+	/*=====
+	declare("dojox.charting.plot2d.__CartesianCtorArgs", dojox.charting.plot2d.__PlotCtorArgs, {
+		// hAxis: String?
+		//		The horizontal axis name.
+		hAxis: "x",
+
+		// vAxis: String?
+		//		The vertical axis name
+		vAxis: "y",
+
+		// labels: Boolean?
+		//		For plots that support labels, whether or not to draw labels for each data item.  Default is false.
+		labels:			false,
+
+		// fixed: Boolean?
+        //		Whether a fixed precision must be applied to data values for display. Default is true.
+		fixed:			true,
+
+		// precision: Number?
+        //		The precision at which to round data values for display. Default is 0.
+		precision:		1,
+
+		// labelOffset: Number?
+		//		The amount in pixels by which to offset labels when using "outside" labelStyle.  Default is 10.
+		labelOffset:	10,
+
+		// labelStyle: String?
+		//		Options as to where to draw labels.  This must be either "inside" or "outside". By default
+		//      the labels are drawn "inside" the shape representing the data point (a column rectangle for a Columns plot
+		//      or a marker for a Line plot for instance). When "outside" is used the labels are drawn above the data point shape.
+		labelStyle:		"inside",
+
+		// htmlLabels: Boolean?
+		//		Whether or not to use HTML to render slice labels. Default is true.
+		htmlLabels:		true,
+
+		// omitLabels: Boolean?
+		//		Whether labels that do not fit in an item render are omitted or not.	This applies only when labelStyle
+		//		is "inside".	Default is false.
+		omitLabels: true,
+
+		// labelFunc: Function?
+		//		An optional function to use to compute label text. It takes precedence over
+		//		the default text when available.
+		//	|		function labelFunc(value, fixed, precision) {}
+		//		`value` is the data value to display
+		//		`fixed` is true if fixed precision must be applied.
+		//		`precision` is the requested precision to be applied.
+		labelFunc: null
+	});
+	=====*/
+
+	return declare("dojox.charting.plot2d.CartesianBase", Base, {
+		baseParams: {
+			hAxis: 			"x",
+			vAxis: 			"y",
+			labels:			false,
+			labelOffset:    10,
+			fixed:			true,
+			precision:		1,
+			labelStyle:		"inside",
+			htmlLabels:		true,		// use HTML to draw labels
+			omitLabels:		true,
+			labelFunc:		null
+        },
+
+		// summary:
+		//		Base class for cartesian plot types.
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		Create a cartesian base plot for cartesian charts.
+			// chart: dojox/chart/Chart
+			//		The chart this plot belongs to.
+			// kwArgs: dojox.charting.plot2d.__CartesianCtorArgs?
+			//		An optional arguments object to help define the plot.
+			this.axes = ["hAxis", "vAxis"];
+			this.zoom = null;
+			this.zoomQueue = [];	// zooming action task queue
+			this.lastWindow = {vscale: 1, hscale: 1, xoffset: 0, yoffset: 0};
+			this.hAxis = (kwArgs && kwArgs.hAxis) || "x";
+			this.vAxis = (kwArgs && kwArgs.vAxis) || "y";
+			this.series = [];
+			this.opt = lang.clone(this.baseParams);
+			du.updateWithObject(this.opt, kwArgs);
+		},
+		clear: function(){
+			// summary:
+			//		Clear out all of the information tied to this plot.
+			// returns: dojox/charting/plot2d/CartesianBase
+			//		A reference to this plot for functional chaining.
+			this.inherited(arguments);
+			this._hAxis = null;
+			this._vAxis = null;
+			return this;	//	dojox/charting/plot2d/CartesianBase
+		},
+		cleanGroup: function(creator, noClip){
+			this.inherited(arguments);
+			if(!noClip && this.chart._nativeClip){
+				var offsets = this.chart.offsets, dim = this.chart.dim;
+				var w = Math.max(0, dim.width  - offsets.l - offsets.r),
+					h = Math.max(0, dim.height - offsets.t - offsets.b);
+				this.group.setClip({ x: offsets.l, y: offsets.t, width: w, height: h });
+				if(!this._clippedGroup){
+					this._clippedGroup = this.group.createGroup();
+				}
+			}
+		},
+		purgeGroup: function(){
+			this.inherited(arguments);
+			this._clippedGroup = null;
+		},
+		getGroup: function(){
+			return this._clippedGroup || this.group;
+		},
+		setAxis: function(axis){
+			// summary:
+			//		Set an axis for this plot.
+			// axis: dojox/charting/axis2d/Base
+			//		The axis to set.
+			// returns: dojox/charting/plot2d/CartesianBase
+			//		A reference to this plot for functional chaining.
+			if(axis){
+				this[axis.vertical ? "_vAxis" : "_hAxis"] = axis;
+			}
+			return this;	//	dojox/charting/plot2d/CartesianBase
+		},
+		toPage: function(coord){
+			// summary:
+			//		Compute page coordinates from plot axis data coordinates.
+			// coord: Object?
+			//		The coordinates in plot axis data coordinate space. For cartesian charts that is of the following form:
+			//		`{ hAxisName: 50, vAxisName: 200 }`
+			//		If not provided return the transform method instead of the result of the transformation.
+			// returns: Object
+			//		The resulting page pixel coordinates. That is of the following form:
+			//		`{ x: 50, y: 200 }`
+			var ah = this._hAxis, av = this._vAxis,
+				sh = ah.getScaler(), sv = av.getScaler(),
+				th = sh.scaler.getTransformerFromModel(sh),
+				tv = sv.scaler.getTransformerFromModel(sv),
+				c = this.chart.getCoords(),
+				o = this.chart.offsets, dim = this.chart.dim;
+			var t = function(coord){
+				var r = {};
+				r.x = th(coord[ah.name]) + c.x + o.l;
+				r.y = c.y + dim.height - o.b - tv(coord[av.name]);
+				return r;
+			};
+			// if no coord return the function so that we can capture the current transforms
+			// and reuse them later on
+			return coord?t(coord):t; // Object
+		},
+		toData: function(coord){
+			// summary:
+			//		Compute plot axis data coordinates from page coordinates.
+			// coord: Object
+			//		The pixel coordinate in page coordinate space. That is of the following form:
+			//		`{ x: 50, y: 200 }`
+			//		If not provided return the tranform method instead of the result of the transformation.
+			// returns: Object
+			//		The resulting plot axis data coordinates. For cartesian charts that is of the following form:
+			//		`{ hAxisName: 50, vAxisName: 200 }`
+			var ah = this._hAxis, av = this._vAxis,
+				sh = ah.getScaler(), sv = av.getScaler(),
+				th = sh.scaler.getTransformerFromPlot(sh),
+				tv = sv.scaler.getTransformerFromPlot(sv),
+				c = this.chart.getCoords(),
+				o = this.chart.offsets, dim = this.chart.dim;
+			var t = function(coord){
+				var r = {};
+				r[ah.name] = th(coord.x - c.x - o.l);
+				r[av.name] = tv(c.y + dim.height - coord.y  - o.b);
+				return r;
+			};
+			// if no coord return the function so that we can capture the current transforms
+			// and reuse them later on
+			return coord?t(coord):t; // Object
+		},
+		isDirty: function(){
+			// summary:
+			//		Returns whether or not this plot needs to be rendered.
+			// returns: Boolean
+			//		The state of the plot.
+			return this.dirty || this._hAxis && this._hAxis.dirty || this._vAxis && this._vAxis.dirty;	//	Boolean
+		},
+		createLabel: function(group, value, bbox, theme){
+			if(this.opt.labels){
+				var x, y, label = this.opt.labelFunc?this.opt.labelFunc.apply(this, [value, this.opt.fixed, this.opt.precision]):
+					this._getLabel(isNaN(value.y)?value:value.y);
+				if(this.opt.labelStyle == "inside"){
+					var lbox = gfx._base._getTextBox(label, { font: theme.series.font } );
+					x = bbox.x + bbox.width / 2;
+					y = bbox.y + bbox.height / 2 + lbox.h / 4;
+					if(lbox.w > bbox.width || lbox.h > bbox.height){
+						return;
+					}
+
+				}else{
+					x = bbox.x + bbox.width / 2;
+					y = bbox.y - this.opt.labelOffset;
+				}
+				this.renderLabel(group, x, y, label, theme, this.opt.labelStyle == "inside");
+			}
+		},
+		performZoom: function(dim, offsets){
+			// summary:
+			//		Create/alter any zooming windows on this plot.
+			// dim: Object
+			//		An object of the form { width, height }.
+			// offsets: Object
+			//		An object of the form { l, r, t, b }.
+			// returns: dojox/charting/plot2d/CartesianBase
+			//		A reference to this plot for functional chaining.
+
+			// get current zooming various
+			var vs = this._vAxis.scale || 1,
+				hs = this._hAxis.scale || 1,
+				vOffset = dim.height - offsets.b,
+				hBounds = this._hScaler.bounds,
+				xOffset = (hBounds.from - hBounds.lower) * hBounds.scale,
+				vBounds = this._vScaler.bounds,
+				yOffset = (vBounds.from - vBounds.lower) * vBounds.scale,
+				// get incremental zooming various
+				rVScale = vs / this.lastWindow.vscale,
+				rHScale = hs / this.lastWindow.hscale,
+				rXOffset = (this.lastWindow.xoffset - xOffset)/
+					((this.lastWindow.hscale == 1)? hs : this.lastWindow.hscale),
+				rYOffset = (yOffset - this.lastWindow.yoffset)/
+					((this.lastWindow.vscale == 1)? vs : this.lastWindow.vscale),
+
+				shape = this.getGroup(),
+				anim = fx.animateTransform(lang.delegate({
+					shape: shape,
+					duration: 1200,
+					transform:[
+						{name:"translate", start:[0, 0], end: [offsets.l * (1 - rHScale), vOffset * (1 - rVScale)]},
+						{name:"scale", start:[1, 1], end: [rHScale, rVScale]},
+						{name:"original"},
+						{name:"translate", start: [0, 0], end: [rXOffset, rYOffset]}
+					]}, this.zoom));
+
+			lang.mixin(this.lastWindow, {vscale: vs, hscale: hs, xoffset: xOffset, yoffset: yOffset});
+			//add anim to zooming action queue,
+			//in order to avoid several zooming action happened at the same time
+			this.zoomQueue.push(anim);
+			//perform each anim one by one in zoomQueue
+			hub.connect(anim, "onEnd", this, function(){
+				this.zoom = null;
+				this.zoomQueue.shift();
+				if(this.zoomQueue.length > 0){
+					this.zoomQueue[0].play();
+				}
+			});
+			if(this.zoomQueue.length == 1){
+				this.zoomQueue[0].play();
+			}
+			return this;	//	dojox/charting/plot2d/CartesianBase
+		},
+		initializeScalers: function(dim, stats){
+			// summary:
+			//		Initializes scalers using attached axes.
+			// dim: Object
+			//		Size of a plot area in pixels as {width, height}.
+			// stats: Object
+			//		Min/max of data in both directions as {hmin, hmax, vmin, vmax}.
+			// returns: dojox/charting/plot2d/CartesianBase
+			//		A reference to this plot for functional chaining.
+			if(this._hAxis){
+				if(!this._hAxis.initialized()){
+					this._hAxis.calculate(stats.hmin, stats.hmax, dim.width);
+				}
+				this._hScaler = this._hAxis.getScaler();
+			}else{
+				this._hScaler = primitive.buildScaler(stats.hmin, stats.hmax, dim.width);
+			}
+			if(this._vAxis){
+				if(!this._vAxis.initialized()){
+					this._vAxis.calculate(stats.vmin, stats.vmax, dim.height);
+				}
+				this._vScaler = this._vAxis.getScaler();
+			}else{
+				this._vScaler = primitive.buildScaler(stats.vmin, stats.vmax, dim.height);
+			}
+			return this;	//	dojox/charting/plot2d/CartesianBase
+		}
+	});
+});
+},
+'dojox/charting/plot2d/_PlotEvents':function(){
+define(["dojo/_base/lang", "dojo/_base/array", "dojo/_base/declare", "dojo/_base/connect"], 
+	function(lang, arr, declare, hub){
+
+	return declare("dojox.charting.plot2d._PlotEvents", null, {
+		constructor: function(){
+			this._shapeEvents = [];
+			this._eventSeries = {};
+		},
+		destroy: function(){
+			// summary:
+			//		Destroy any internal elements and event handlers.
+			this.resetEvents();
+			this.inherited(arguments);
+		},
+		plotEvent: function(o){
+			// summary:
+			//		Stub function for use by specific plots.
+			// o: Object
+			//		An object intended to represent event parameters.
+		},
+		raiseEvent: function(o){
+			// summary:
+			//		Raises events in predefined order
+			// o: Object
+			//		An object intended to represent event parameters.
+			this.plotEvent(o);
+			var t = lang.delegate(o);
+			t.originalEvent = o.type;
+			t.originalPlot  = o.plot;
+			t.type = "onindirect";
+			arr.forEach(this.chart.stack, function(plot){
+				if(plot !== this && plot.plotEvent){
+					t.plot = plot;
+					plot.plotEvent(t);
+				}
+			}, this);
+		},
+		connect: function(object, method){
+			// summary:
+			//		Helper function to connect any object's method to our plotEvent.
+			// object: Object
+			//		The object to connect to.
+			// method: String|Function
+			//		The method to fire when our plotEvent is fired.
+			// returns: Array
+			//		The handle as returned from dojo.connect (see dojo.connect).
+			this.dirty = true;
+			return hub.connect(this, "plotEvent", object, method);	//	Array
+		},
+		events: function(){
+			// summary:
+			//		Find out if any event handlers have been connected to our plotEvent.
+			// returns: Boolean
+			//		A flag indicating that there are handlers attached.
+			return !!this.plotEvent.after;
+		},
+		resetEvents: function(){
+			// summary:
+			//		Reset all events attached to our plotEvent (i.e. disconnect).
+			if(this._shapeEvents.length){
+				arr.forEach(this._shapeEvents, function(item){
+					item.shape.disconnect(item.handle);
+				});
+				this._shapeEvents = [];
+			}
+			this.raiseEvent({type: "onplotreset", plot: this});
+		},
+		_connectSingleEvent: function(o, eventName){
+			this._shapeEvents.push({
+				shape:  o.eventMask,
+				handle: o.eventMask.connect(eventName, this, function(e){
+					o.type  = eventName;
+					o.event = e;
+					this.raiseEvent(o);
+					o.event = null;
+				})
+			});
+		},
+		_connectEvents: function(o){
+			if(o){
+				o.chart = this.chart;
+				o.plot  = this;
+				o.hAxis = this.hAxis || null;
+				o.vAxis = this.vAxis || null;
+				o.eventMask = o.eventMask || o.shape;
+				this._connectSingleEvent(o, "onmouseover");
+				this._connectSingleEvent(o, "onmouseout");
+				this._connectSingleEvent(o, "onclick");
+			}
+		},
+		_reconnectEvents: function(seriesName){
+			var a = this._eventSeries[seriesName];
+			if(a){
+				arr.forEach(a, this._connectEvents, this);
+			}
+		},
+		fireEvent: function(seriesName, eventName, index, eventObject){
+			// summary:
+			//		Emulates firing an event for a given data value (specified by
+			//		an index) of a given series.
+			// seriesName: String
+			//		Series name.
+			// eventName: String
+			//		Event name to emulate.
+			// index: Number
+			//		Valid data value index used to raise an event.
+			// eventObject: Object?
+			//		Optional event object. Especially useful for synthetic events.
+			//		Default: null.
+			var s = this._eventSeries[seriesName];
+			if(s && s.length && index < s.length){
+				var o = s[index];
+				o.type  = eventName;
+				o.event = eventObject || null;
+				this.raiseEvent(o);
+				o.event = null;
+			}
+		}
+	});
+});
+},
+'dojox/charting/plot2d/Columns':function(){
+define(["dojo/_base/lang", "dojo/_base/array", "dojo/_base/declare", "dojo/has", "./CartesianBase", "./_PlotEvents", "./common",
+		"dojox/lang/functional", "dojox/lang/functional/reversed", "dojox/lang/utils", "dojox/gfx/fx"], 
+	function(lang, arr, declare, has, CartesianBase, _PlotEvents, dc, df, dfr, du, fx){
+
+	var purgeGroup = dfr.lambda("item.purgeGroup()");
+
+	return declare("dojox.charting.plot2d.Columns", [CartesianBase, _PlotEvents], {
+		// summary:
+		//		The plot object representing a column chart (vertical bars).
+		defaultParams: {
+			gap:	0,		// gap between columns in pixels
+			animate: null,  // animate bars into place
+			enableCache: false
+		},
+		optionalParams: {
+			minBarSize:	1,	// minimal column width in pixels
+			maxBarSize:	1,	// maximal column width in pixels
+			// theme component
+			stroke:		{},
+			outline:	{},
+			shadow:		{},
+			fill:		{},
+			filter:     {},
+			styleFunc:  null,
+			font:		"",
+			fontColor:	""
+		},
+
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		The constructor for a columns chart.
+			// chart: dojox/charting/Chart
+			//		The chart this plot belongs to.
+			// kwArgs: dojox.charting.plot2d.__BarCtorArgs?
+			//		An optional keyword arguments object to help define the plot.
+			this.opt = lang.clone(lang.mixin(this.opt, this.defaultParams));
+			du.updateWithObject(this.opt, kwArgs);
+			du.updateWithPattern(this.opt, kwArgs, this.optionalParams);
+			this.animate = this.opt.animate;
+			this.renderingOptions = { "shape-rendering": "crispEdges" };
+		},
+
+		getSeriesStats: function(){
+			// summary:
+			//		Calculate the min/max on all attached series in both directions.
+			// returns: Object
+			//		{hmin, hmax, vmin, vmax} min/max in both directions.
+			var stats = dc.collectSimpleStats(this.series);
+			stats.hmin -= 0.5;
+			stats.hmax += 0.5;
+			return stats; // Object
+		},
+		
+		createRect: function(run, creator, params){
+			var rect;
+			if(this.opt.enableCache && run._rectFreePool.length > 0){
+				rect = run._rectFreePool.pop();
+				rect.setShape(params);
+				// was cleared, add it back
+				creator.add(rect);
+			}else{
+				rect = creator.createRect(params);
+			}
+			if(this.opt.enableCache){
+				run._rectUsePool.push(rect);
+			}
+			return rect;
+		},
+
+		render: function(dim, offsets){
+			// summary:
+			//		Run the calculations for any axes for this plot.
+			// dim: Object
+			//		An object in the form of { width, height }
+			// offsets: Object
+			//		An object of the form { l, r, t, b}.
+			// returns: dojox/charting/plot2d/Columns
+			//		A reference to this plot for functional chaining.
+			if(this.zoom && !this.isDataDirty()){
+				return this.performZoom(dim, offsets);
+			}
+			this.resetEvents();
+			this.dirty = this.isDirty();
+			var s;
+			if(this.dirty){
+				arr.forEach(this.series, purgeGroup);
+				this._eventSeries = {};
+				this.cleanGroup();
+				s = this.getGroup();
+				df.forEachRev(this.series, function(item){ item.cleanGroup(s); });
+			}
+			var t = this.chart.theme,
+				ht = this._hScaler.scaler.getTransformerFromModel(this._hScaler),
+				vt = this._vScaler.scaler.getTransformerFromModel(this._vScaler),
+				baseline = Math.max(0, this._vScaler.bounds.lower),
+				baselineHeight = vt(baseline),
+				events = this.events(),
+				bar = this.getBarProperties();
+			
+			var z = this.series.length;
+			arr.forEach(this.series, function(serie){if(serie.hidden){z--;}});
+
+			for(var i = this.series.length - 1; i >= 0; --i){
+				var run = this.series[i];
+				if(!this.dirty && !run.dirty){
+					t.skip();
+					this._reconnectEvents(run.name);
+					continue;
+				}
+				run.cleanGroup();
+				if(this.opt.enableCache){
+					run._rectFreePool = (run._rectFreePool?run._rectFreePool:[]).concat(run._rectUsePool?run._rectUsePool:[]);
+					run._rectUsePool = [];
+				}
+				var theme = t.next("column", [this.opt, run]),
+					eventSeries = new Array(run.data.length);
+
+				if(run.hidden){
+					run.dyn.fill = theme.series.fill;
+					continue;
+				}
+				z--;
+
+				s = run.group;
+				var indexed = arr.some(run.data, function(item){
+					return typeof item == "number" || (item && !item.hasOwnProperty("x"));
+				});
+				// on indexed charts we can easily just interate from the first visible to the last visible
+				// data point to save time
+				var min = indexed?Math.max(0, Math.floor(this._hScaler.bounds.from - 1)):0;
+				var max = indexed?Math.min(run.data.length, Math.ceil(this._hScaler.bounds.to)):run.data.length;
+				for(var j = min; j < max; ++j){
+					var value = run.data[j];
+					if(value != null){
+						var val = this.getValue(value, j, i, indexed),
+							vv = vt(val.y),
+							h = Math.abs(vv - baselineHeight), 
+							finalTheme,
+							sshape;
+						
+						if(this.opt.styleFunc || typeof value != "number"){
+							var tMixin = typeof value != "number" ? [value] : [];
+							if(this.opt.styleFunc){
+								tMixin.push(this.opt.styleFunc(value));
+							}
+							finalTheme = t.addMixin(theme, "column", tMixin, true);
+						}else{
+							finalTheme = t.post(theme, "column");
+						}
+						
+						if(bar.width >= 1 && h >= 0){
+							var rect = {
+								x: offsets.l + ht(val.x + 0.5) + bar.gap + bar.thickness * z,
+								y: dim.height - offsets.b - (val.y > baseline ? vv : baselineHeight),
+								width: bar.width, 
+								height: h
+							};
+							if(finalTheme.series.shadow){
+								var srect = lang.clone(rect);
+								srect.x += finalTheme.series.shadow.dx;
+								srect.y += finalTheme.series.shadow.dy;
+								sshape = this.createRect(run, s, srect).setFill(finalTheme.series.shadow.color).setStroke(finalTheme.series.shadow);
+								if(this.animate){
+									this._animateColumn(sshape, dim.height - offsets.b + baselineHeight, h);
+								}
+							}
+							
+							var specialFill = this._plotFill(finalTheme.series.fill, dim, offsets);
+							specialFill = this._shapeFill(specialFill, rect);
+							var shape = this.createRect(run, s, rect).setFill(specialFill).setStroke(finalTheme.series.stroke);
+							if(shape.setFilter && finalTheme.series.filter){
+								shape.setFilter(finalTheme.series.filter);
+							}
+							run.dyn.fill   = shape.getFill();
+							run.dyn.stroke = shape.getStroke();
+							if(events){
+								var o = {
+									element: "column",
+									index:   j,
+									run:     run,
+									shape:   shape,
+									shadow:  sshape,
+									cx:      val.x + 0.5,
+									cy:      val.y,
+									x:	     indexed?j:run.data[j].x,
+									y:	 	 indexed?run.data[j]:run.data[j].y
+								};
+								this._connectEvents(o);
+								eventSeries[j] = o;
+							}
+							// if val.py is here, this means we are stacking and we need to subtract previous
+							// value to get the high in which we will lay out the label
+							if(!isNaN(val.py) && val.py > baseline){
+								rect.height = vv - vt(val.py);
+							}
+							this.createLabel(s, value, rect, finalTheme);
+							if(this.animate){
+								this._animateColumn(shape, dim.height - offsets.b - baselineHeight, h);
+							}
+						}
+					}
+				}
+				this._eventSeries[run.name] = eventSeries;
+				run.dirty = false;
+			}
+			this.dirty = false;
+			// chart mirroring starts
+			if(has("dojo-bidi")){
+				this._checkOrientation(this.group, dim, offsets);
+			}
+			// chart mirroring ends
+			return this;	//	dojox/charting/plot2d/Columns
+		},
+		getValue: function(value, j, seriesIndex, indexed){
+			var y,x;
+			if(indexed){
+				if(typeof value == "number"){
+					y = value;
+				}else{
+					y = value.y;
+				}
+				x = j;
+			}else{
+				y = value.y;
+				x = value.x - 1;
+			}
+			return { x: x, y: y };
+		},
+		getBarProperties: function(){
+			var f = dc.calculateBarSize(this._hScaler.bounds.scale, this.opt);
+			return {gap: f.gap, width: f.size, thickness: 0};
+		},
+		_animateColumn: function(shape, voffset, vsize){
+			if(vsize==0){
+				vsize = 1;
+			}
+			fx.animateTransform(lang.delegate({
+				shape: shape,
+				duration: 1200,
+				transform: [
+					{name: "translate", start: [0, voffset - (voffset/vsize)], end: [0, 0]},
+					{name: "scale", start: [1, 1/vsize], end: [1, 1]},
+					{name: "original"}
+				]
+			}, this.animate)).play();
+		}
+		
+	});
+});
+},
+'dojox/charting/action2d/Base':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "dojo/Evented"],
+	function(lang, declare, Evented){
+
+	return declare("dojox.charting.action2d.Base", Evented, {
+		// summary:
+		//		Base action class for plot and chart actions.
+	
+		constructor: function(chart, plot){
+			// summary:
+			//		Create a new base action.  This can either be a plot or a chart action.
+			// chart: dojox/charting/Chart
+			//		The chart this action applies to.
+			// plot: String|dojox/charting/plot2d/Base?
+			//		Optional target plot for this action.  Default is "default".
+			this.chart = chart;
+			this.plot = plot ? (lang.isString(plot) ? this.chart.getPlot(plot) : plot) : this.chart.getPlot("default");
+		},
+	
+		connect: function(){
+			// summary:
+			//		Connect this action to the plot or the chart.
+		},
+	
+		disconnect: function(){
+			// summary:
+			//		Disconnect this action from the plot or the chart.
+		},
+		
+		destroy: function(){
+			// summary:
+			//		Do any cleanup needed when destroying parent elements.
+			this.disconnect();
+		}
+	});
+
+});
+},
+'dojox/charting/action2d/PlotAction':function(){
+define(["dojo/_base/connect", "dojo/_base/declare", "./Base", "dojo/fx/easing", "dojox/lang/functional"],
+	function(hub, declare, Base, dfe, df){
+	
+	/*=====
+	var __PlotActionCtorArgs = {
+	 	// summary:
+		//		The base keyword arguments object for creating an action2d.
+		// duration: Number?
+		//		The amount of time in milliseconds for an animation to last.  Default is 400.
+		// easing: dojo/fx/easing/*?
+		//		An easing object (see dojo.fx.easing) for use in an animation.  The
+		//		default is dojo.fx.easing.backOut.
+	};
+	=====*/
+
+	var DEFAULT_DURATION = 400,	// ms
+		DEFAULT_EASING   = dfe.backOut;
+
+	return declare("dojox.charting.action2d.PlotAction", Base, {
+		// summary:
+		//		Base action class for plot actions.
+
+		overOutEvents: {onmouseover: 1, onmouseout: 1},
+
+		constructor: function(chart, plot, kwargs){
+			// summary:
+			//		Create a new base PlotAction.
+			// chart: dojox/charting/Chart
+			//		The chart this action applies to.
+			// plot: String?
+			//		The name of the plot this action belongs to.  If none is passed "default" is assumed.
+			// kwargs: __PlotActionCtorArgs?
+			//		Optional arguments for the action.
+			this.anim = {};
+
+			// process common optional named parameters
+			if(!kwargs){ kwargs = {}; }
+			this.duration = kwargs.duration ? kwargs.duration : DEFAULT_DURATION;
+			this.easing   = kwargs.easing   ? kwargs.easing   : DEFAULT_EASING;
+		},
+
+		connect: function(){
+			// summary:
+			//		Connect this action to the given plot.
+			this.handle = this.chart.connectToPlot(this.plot.name, this, "process");
+		},
+
+		disconnect: function(){
+			// summary:
+			//		Disconnect this action from the given plot, if connected.
+			if(this.handle){
+				hub.disconnect(this.handle);
+				this.handle = null;
+			}
+		},
+
+		reset: function(){
+			// summary:
+			//		Reset the action.
+		},
+
+		destroy: function(){
+			// summary:
+			//		Do any cleanup needed when destroying parent elements.
+			this.inherited(arguments);
+			df.forIn(this.anim, function(o){
+				df.forIn(o, function(anim){
+					anim.action.stop(true);
+				});
+			});
+			this.anim = {};
+		}
+	});
+});
+},
+'dojox/charting/action2d/Highlight':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "dojo/_base/Color", "dojo/_base/connect", "dojox/color/_base",
+		"./PlotAction", "dojo/fx/easing", "dojox/gfx/fx"], 
+	function(lang, declare, Color, hub, c, PlotAction, dfe, dgf){
+
+	/*=====
+	var __HighlightCtorArgs = {
+		// summary:
+		//		Additional arguments for highlighting actions.
+		// duration: Number?
+		//		The amount of time in milliseconds for an animation to last.  Default is 400.
+		// easing: dojo/fx/easing/*?
+		//		An easing object (see dojo.fx.easing) for use in an animation.  The
+		//		default is dojo.fx.easing.backOut.
+		// highlight: String|dojo/_base/Color|Function?
+		//		Either a color or a function that creates a color when highlighting happens.
+	};
+	=====*/
+	
+	var DEFAULT_SATURATION  = 100,	// %
+		DEFAULT_LUMINOSITY1 = 75,	// %
+		DEFAULT_LUMINOSITY2 = 50,	// %
+		cc = function(color){
+			return function(){ return color; };
+		},
+
+		hl = function(color){
+			var a = new c.Color(color),
+				x = a.toHsl();
+			if(x.s == 0){
+				x.l = x.l < 50 ? 100 : 0;
+			}else{
+				x.s = DEFAULT_SATURATION;
+				if(x.l < DEFAULT_LUMINOSITY2){
+					x.l = DEFAULT_LUMINOSITY1;
+				}else if(x.l > DEFAULT_LUMINOSITY1){
+					x.l = DEFAULT_LUMINOSITY2;
+				}else{
+					x.l = x.l - DEFAULT_LUMINOSITY2 > DEFAULT_LUMINOSITY1 - x.l ?
+						DEFAULT_LUMINOSITY2 : DEFAULT_LUMINOSITY1;
+				}
+			}
+			var rcolor = c.fromHsl(x);
+			rcolor.a = a.a;
+			return rcolor;
+		},
+
+		spiderhl = function(color){
+			var r = hl(color);
+			r.a = 0.7;
+			return r;
+		}
+
+	return declare("dojox.charting.action2d.Highlight", PlotAction, {
+		// summary:
+		//		Creates a highlighting action on a plot, where an element on that plot
+		//		has a highlight on it.
+
+		// the data description block for the widget parser
+		defaultParams: {
+			duration: 400,	// duration of the action in ms
+			easing:   dfe.backOut	// easing for the action
+		},
+		optionalParams: {
+			highlight: "red"	// name for the highlight color
+								// programmatic instantiation can use functions and color objects
+		},
+
+		constructor: function(chart, plot, kwArgs){
+			// summary:
+			//		Create the highlighting action and connect it to the plot.
+			// chart: dojox/charting/Chart
+			//		The chart this action belongs to.
+			// plot: String?
+			//		The plot this action is attached to.  If not passed, "default" is assumed.
+			// kwArgs: __HighlightCtorArgs?
+			//		Optional keyword arguments object for setting parameters.
+			var a = kwArgs && kwArgs.highlight;
+			this.colorFunc = a ? (lang.isFunction(a) ? a : cc(a)) : hl;
+			this.connect();
+		},
+
+		process: function(o){
+			// summary:
+			//		Process the action on the given object.
+			// o: dojox/gfx/shape.Shape
+			//		The object on which to process the highlighting action.
+			if(!o.shape || !(o.type in this.overOutEvents)){ return; }
+
+			// if spider let's deal only with poly
+			if(o.element == "spider_circle" || o.element == "spider_plot"){
+				return;
+			}else if(o.element == "spider_poly" && this.colorFunc == hl){
+				// hardcode alpha for compatibility reasons
+				// TODO to remove in 2.0
+				this.colorFunc = spiderhl;
+			}
+
+			var runName = o.run.name, index = o.index, anim;
+
+			if(runName in this.anim){
+				anim = this.anim[runName][index];
+			}else{
+				this.anim[runName] = {};
+			}
+
+			if(anim){
+				anim.action.stop(true);
+			}else{
+				var color = o.shape.getFill();
+				if(!color || !(color instanceof Color)){
+					return;
+				}
+				this.anim[runName][index] = anim = {
+					start: color,
+					end:   this.colorFunc(color)
+				};
+			}
+
+			var start = anim.start, end = anim.end;
+			if(o.type == "onmouseout"){
+				// swap colors
+				var t = start;
+				start = end;
+				end = t;
+			}
+
+			anim.action = dgf.animateFill({
+				shape:    o.shape,
+				duration: this.duration,
+				easing:   this.easing,
+				color:    {start: start, end: end}
+			});
+			if(o.type == "onmouseout"){
+				hub.connect(anim.action, "onEnd", this, function(){
+					if(this.anim[runName]){
+						delete this.anim[runName][index];
+					}
+				});
+			}
+			anim.action.play();
+		}
+	});
+	
+});
+},
+'dojox/charting/plot2d/Default':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "dojo/_base/array", "dojo/has", 
+		"./CartesianBase", "./_PlotEvents", "./common", "dojox/lang/functional", "dojox/lang/functional/reversed", "dojox/lang/utils", "dojox/gfx/fx"],
+	function(lang, declare, arr, has, CartesianBase, _PlotEvents, dc, df, dfr, du, fx){
+
+	/*=====
+	declare("dojox.charting.plot2d.__DefaultCtorArgs", dojox.charting.plot2d.__CartesianCtorArgs, {
+		// summary:
+		//		The arguments used for any/most plots.
+	
+		// lines: Boolean?
+		//		Whether or not to draw lines on this plot.  Defaults to true.
+		lines:   true,
+	
+		// areas: Boolean?
+		//		Whether or not to draw areas on this plot. Defaults to false.
+		areas:   false,
+	
+		// markers: Boolean?
+		//		Whether or not to draw markers at data points on this plot. Default is false.
+		markers: false,
+	
+		// tension: Number|String?
+		//		Whether or not to apply 'tensioning' to the lines on this chart.
+		//		Options include a number, "X", "x", or "S"; if a number is used, the
+		//		simpler bezier curve calculations are used to draw the lines.  If X, x or S
+		//		is used, the more accurate smoothing algorithm is used.
+		tension: "",
+	
+		// animate: Boolean?|Number?
+		//		Whether or not to animate the chart to place. When a Number it specifies the duration of the animation.
+		//		Default is false.
+		animate: false,
+	
+		// stroke: dojox.gfx.Stroke?
+		//		An optional stroke to use for any series on the plot.
+		stroke:		{},
+	
+		// outline: dojox.gfx.Stroke?
+		//		An optional stroke used to outline any series on the plot.
+		outline:	{},
+	
+		// shadow: dojox.gfx.Stroke?
+		//		An optional stroke to use to draw any shadows for a series on a plot.
+		shadow:		{},
+	
+		// fill: dojox.gfx.Fill?
+		//		Any fill to be used for elements on the plot (such as areas).
+		fill:		{},
+
+		// filter: dojox.gfx.Filter?
+		//		An SVG filter to be used for elements on the plot. gfx SVG renderer must be used and dojox/gfx/svgext must
+		//		be required for this to work.
+		filter:		{},
+
+		// styleFunc: Function?
+		//		A function that returns a styling object for the a given data item.
+		styleFunc:	null,
+	
+		// font: String?
+		//		A font definition to be used for labels and other text-based elements on the plot.
+		font:		"",
+	
+		// fontColor: String|dojo.Color?
+		//		The color to be used for any text-based elements on the plot.
+		fontColor:	"",
+	
+		// markerStroke: dojo.gfx.Stroke?
+		//		An optional stroke to use for any markers on the plot.
+		markerStroke:		{},
+	
+		// markerOutline: dojo.gfx.Stroke?
+		//		An optional outline to use for any markers on the plot.
+		markerOutline:		{},
+	
+		// markerShadow: dojo.gfx.Stroke?
+		//		An optional shadow to use for any markers on the plot.
+		markerShadow:		{},
+	
+		// markerFill: dojo.gfx.Fill?
+		//		An optional fill to use for any markers on the plot.
+		markerFill:			{},
+	
+		// markerFont: String?
+		//		An optional font definition to use for any markers on the plot.
+		markerFont:			"",
+	
+		// markerFontColor: String|dojo.Color?
+		//		An optional color to use for any marker text on the plot.
+		markerFontColor:	"",
+		
+		// enableCache: Boolean?
+		//		Whether the markers are cached from one rendering to another. This improves the rendering performance of
+		//		successive rendering but penalize the first rendering.  Default false.
+		enableCache: false,
+
+		// interpolate: Boolean?
+		//		Whether when there is a null data point in the data the plot interpolates it or if the lines is split at that
+		//		point.	Default false.
+		interpolate: false
+	});
+=====*/
+
+	var purgeGroup = dfr.lambda("item.purgeGroup()");
+
+	var DEFAULT_ANIMATION_LENGTH = 1200;	// in ms
+
+	return declare("dojox.charting.plot2d.Default", [CartesianBase, _PlotEvents], {
+		
+		// defaultParams:
+		//		The default parameters of this plot.
+		defaultParams: {
+			lines:   true,	// draw lines
+			areas:   false,	// draw areas
+			markers: false,	// draw markers
+			tension: "",	// draw curved lines (tension is "X", "x", or "S")
+			animate: false, // animate chart to place
+			enableCache: false,
+			interpolate: false
+		},
+		
+		// optionalParams:
+		//		The optional parameters of this plot.
+		optionalParams: {
+			// theme component
+			stroke:		{},
+			outline:	{},
+			shadow:		{},
+			fill:		{},
+			filter:     {},
+			styleFunc: null,
+			font:		"",
+			fontColor:	"",
+			marker:             "",
+			markerStroke:		{},
+			markerOutline:		{},
+			markerShadow:		{},
+			markerFill:			{},
+			markerFont:			"",
+			markerFontColor:	""
+		},
+
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		Return a new plot.
+			// chart: dojox/charting/Chart
+			//		The chart this plot belongs to.
+			// kwArgs: dojox.charting.plot2d.__DefaultCtorArgs?
+			//		An optional arguments object to help define this plot.
+			this.opt = lang.clone(lang.mixin(this.opt, this.defaultParams));
+			du.updateWithObject(this.opt, kwArgs);
+			du.updateWithPattern(this.opt, kwArgs, this.optionalParams);
+			// animation properties
+			this.animate = this.opt.animate;
+		},
+
+		createPath: function(run, creator, params){
+			var path;
+			if(this.opt.enableCache && run._pathFreePool.length > 0){
+				path = run._pathFreePool.pop();
+				path.setShape(params);
+				// was cleared, add it back
+				creator.add(path);
+			}else{
+				path = creator.createPath(params);
+			}
+			if(this.opt.enableCache){
+				run._pathUsePool.push(path);
+			}
+			return path;
+		},
+
+		buildSegments: function(i, indexed){
+			var run = this.series[i],
+				min = indexed?Math.max(0, Math.floor(this._hScaler.bounds.from - 1)):0,
+				max = indexed?Math.min(run.data.length, Math.ceil(this._hScaler.bounds.to)):run.data.length,
+				rseg = null, segments = [];
+
+			// split the run data into dense segments (each containing no nulls)
+			// except if interpolates is false in which case ignore null between valid data
+			for(var j = min; j < max; j++){
+				if(run.data[j] != null && (indexed || run.data[j].y != null)){
+					if(!rseg){
+						rseg = [];
+						segments.push({index: j, rseg: rseg});
+					}
+					rseg.push((indexed && run.data[j].hasOwnProperty("y"))?run.data[j].y:run.data[j]);
+				}else{
+					if(!this.opt.interpolate || indexed){
+						// we break the line only if not interpolating or if we have indexed data
+						rseg = null;
+					}
+				}
+			}
+			return segments;
+		},
+
+		render: function(dim, offsets){
+			// summary:
+			//		Render/draw everything on this plot.
+			// dim: Object
+			//		An object of the form { width, height }
+			// offsets: Object
+			//		An object of the form { l, r, t, b }
+			// returns: dojox/charting/plot2d/Default
+			//		A reference to this plot for functional chaining.
+
+			// make sure all the series is not modified
+			if(this.zoom && !this.isDataDirty()){
+				return this.performZoom(dim, offsets);
+			}
+
+			this.resetEvents();
+			this.dirty = this.isDirty();
+			var s;
+			if(this.dirty){
+				arr.forEach(this.series, purgeGroup);
+				this._eventSeries = {};
+				this.cleanGroup();
+				this.getGroup().setTransform(null);
+				s = this.getGroup();
+				df.forEachRev(this.series, function(item){ item.cleanGroup(s); });
+			}
+			var t = this.chart.theme, stroke, outline, events = this.events();
+
+			for(var i = this.series.length - 1; i >= 0; --i){
+				var run = this.series[i];
+				if(!this.dirty && !run.dirty){
+					t.skip();
+					this._reconnectEvents(run.name);
+					continue;
+				}
+				run.cleanGroup();
+				if(this.opt.enableCache){
+					run._pathFreePool = (run._pathFreePool?run._pathFreePool:[]).concat(run._pathUsePool?run._pathUsePool:[]);
+					run._pathUsePool = [];
+				}
+				if(!run.data.length){
+					run.dirty = false;
+					t.skip();
+					continue;
+				}
+
+				var theme = t.next(this.opt.areas ? "area" : "line", [this.opt, run], true),
+					lpoly,
+					ht = this._hScaler.scaler.getTransformerFromModel(this._hScaler),
+					vt = this._vScaler.scaler.getTransformerFromModel(this._vScaler),
+					eventSeries = this._eventSeries[run.name] = new Array(run.data.length);
+
+				s = run.group;
+				if(run.hidden){
+					if(this.opt.lines){
+						run.dyn.stroke = theme.series.stroke;
+					}
+					if(this.opt.markers){
+						run.dyn.markerFill = theme.marker.fill;
+						run.dyn.markerStroke = theme.marker.stroke;
+						run.dyn.marker = theme.symbol;
+					}
+					if(this.opt.areas){ 
+						run.dyn.fill = theme.series.fill;
+					}
+					continue;
+				}
+				// optim works only for index based case
+				var indexed = arr.some(run.data, function(item){
+					return typeof item == "number" || (item && !item.hasOwnProperty("x"));
+				});
+
+				var rsegments = this.buildSegments(i, indexed);
+				for(var seg = 0; seg < rsegments.length; seg++){
+					var rsegment = rsegments[seg];
+					if(indexed){
+						lpoly = arr.map(rsegment.rseg, function(v, i){
+							return {
+								x: ht(i + rsegment.index + 1) + offsets.l,
+								y: dim.height - offsets.b - vt(v),
+								data: v
+							};
+						}, this);
+					}else{
+						lpoly = arr.map(rsegment.rseg, function(v){
+							return {
+								x: ht(v.x) + offsets.l,
+								y: dim.height - offsets.b - vt(v.y),
+								data: v
+							};
+						}, this);
+					}
+
+					// if we are indexed & we interpolate we need to put all the segments as a single one now
+					if(indexed && this.opt.interpolate){
+						while(seg < rsegments.length) {
+							seg++;
+							rsegment = rsegments[seg];
+							if(rsegment){
+								lpoly = lpoly.concat(arr.map(rsegment.rseg, function(v, i){
+									return {
+										x: ht(i + rsegment.index + 1) + offsets.l,
+										y: dim.height - offsets.b - vt(v),
+										data: v
+									};
+								}, this));
+							}
+						}
+					} 
+
+					var lpath = this.opt.tension ? dc.curve(lpoly, this.opt.tension) : "";
+
+					if(this.opt.areas && lpoly.length > 1){
+						var fill = this._plotFill(theme.series.fill, dim, offsets), apoly = lang.clone(lpoly);
+						if(this.opt.tension){
+							var apath = "L" + apoly[apoly.length-1].x + "," + (dim.height - offsets.b) +
+								" L" + apoly[0].x + "," + (dim.height - offsets.b) +
+								" L" + apoly[0].x + "," + apoly[0].y;
+							run.dyn.fill = s.createPath(lpath + " " + apath).setFill(fill).getFill();
+						} else {
+							apoly.push({x: lpoly[lpoly.length - 1].x, y: dim.height - offsets.b});
+							apoly.push({x: lpoly[0].x, y: dim.height - offsets.b});
+							apoly.push(lpoly[0]);
+							run.dyn.fill = s.createPolyline(apoly).setFill(fill).getFill();
+						}
+					}
+					if(this.opt.lines || this.opt.markers){
+						// need a stroke
+						stroke = theme.series.stroke;
+						if(theme.series.outline){
+							outline = run.dyn.outline = dc.makeStroke(theme.series.outline);
+							outline.width = 2 * outline.width + stroke.width;
+						}
+					}
+					if(this.opt.markers){
+						run.dyn.marker = theme.symbol;
+					}
+					var frontMarkers = null, outlineMarkers = null, shadowMarkers = null;
+					if(stroke && theme.series.shadow && lpoly.length > 1){
+						var shadow = theme.series.shadow,
+							spoly = arr.map(lpoly, function(c){
+								return {x: c.x + shadow.dx, y: c.y + shadow.dy};
+							});
+						if(this.opt.lines){
+							if(this.opt.tension){
+								run.dyn.shadow = s.createPath(dc.curve(spoly, this.opt.tension)).setStroke(shadow).getStroke();
+							} else {
+								run.dyn.shadow = s.createPolyline(spoly).setStroke(shadow).getStroke();
+							}
+						}
+						if(this.opt.markers && theme.marker.shadow){
+							shadow = theme.marker.shadow;
+							shadowMarkers = arr.map(spoly, function(c){
+								return this.createPath(run, s, "M" + c.x + " " + c.y + " " + theme.symbol).
+									setStroke(shadow).setFill(shadow.color);
+							}, this);
+						}
+					}
+					if(this.opt.lines && lpoly.length > 1){
+						var shape;
+						if(outline){
+							if(this.opt.tension){
+								run.dyn.outline = s.createPath(lpath).setStroke(outline).getStroke();
+							} else {
+								run.dyn.outline = s.createPolyline(lpoly).setStroke(outline).getStroke();
+							}
+						}
+						if(this.opt.tension){
+							run.dyn.stroke = (shape = s.createPath(lpath)).setStroke(stroke).getStroke();
+						} else {
+							run.dyn.stroke = (shape = s.createPolyline(lpoly)).setStroke(stroke).getStroke();
+						}
+						if(shape.setFilter && theme.series.filter){
+							shape.setFilter(theme.series.filter);
+						}
+					}
+					var markerBox = null;
+					if(this.opt.markers){
+						var markerTheme = theme; 
+						frontMarkers = new Array(lpoly.length);
+						outlineMarkers = new Array(lpoly.length);
+						outline = null;
+						if(markerTheme.marker.outline){
+							outline = dc.makeStroke(markerTheme.marker.outline);
+							outline.width = 2 * outline.width + (markerTheme.marker.stroke ? markerTheme.marker.stroke.width : 0);
+						}
+						arr.forEach(lpoly, function(c, i){
+							if(this.opt.styleFunc || typeof c.data != "number"){
+								var tMixin = typeof c.data != "number" ? [c.data] : [];
+								if(this.opt.styleFunc){
+									tMixin.push(this.opt.styleFunc(c.data));
+								}
+								markerTheme = t.addMixin(theme, "marker", tMixin, true);
+							}else{
+								markerTheme = t.post(theme, "marker");
+							}
+							var path = "M" + c.x + " " + c.y + " " + markerTheme.symbol;
+							if(outline){
+								outlineMarkers[i] = this.createPath(run, s, path).setStroke(outline);
+							}
+							frontMarkers[i] = this.createPath(run, s, path).setStroke(markerTheme.marker.stroke).setFill(markerTheme.marker.fill);
+						}, this);
+						run.dyn.markerFill = markerTheme.marker.fill;
+						run.dyn.markerStroke = markerTheme.marker.stroke;
+						if(!markerBox && this.opt.labels){
+							markerBox = frontMarkers[0].getBoundingBox();
+						}
+						if(events){
+							arr.forEach(frontMarkers, function(s, i){
+								var o = {
+									element: "marker",
+									index:   i + rsegment.index,
+									run:     run,
+									shape:   s,
+									outline: outlineMarkers[i] || null,
+									shadow:  shadowMarkers && shadowMarkers[i] || null,
+									cx:      lpoly[i].x,
+									cy:      lpoly[i].y
+								};
+								if(indexed){
+									o.x = i + rsegment.index + 1;
+									o.y = run.data[i + rsegment.index];
+								}else{
+									o.x = rsegment.rseg[i].x;
+									o.y = run.data[i + rsegment.index].y;
+								}
+								this._connectEvents(o);
+								eventSeries[i + rsegment.index] = o;
+							}, this);
+						}else{
+							delete this._eventSeries[run.name];
+						}
+					}
+					if(this.opt.labels){
+						var labelBoxW = markerBox?markerBox.width:2;
+						var labelBoxH = markerBox?markerBox.height:2;
+						arr.forEach(lpoly, function(c, i){
+							if(this.opt.styleFunc || typeof c.data != "number"){
+								var tMixin = typeof c.data != "number" ? [c.data] : [];
+								if(this.opt.styleFunc){
+									tMixin.push(this.opt.styleFunc(c.data));
+								}
+								markerTheme = t.addMixin(theme, "marker", tMixin, true);
+							}else{
+								markerTheme = t.post(theme, "marker");
+							}
+							this.createLabel(s, rsegment.rseg[i], { x: c.x - labelBoxW / 2, y: c.y - labelBoxH / 2,
+								width: labelBoxW , height: labelBoxH }, markerTheme);
+						}, this);
+					}
+				}
+				run.dirty = false;
+			}
+			// chart mirroring starts
+			if(has("dojo-bidi")){
+				this._checkOrientation(this.group, dim, offsets);
+			}
+			// chart mirroring ends
+			if(this.animate){
+				// grow from the bottom
+				var plotGroup = this.getGroup();
+				fx.animateTransform(lang.delegate({
+					shape: plotGroup,
+					duration: DEFAULT_ANIMATION_LENGTH,
+					transform:[
+						{name:"translate", start: [0, dim.height - offsets.b], end: [0, 0]},
+						{name:"scale", start: [1, 0], end:[1, 1]},
+						{name:"original"}
+					]
+				}, this.animate)).play();
+			}
+			this.dirty = false;
+			return this;	//	dojox/charting/plot2d/Default
+		}
+	});
+});
+},
+'dojox/charting/plot2d/Markers':function(){
+define(["dojo/_base/declare", "./Default"], function(declare, Default){
+
+	return declare("dojox.charting.plot2d.Markers", Default, {
+		// summary:
+		//		A convenience plot to draw a line chart with markers.
+		constructor: function(){
+			// summary:
+			//		Set up the plot for lines and markers.
+			this.opt.markers = true;
+		}
+	});
+});
+},
+'dojox/charting/scaler/linear':function(){
+define(["dojo/_base/lang", "./common"], 
+	function(lang, common){
+	var linear = lang.getObject("dojox.charting.scaler.linear", true);
+	
+	var deltaLimit = 3,	// pixels
+		getLabel = common.getNumericLabel;
+
+		function findString(/*String*/ val, /*Array*/ text){
+			val = val.toLowerCase();
+			for(var i = text.length - 1; i >= 0; --i){
+				if(val === text[i]){
+					return true;
+				}
+			}
+			return false;
+		}
+	
+	var calcTicks = function(min, max, kwArgs, majorTick, minorTick, microTick, span){
+		kwArgs = lang.delegate(kwArgs);
+		if(!majorTick){
+			if(kwArgs.fixUpper == "major"){ kwArgs.fixUpper = "minor"; }
+			if(kwArgs.fixLower == "major"){ kwArgs.fixLower = "minor"; }
+		}
+		if(!minorTick){
+			if(kwArgs.fixUpper == "minor"){ kwArgs.fixUpper = "micro"; }
+			if(kwArgs.fixLower == "minor"){ kwArgs.fixLower = "micro"; }
+		}
+		if(!microTick){
+			if(kwArgs.fixUpper == "micro"){ kwArgs.fixUpper = "none"; }
+			if(kwArgs.fixLower == "micro"){ kwArgs.fixLower = "none"; }
+		}
+		var lowerBound = findString(kwArgs.fixLower, ["major"]) ?
+				Math.floor(kwArgs.min / majorTick) * majorTick :
+					findString(kwArgs.fixLower, ["minor"]) ?
+						Math.floor(kwArgs.min / minorTick) * minorTick :
+							findString(kwArgs.fixLower, ["micro"]) ?
+								Math.floor(kwArgs.min / microTick) * microTick : kwArgs.min,
+			upperBound = findString(kwArgs.fixUpper, ["major"]) ?
+				Math.ceil(kwArgs.max / majorTick) * majorTick :
+					findString(kwArgs.fixUpper, ["minor"]) ?
+						Math.ceil(kwArgs.max / minorTick) * minorTick :
+							findString(kwArgs.fixUpper, ["micro"]) ?
+								Math.ceil(kwArgs.max / microTick) * microTick : kwArgs.max;
+								
+		if(kwArgs.useMin){ min = lowerBound; }
+		if(kwArgs.useMax){ max = upperBound; }
+		
+		var majorStart = (!majorTick || kwArgs.useMin && findString(kwArgs.fixLower, ["major"])) ?
+				min : Math.ceil(min / majorTick) * majorTick,
+			minorStart = (!minorTick || kwArgs.useMin && findString(kwArgs.fixLower, ["major", "minor"])) ?
+				min : Math.ceil(min / minorTick) * minorTick,
+			microStart = (! microTick || kwArgs.useMin && findString(kwArgs.fixLower, ["major", "minor", "micro"])) ?
+				min : Math.ceil(min / microTick) * microTick,
+			majorCount = !majorTick ? 0 : (kwArgs.useMax && findString(kwArgs.fixUpper, ["major"]) ?
+				Math.round((max - majorStart) / majorTick) :
+				Math.floor((max - majorStart) / majorTick)) + 1,
+			minorCount = !minorTick ? 0 : (kwArgs.useMax && findString(kwArgs.fixUpper, ["major", "minor"]) ?
+				Math.round((max - minorStart) / minorTick) :
+				Math.floor((max - minorStart) / minorTick)) + 1,
+			microCount = !microTick ? 0 : (kwArgs.useMax && findString(kwArgs.fixUpper, ["major", "minor", "micro"]) ?
+				Math.round((max - microStart) / microTick) :
+				Math.floor((max - microStart) / microTick)) + 1,
+			minorPerMajor  = minorTick ? Math.round(majorTick / minorTick) : 0,
+			microPerMinor  = microTick ? Math.round(minorTick / microTick) : 0,
+			majorPrecision = majorTick ? Math.floor(Math.log(majorTick) / Math.LN10) : 0,
+			minorPrecision = minorTick ? Math.floor(Math.log(minorTick) / Math.LN10) : 0,
+			scale = span / (max - min);
+		if(!isFinite(scale)){ scale = 1; }
+		
+		return {
+			bounds: {
+				lower:	lowerBound,
+				upper:	upperBound,
+				from:	min,
+				to:		max,
+				scale:	scale,
+				span:	span
+			},
+			major: {
+				tick:	majorTick,
+				start:	majorStart,
+				count:	majorCount,
+				prec:	majorPrecision
+			},
+			minor: {
+				tick:	minorTick,
+				start:	minorStart,
+				count:	minorCount,
+				prec:	minorPrecision
+			},
+			micro: {
+				tick:	microTick,
+				start:	microStart,
+				count:	microCount,
+				prec:	0
+			},
+			minorPerMajor:	minorPerMajor,
+			microPerMinor:	microPerMinor,
+			scaler:			linear
+		};
+	};
+	
+	return lang.mixin(linear, {
+		buildScaler: function(/*Number*/ min, /*Number*/ max, /*Number*/ span, /*Object*/ kwArgs, /*Number?*/ delta, /*Number?*/ minorDelta){
+			var h = {fixUpper: "none", fixLower: "none", natural: false};
+			if(kwArgs){
+				if("fixUpper" in kwArgs){ h.fixUpper = String(kwArgs.fixUpper); }
+				if("fixLower" in kwArgs){ h.fixLower = String(kwArgs.fixLower); }
+				if("natural"  in kwArgs){ h.natural  = Boolean(kwArgs.natural); }
+			}
+			minorDelta = !minorDelta || minorDelta < deltaLimit ? deltaLimit : minorDelta;
+			
+			// update bounds
+			if("min" in kwArgs){ min = kwArgs.min; }
+			if("max" in kwArgs){ max = kwArgs.max; }
+			if(kwArgs.includeZero){
+				if(min > 0){ min = 0; }
+				if(max < 0){ max = 0; }
+			}
+			h.min = min;
+			h.useMin = true;
+			h.max = max;
+			h.useMax = true;
+			
+			if("from" in kwArgs){
+				min = kwArgs.from;
+				h.useMin = false;
+			}
+			if("to" in kwArgs){
+				max = kwArgs.to;
+				h.useMax = false;
+			}
+			
+			// check for erroneous condition
+			if(max <= min){
+				return calcTicks(min, max, h, 0, 0, 0, span);	// Object
+			}
+			if(!delta){
+				delta = max - min;
+			}
+			var mag = Math.floor(Math.log(delta) / Math.LN10),
+				major = kwArgs && ("majorTickStep" in kwArgs) ? kwArgs.majorTickStep : Math.pow(10, mag),
+				minor = 0, micro = 0, ticks;
+				
+			// calculate minor ticks
+			if(kwArgs && ("minorTickStep" in kwArgs)){
+				minor = kwArgs.minorTickStep;
+			}else{
+				do{
+					minor = major / 10;
+					if(!h.natural || minor > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, 0, span);
+						if(ticks.bounds.scale * ticks.minor.tick > minorDelta){ break; }
+					}
+					minor = major / 5;
+					if(!h.natural || minor > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, 0, span);
+						if(ticks.bounds.scale * ticks.minor.tick > minorDelta){ break; }
+					}
+					minor = major / 2;
+					if(!h.natural || minor > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, 0, span);
+						if(ticks.bounds.scale * ticks.minor.tick > minorDelta){ break; }
+					}
+					return calcTicks(min, max, h, major, 0, 0, span);	// Object
+				}while(false);
+			}
+	
+			// calculate micro ticks
+			if(kwArgs && ("microTickStep" in kwArgs)){
+				micro = kwArgs.microTickStep;
+				ticks = calcTicks(min, max, h, major, minor, micro, span);
+			}else{
+				do{
+					micro = minor / 10;
+					if(!h.natural || micro > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, micro, span);
+						if(ticks.bounds.scale * ticks.micro.tick > deltaLimit){ break; }
+					}
+					micro = minor / 5;
+					if(!h.natural || micro > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, micro, span);
+						if(ticks.bounds.scale * ticks.micro.tick > deltaLimit){ break; }
+					}
+					micro = minor / 2;
+					if(!h.natural || micro > 0.9){
+						ticks = calcTicks(min, max, h, major, minor, micro, span);
+						if(ticks.bounds.scale * ticks.micro.tick > deltaLimit){ break; }
+					}
+					micro = 0;
+				}while(false);
+			}
+	
+			return micro ? ticks : calcTicks(min, max, h, major, minor, 0, span);	// Object
+		},
+		buildTicks: function(/*Object*/ scaler, /*Object*/ kwArgs){
+			var step, next, tick,
+				nextMajor = scaler.major.start,
+				nextMinor = scaler.minor.start,
+				nextMicro = scaler.micro.start;
+			if(kwArgs.microTicks && scaler.micro.tick){
+				step = scaler.micro.tick, next = nextMicro;
+			}else if(kwArgs.minorTicks && scaler.minor.tick){
+				step = scaler.minor.tick, next = nextMinor;
+			}else if(scaler.major.tick){
+				step = scaler.major.tick, next = nextMajor;
+			}else{
+				// no ticks
+				return null;
+			}
+			// make sure that we have finite bounds
+			var revScale = 1 / scaler.bounds.scale;
+			if(scaler.bounds.to <= scaler.bounds.from || isNaN(revScale) || !isFinite(revScale) ||
+					step <= 0 || isNaN(step) || !isFinite(step)){
+				// no ticks
+				return null;
+			}
+			// loop over all ticks
+			var majorTicks = [], minorTicks = [], microTicks = [];
+			while(next <= scaler.bounds.to + revScale){
+				if(Math.abs(nextMajor - next) < step / 2){
+					// major tick
+					tick = {value: nextMajor};
+					if(kwArgs.majorLabels){
+						tick.label = getLabel(nextMajor, scaler.major.prec, kwArgs);
+					}
+					majorTicks.push(tick);
+					nextMajor += scaler.major.tick;
+					nextMinor += scaler.minor.tick;
+					nextMicro += scaler.micro.tick;
+				}else if(Math.abs(nextMinor - next) < step / 2){
+					// minor tick
+					if(kwArgs.minorTicks){
+						tick = {value: nextMinor};
+						if(kwArgs.minorLabels && (scaler.minMinorStep <= scaler.minor.tick * scaler.bounds.scale)){
+							tick.label = getLabel(nextMinor, scaler.minor.prec, kwArgs);
+						}
+						minorTicks.push(tick);
+					}
+					nextMinor += scaler.minor.tick;
+					nextMicro += scaler.micro.tick;
+				}else{
+					// micro tick
+					if(kwArgs.microTicks){
+						microTicks.push({value: nextMicro});
+					}
+					nextMicro += scaler.micro.tick;
+				}
+				next += step;
+			}
+			return {major: majorTicks, minor: minorTicks, micro: microTicks};	// Object
+		},
+		getTransformerFromModel: function(/*Object*/ scaler){
+			var offset = scaler.bounds.from, scale = scaler.bounds.scale;
+			return function(x){ return (x - offset) * scale; };	// Function
+		},
+		getTransformerFromPlot: function(/*Object*/ scaler){
+			var offset = scaler.bounds.from, scale = scaler.bounds.scale;
+			return function(x){ return x / scale + offset; };	// Function
+		}
+	});
+});
+},
+'dojox/charting/axis2d/Invisible':function(){
+define(["dojo/_base/lang", "dojo/_base/declare", "./Base", "../scaler/linear",
+	"dojox/lang/utils"],
+	function(lang, declare, Base, lin, du){
+
+/*=====
+	var __InvisibleAxisCtorArgs = {
+		// summary:
+		//		Optional arguments used in the definition of an invisible axis.
+		// vertical: Boolean?
+		//		A flag that says whether an axis is vertical (i.e. y axis) or horizontal. Default is false (horizontal).
+		// fixUpper: String?
+		//		Align the greatest value on the axis with the specified tick level. Options are "major", "minor", "micro", or "none".  Defaults to "none".
+		// fixLower: String?
+		//		Align the smallest value on the axis with the specified tick level. Options are "major", "minor", "micro", or "none".  Defaults to "none".
+		// natural: Boolean?
+		//		Ensure tick marks are made on "natural" numbers. Defaults to false.
+		// leftBottom: Boolean?
+		//		The position of a vertical axis; if true, will be placed against the left-bottom corner of the chart.  Defaults to true.
+		// includeZero: Boolean?
+		//		Include 0 on the axis rendering.  Default is false.
+		// fixed: Boolean?
+		//		Force all axis labels to be fixed numbers.  Default is true.
+		// min: Number?
+		//		The smallest value on an axis. Default is 0.
+		// max: Number?
+		//		The largest value on an axis. Default is 1.
+		// from: Number?
+		//		Force the chart to render data visible from this value. Default is 0.
+		// to: Number?
+		//		Force the chart to render data visible to this value. Default is 1.
+		// majorTickStep: Number?
+		//		The amount to skip before a major tick is drawn. When not set the major ticks step is computed from
+		//		the data range.
+		// minorTickStep: Number?
+		//		The amount to skip before a minor tick is drawn. When not set the minor ticks step is computed from
+		//		the data range.
+		// microTickStep: Number?
+		//		The amount to skip before a micro tick is drawn. When not set the micro ticks step is computed from
+	};
+=====*/
+
+	return declare("dojox.charting.axis2d.Invisible", Base, {
+		// summary:
+		//		A axis object used in dojox.charting.  You can use that axis if you want the axis to be invisible.
+		//		See dojox.charting.Chart.addAxis for details.
+		//
+		// defaultParams: Object
+		//		The default parameters used to define any axis.
+		// optionalParams: Object
+		//		Any optional parameters needed to define an axis.
+
+		/*
+		// TODO: the documentation tools need these to be pre-defined in order to pick them up
+		//	correctly, but the code here is partially predicated on whether or not the properties
+		//	actually exist.  For now, we will leave these undocumented but in the code for later. -- TRT
+
+		// opt: Object
+		//		The actual options used to define this axis, created at initialization.
+		// scaler: Object
+		//		The calculated helper object to tell charts how to draw an axis and any data.
+		// ticks: Object
+		//		The calculated tick object that helps a chart draw the scaling on an axis.
+		// dirty: Boolean
+		//		The state of the axis (whether it needs to be redrawn or not)
+		// scale: Number
+		//		The current scale of the axis.
+		// offset: Number
+		//		The current offset of the axis.
+
+		opt: null,
+		scaler: null,
+		ticks: null,
+		dirty: true,
+		scale: 1,
+		offset: 0,
+		*/
+		defaultParams: {
+			vertical:    false,		// true for vertical axis
+			fixUpper:    "none",	// align the upper on ticks: "major", "minor", "micro", "none"
+			fixLower:    "none",	// align the lower on ticks: "major", "minor", "micro", "none"
+			natural:     false,		// all tick marks should be made on natural numbers
+			leftBottom:  true,		// position of the axis, used with "vertical"
+			includeZero: false,		// 0 should be included
+			fixed:       true		// all labels are fixed numbers
+		},
+		optionalParams: {
+			min:			0,	// minimal value on this axis
+			max:			1,	// maximal value on this axis
+			from:			0,	// visible from this value
+			to:				1,	// visible to this value
+			majorTickStep:	4,	// major tick step
+			minorTickStep:	2,	// minor tick step
+			microTickStep:	1	// micro tick step
+		},
+
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		The constructor for an invisible axis.
+			// chart: dojox/charting/Chart
+			//		The chart the axis belongs to.
+			// kwArgs: __InvisibleAxisCtorArgs?
+			//		Any optional keyword arguments to be used to define this axis.
+			this.opt = lang.clone(this.defaultParams);
+            du.updateWithObject(this.opt, kwArgs);
+			du.updateWithPattern(this.opt, kwArgs, this.optionalParams);
+		},
+		dependOnData: function(){
+			// summary:
+			//		Find out whether or not the axis options depend on the data in the axis.
+			return !("min" in this.opt) || !("max" in this.opt);	//	Boolean
+		},
+		clear: function(){
+			// summary:
+			//		Clear out all calculated properties on this axis;
+			// returns: dojox/charting/axis2d/Invisible
+			//		The reference to the axis for functional chaining.
+			delete this.scaler;
+			delete this.ticks;
+			this.dirty = true;
+			return this;	//	dojox/charting/axis2d/Invisible
+		},
+		initialized: function(){
+			// summary:
+			//		Finds out if this axis has been initialized or not.
+			// returns: Boolean
+			//		Whether a scaler has been calculated and if the axis is not dirty.
+			return "scaler" in this && !(this.dirty && this.dependOnData());
+		},
+		setWindow: function(scale, offset){
+			// summary:
+			//		Set the drawing "window" for the axis.
+			// scale: Number
+			//		The new scale for the axis.
+			// offset: Number
+			//		The new offset for the axis.
+			// returns: dojox/charting/axis2d/Invisible
+			//		The reference to the axis for functional chaining.
+			this.scale  = scale;
+			this.offset = offset;
+			return this.clear();	//	dojox/charting/axis2d/Invisible
+		},
+		getWindowScale: function(){
+			// summary:
+			//		Get the current windowing scale of the axis.
+			return "scale" in this ? this.scale : 1;	//	Number
+		},
+		getWindowOffset: function(){
+			// summary:
+			//		Get the current windowing offset for the axis.
+			return "offset" in this ? this.offset : 0;	//	Number
+		},
+		calculate: function(min, max, span){
+			// summary:
+			//		Perform all calculations needed to render this axis.
+			// min: Number
+			//		The smallest value represented on this axis.
+			// max: Number
+			//		The largest value represented on this axis.
+			// span: Number
+			//		The span in pixels over which axis calculations are made.
+			// returns: dojox/charting/axis2d/Invisible
+			//		The reference to the axis for functional chaining.
+			if(this.initialized()){
+				return this;
+			}
+			var o = this.opt;
+			// we used to have a 4th function parameter to reach labels but
+			// nobody was calling it with 4 parameters.
+			this.labels = o.labels;
+			this.scaler = lin.buildScaler(min, max, span, o);
+			// store the absolute major tick start, this will be useful when dropping a label every n labels
+			// TODO: if o.lower then it does not work
+			var tsb = this.scaler.bounds;
+			if("scale" in this){
+				// calculate new range
+				o.from = tsb.lower + this.offset;
+				o.to   = (tsb.upper - tsb.lower) / this.scale + o.from;
+				// make sure that bounds are correct
+				if( !isFinite(o.from) ||
+					isNaN(o.from) ||
+					!isFinite(o.to) ||
+					isNaN(o.to) ||
+					o.to - o.from >= tsb.upper - tsb.lower
+				){
+					// any error --- remove from/to bounds
+					delete o.from;
+					delete o.to;
+					delete this.scale;
+					delete this.offset;
+				}else{
+					// shift the window, if we are out of bounds
+					if(o.from < tsb.lower){
+						o.to += tsb.lower - o.from;
+						o.from = tsb.lower;
+					}else if(o.to > tsb.upper){
+						o.from += tsb.upper - o.to;
+						o.to = tsb.upper;
+					}
+					// update the offset
+					this.offset = o.from - tsb.lower;
+				}
+				// re-calculate the scaler
+				this.scaler = lin.buildScaler(min, max, span, o);
+				tsb = this.scaler.bounds;
+				// cleanup
+				if(this.scale == 1 && this.offset == 0){
+					delete this.scale;
+					delete this.offset;
+				}
+			}
+			return this;	//	dojox/charting/axis2d/Invisible
+		},
+		getScaler: function(){
+			// summary:
+			//		Get the pre-calculated scaler object.
+			return this.scaler;	//	Object
+		},
+		getTicks: function(){
+			// summary:
+			//		Get the pre-calculated ticks object.
+			return this.ticks;	//	Object
+		}
+	});
+});
+},
+'dojox/charting/plot2d/Base':function(){
+define(["dojo/_base/declare", "dojo/_base/array", "dojox/gfx",
+		"../Element", "./common", "../axis2d/common", "dojo/has"],
+	function(declare, arr, gfx, Element, common, ac, has){
+/*=====
+dojox.charting.plot2d.__PlotCtorArgs = {
+	// summary:
+	//		The base keyword arguments object for plot constructors.
+	//		Note that the parameters for this may change based on the
+	//		specific plot type (see the corresponding plot type for
+	//		details).
+
+	// tooltipFunc: Function?
+	//		An optional function used to compute tooltip text for this plot. It takes precedence over
+	//		the default function when available.
+	//	|		function tooltipFunc(o) { return "text"; }
+	//		`o`is the event object that triggered the tooltip.
+	tooltipFunc: null
+};
+=====*/
+	var Base = declare("dojox.charting.plot2d.Base", Element, {
+		// summary:
+		//		Base class for all plot types.
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		Create a base plot for charting.
+			// chart: dojox/chart/Chart
+			//		The chart this plot belongs to.
+			// kwArgs: dojox.charting.plot2d.__PlotCtorArgs?
+			//		An optional arguments object to help define the plot.
+	
+			// TODO does not work in markup
+			if(kwArgs && kwArgs.tooltipFunc){
+				this.tooltipFunc = kwArgs.tooltipFunc;
+			}
+		},
+		clear: function(){
+			// summary:
+			//		Clear out all of the information tied to this plot.
+			// returns: dojox.charting.plot2d.Base
+			//		A reference to this plot for functional chaining.
+			this.series = [];
+			this.dirty = true;
+			return this;	//	dojox/charting/plot2d/Base
+		},
+		setAxis: function(axis){
+			// summary:
+			//		Set an axis for this plot.
+			// axis: dojox.charting.axis2d.Base
+			//		The axis to set.
+			// returns: dojox/charting/plot2d/Base
+			//		A reference to this plot for functional chaining.
+			return this;	//	dojox/charting/plot2d/Base
+		},
+		assignAxes: function(axes){
+			// summary:
+			//		From an array of axes pick the ones that correspond to this plot and
+			//		assign them to the plot using setAxis method.
+			// axes: Array
+			//		An array of dojox/charting/axis2d/Base
+			// tags:
+			//		protected
+			arr.forEach(this.axes, function(axis){
+				if(this[axis]){
+					this.setAxis(axes[this[axis]]);
+				}
+			}, this);
+		},
+		addSeries: function(run){
+			// summary:
+			//		Add a data series to this plot.
+			// run: dojox.charting.Series
+			//		The series to be added.
+			// returns: dojox/charting/plot2d/Base
+			//		A reference to this plot for functional chaining.
+			this.series.push(run);
+			return this;	//	dojox/charting/plot2d/Base
+		},
+		getSeriesStats: function(){
+			// summary:
+			//		Calculate the min/max on all attached series in both directions.
+			// returns: Object
+			//		{hmin, hmax, vmin, vmax} min/max in both directions.
+			return common.collectSimpleStats(this.series);
+		},
+		calculateAxes: function(dim){
+			// summary:
+			//		Stub function for running the axis calculations (deprecated).
+			// dim: Object
+			//		An object of the form { width, height }
+			// returns: dojox/charting/plot2d/Base
+			//		A reference to this plot for functional chaining.
+			this.initializeScalers(dim, this.getSeriesStats());
+			return this;	//	dojox/charting/plot2d/Base
+		},
+		initializeScalers: function(){
+			// summary:
+			//		Does nothing.
+			return this;
+		},
+		isDataDirty: function(){
+			// summary:
+			//		Returns whether or not any of this plot's data series need to be rendered.
+			// returns: Boolean
+			//		Flag indicating if any of this plot's series are invalid and need rendering.
+			return arr.some(this.series, function(item){ return item.dirty; });	//	Boolean
+		},
+		render: function(dim, offsets){
+			// summary:
+			//		Render the plot on the chart.
+			// dim: Object
+			//		An object of the form { width, height }.
+			// offsets: Object
+			//		An object of the form { l, r, t, b }.
+			// returns: dojox/charting/plot2d/Base
+			//		A reference to this plot for functional chaining.
+			return this;	//	dojox/charting/plot2d/Base
+		},
+		renderLabel: function(group, x, y, label, theme, block, align){
+			var elem = ac.createText[this.opt.htmlLabels && gfx.renderer != "vml" ? "html" : "gfx"]
+				(this.chart, group, x, y, align?align:"middle", label, theme.series.font, theme.series.fontColor);
+			// if the label is inside we need to avoid catching events on it this would prevent action on
+			// chart elements
+			if(block){
+				// TODO this won't work in IE neither in VML nor in HTML
+				// a solution would be to catch the event on the label and refire it to the element
+				// possibly using elementFromPoint or having it already available
+				if(this.opt.htmlLabels && gfx.renderer != "vml"){
+					// we have HTML labels, let's use pointEvents on the HTML node
+					elem.style.pointerEvents = "none";
+				}else if(elem.rawNode){
+					// we have SVG labels, let's use pointerEvents on the SVG or VML node
+					elem.rawNode.style.pointerEvents = "none";
+				}
+				// else we have Canvas, we need do nothing, as Canvas text won't catch events
+			}
+			if(this.opt.htmlLabels && gfx.renderer != "vml"){
+				this.htmlElements.push(elem);
+			}
+
+			return elem;
+		},
+		getRequiredColors: function(){
+			// summary:
+			//		Get how many data series we have, so we know how many colors to use.
+			// returns: Number
+			//		The number of colors needed.
+			return this.series.length;	//	Number
+		},
+		_getLabel: function(number){
+			return common.getLabel(number, this.opt.fixed, this.opt.precision);
+		}
+	});
+	if(has("dojo-bidi")){
+		Base.extend({
+			_checkOrientation: function(group, dim, offsets){
+				this.chart.applyMirroring(this.group, dim, offsets);
+			}		
+		});
+	}
+	return Base;
+});
+},
+'dojox/charting/axis2d/Base':function(){
+define(["dojo/_base/declare", "../Element"],
+	function(declare, Element){
+	/*=====
+	var __BaseAxisCtorArgs = {
+		// summary:
+		//		Optional arguments used in the definition of an invisible axis.
+		// vertical: Boolean?
+		//		A flag that says whether an axis is vertical (i.e. y axis) or horizontal. Default is false (horizontal).
+		// min: Number?
+		//		The smallest value on an axis. Default is 0.
+		// max: Number?
+		//		The largest value on an axis. Default is 1.
+	};
+	=====*/
+	return declare("dojox.charting.axis2d.Base", Element, {
+		// summary:
+		//		The base class for any axis.  This is more of an interface/API
+		//		definition than anything else; see dojox.charting.axis2d.Default
+		//		for more details.
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		Return a new base axis.
+			// chart: dojox/charting/Chart
+			//		The chart this axis belongs to.
+			// kwArgs: __BaseAxisCtorArgs?
+			//		An optional arguments object to define the axis parameters.
+			this.vertical = kwArgs && kwArgs.vertical;
+			this.opt = {};
+			this.opt.min = kwArgs && kwArgs.min;
+			this.opt.max = kwArgs && kwArgs.max;
+		},
+		clear: function(){
+			// summary:
+			//		Stub function for clearing the axis.
+			// returns: dojox/charting/axis2d/Base
+			//		A reference to the axis for functional chaining.
+			return this;	//	dojox/charting/axis2d/Base
+		},
+		initialized: function(){
+			// summary:
+			//		Return a flag as to whether or not this axis has been initialized.
+			// returns: Boolean
+			//		If the axis is initialized or not.
+			return false;	//	Boolean
+		},
+		calculate: function(min, max, span){
+			// summary:
+			//		Stub function to run the calculations needed for drawing this axis.
+			// returns: dojox/charting/axis2d/Base
+			//		A reference to the axis for functional chaining.
+			return this;	//	dojox/charting/axis2d/Base
+		},
+		getScaler: function(){
+			// summary:
+			//		A stub function to return the scaler object created during calculate.
+			// returns: Object
+			//		The scaler object (see dojox.charting.scaler.linear for more information)
+			return null;	//	Object
+		},
+		getTicks: function(){
+			// summary:
+			//		A stub function to return the object that helps define how ticks are rendered.
+			// returns: Object
+			//		The ticks object.
+			return null;	//	Object
+		},
+		getOffsets: function(){
+			// summary:
+			//		A stub function to return any offsets needed for axis and series rendering.
+			// returns: Object
+			//		An object of the form { l, r, t, b }.
+			return {l: 0, r: 0, t: 0, b: 0};	//	Object
+		},
+		render: function(dim, offsets){
+			// summary:
+			//		Stub function to render this axis.
+			// returns: dojox/charting/axis2d/Base
+			//		A reference to the axis for functional chaining.
+			this.dirty = false;
+			return this;	//	dojox/charting/axis2d/Base
+		}
+	});
+});
+},
+'dojox/charting/axis2d/Default':function(){
+define(["dojo/_base/lang", "dojo/_base/array", "dojo/sniff", "dojo/_base/declare",
+	"dojo/_base/connect", "dojo/dom-geometry", "./Invisible",
+	"../scaler/linear", "./common", "dojox/gfx", "dojox/lang/utils", "dojox/lang/functional",
+	"dojo/has!dojo-bidi?../bidi/axis2d/Default"],
+	function(lang, arr, has, declare, connect, domGeom, Invisible,
+			lin, acommon, g, du, df, BidiDefault){
+
+	/*=====
+	var __AxisCtorArgs = {
+		// summary:
+		//		Optional arguments used in the definition of an axis.
+		// vertical: Boolean?
+		//		A flag that says whether an axis is vertical (i.e. y axis) or horizontal. Default is false (horizontal).
+		// fixUpper: String?
+		//		Align the greatest value on the axis with the specified tick level. Options are "major", "minor", "micro", or "none".  Defaults to "none".
+		// fixLower: String?
+		//		Align the smallest value on the axis with the specified tick level. Options are "major", "minor", "micro", or "none".  Defaults to "none".
+		// natural: Boolean?
+		//		Ensure tick marks are made on "natural" numbers. Defaults to false.
+		// leftBottom: Boolean?
+		//		Deprecated: use position instead. The position of a vertical axis; if true, will be placed against the left-bottom corner of the chart.  Defaults to true.
+		// includeZero: Boolean?
+		//		Include 0 on the axis rendering.  Default is false.
+		// fixed: Boolean?
+		//		Force all axis labels to be fixed numbers.  Default is true.
+		// majorLabels: Boolean?
+		//		Flag to draw labels at major ticks. Default is true.
+		// minorTicks: Boolean?
+		//		Flag to draw minor ticks on an axis.  Default is true.
+		// minorLabels: Boolean?
+		//		Flag to labels on minor ticks when there is enough space. Default is true.
+		// microTicks: Boolean?
+		//		Flag to draw micro ticks on an axis. Default is false.
+		// htmlLabels: Boolean?
+		//		Flag to use HTML (as opposed to the native vector graphics engine) to draw labels. Default is true.
+		// min: Number?
+		//		The smallest value on an axis. Default is 0.
+		// max: Number?
+		//		The largest value on an axis. Default is 1.
+		// from: Number?
+		//		Force the chart to render data visible from this value. Default is 0.
+		// to: Number?
+		//		Force the chart to render data visible to this value. Default is 1.
+		// majorTickStep: Number?
+		//		The amount to skip before a major tick is drawn. When not set the major ticks step is computed from
+		//		the data range.
+		// minorTickStep: Number?
+		//		The amount to skip before a minor tick is drawn. When not set the minor ticks step is computed from
+		//		the data range.
+		// microTickStep: Number?
+		//		The amount to skip before a micro tick is drawn. When not set the micro ticks step is computed from
+		// labels: Object[]?
+		//		An array of labels for major ticks, with corresponding numeric values, ordered by value.
+		// labelFunc: Function?
+		//		An optional function to use to compute label text. It takes precedence over
+		//		the default text when available. The function must be of the following form:
+		//	|		function labelFunc(text, value, precision) {}
+		//		`text` is the already pre-formatted text. Pre-formatting is done using `dojo/number` is available, `Date.toFixed` otherwise.
+		//		`value`  is the raw axis value.
+		//		`precision` is the requested precision to be applied.
+		// maxLabelSize: Number?
+		//		The maximum size, in pixels, for a label.  To be used with the optional label function.
+		// stroke: dojox.gfx.Stroke?
+		//		An optional stroke to be used for drawing an axis.
+		// majorTick: Object?
+		//		An object containing a dojox.gfx.Stroke, and a length (number) for a major tick.
+		// minorTick: Object?
+		//		An object containing a dojox.gfx.Stroke, and a length (number) for a minor tick.
+		// microTick: Object?
+		//		An object containing a dojox.gfx.Stroke, and a length (number) for a micro tick.
+		// tick: Object?
+		//		An object containing a dojox.gfx.Stroke, and a length (number) for a tick.
+		// font: String?
+		//		An optional font definition (as used in the CSS font property) for labels.
+		// fontColor: String|dojo.Color?
+		//		An optional color to be used in drawing labels.
+		// titleGap: Number?
+		//		An optional grap between axis title and axis label
+		// titleFont: String?
+		//		An optional font definition for axis title
+		// titleFontColor: String?
+		//		An optional axis title color
+		// titleOrientation: String?
+		//		An optional orientation for axis title. "axis" means the title facing the axis, "away" means facing away.
+		//		If no value is set "axis" is used.
+		// enableCache: Boolean?
+		//		Whether the ticks and labels are cached from one rendering to another. This improves the rendering performance of
+		//		successive rendering but penalize the first rendering. For labels it is only working with gfx labels
+		//		not html ones.  Default false.
+		// dropLabels: Boolean?
+		//		Whether the axis automatically drops labels at regular interval or not to avoid labels overlapping.
+		//		This gives better results but require more computations.  You can disable it to save computation
+		//		time when you know your labels won't overlap. Default is true.
+		// labelSizeChange: Boolean?
+		//		Indicates to the axis whether the axis labels are changing their size on zoom. If false this allows to
+		//		optimize the axis by avoiding recomputing labels maximum size on zoom actions. Default is false.
+		// position: String?
+		//		The position of the axis. Values: "leftOrBottom", "center" or "rightOrTop". Default is "leftOrBottom".
+	};
+	=====*/
+
+	var centerAnchorLimit = 45;	// in degrees
+
+	var Default = declare(has("dojo-bidi")? "dojox.charting.axis2d.NonBidiDefault" : "dojox.charting.axis2d.Default", Invisible, {
+		// summary:
+		//		The default axis object used in dojox.charting.  See dojox.charting.Chart.addAxis for details.
+
+		// defaultParams: Object
+		//		The default parameters used to define any axis.
+		// optionalParams: Object
+		//		Any optional parameters needed to define an axis.
+
+		/*=====
+		// TODO: the documentation tools need these to be pre-defined in order to pick them up
+		//	correctly, but the code here is partially predicated on whether or not the properties
+		//	actually exist.  For now, we will leave these undocumented but in the code for later. -- TRT
+
+		// opt: Object
+		//		The actual options used to define this axis, created at initialization.
+		// scaler: Object
+		//		The calculated helper object to tell charts how to draw an axis and any data.
+		// ticks: Object
+		//		The calculated tick object that helps a chart draw the scaling on an axis.
+		// dirty: Boolean
+		//		The state of the axis (whether it needs to be redrawn or not)
+		// scale: Number
+		//		The current scale of the axis.
+		// offset: Number
+		//		The current offset of the axis.
+
+		opt: null,
+		scaler: null,
+		ticks: null,
+		dirty: true,
+		scale: 1,
+		offset: 0,
+		=====*/
+		defaultParams: {
+			vertical:	false,		// true for vertical axis
+			fixUpper:	"none",	// align the upper on ticks: "major", "minor", "micro", "none"
+			fixLower:	"none",	// align the lower on ticks: "major", "minor", "micro", "none"
+			natural:	 false,		// all tick marks should be made on natural numbers
+			leftBottom:  true,		// position of the axis, used with "vertical" - deprecated: use position instead
+			includeZero: false,		// 0 should be included
+			fixed:	   true,		// all labels are fixed numbers
+			majorLabels: true,		// draw major labels
+			minorTicks:  true,		// draw minor ticks
+			minorLabels: true,		// draw minor labels
+			microTicks:  false,		// draw micro ticks
+			rotation:	0,			// label rotation angle in degrees
+			htmlLabels:  true,		// use HTML to draw labels
+			enableCache: false,		// whether we cache or not
+			dropLabels: true,		// whether we automatically drop overlapping labels or not
+			labelSizeChange: false, // whether the labels size change on zoom
+			position: "leftOrBottom" // position of the axis: "leftOrBottom" (default), "center" or "rightOrTop"
+		},
+		optionalParams: {
+			min:			0,	// minimal value on this axis
+			max:			1,	// maximal value on this axis
+			from:			0,	// visible from this value
+			to:				1,	// visible to this value
+			majorTickStep:	4,	// major tick step
+			minorTickStep:	2,	// minor tick step
+			microTickStep:	1,	// micro tick step
+			labels:			[],	// array of labels for major ticks
+			// with corresponding numeric values
+			// ordered by values
+			labelFunc:		null, // function to compute label values
+			maxLabelSize:	0,	// size in px. For use with labelFunc
+			maxLabelCharCount:	0,	// size in word count.
+			trailingSymbol:	null,
+
+			// TODO: add support for minRange!
+			// minRange:		1,	// smallest distance from min allowed on the axis
+
+			// theme components
+			stroke:			{},	// stroke for an axis
+			majorTick:		{},	// stroke + length for a tick
+			minorTick:		{},	// stroke + length for a tick
+			microTick:		{},	// stroke + length for a tick
+			tick:		   {},	// stroke + length for a tick
+			font:			"",	// font for labels
+			fontColor:		"",	// color for labels as a string
+			title:				 "",	// axis title
+			titleGap:			 0,		// gap between axis title and axis label
+			titleFont:			 "",		// axis title font
+			titleFontColor:		 "",		// axis title font color
+			titleOrientation:	 ""		// "axis" means the title facing the axis, "away" means facing away
+		},
+
+		constructor: function(chart, kwArgs){
+			// summary:
+			//		The constructor for an axis.
+			// chart: dojox/charting/Chart
+			//		The chart the axis belongs to.
+			// kwArgs: __AxisCtorArgs?
+			//		Any optional keyword arguments to be used to define this axis.
+			this.opt = lang.clone(this.defaultParams);
+			du.updateWithObject(this.opt, kwArgs);
+			du.updateWithPattern(this.opt, kwArgs, this.optionalParams);
+			if(this.opt.enableCache){
+				this._textFreePool = [];
+				this._lineFreePool = [];
+				this._textUsePool = [];
+				this._lineUsePool = [];
+			}
+			this._invalidMaxLabelSize = true;
+			// replace deprecated leftBotton to position
+			if(!(kwArgs && ('position' in kwArgs))){
+			    this.opt.position = this.opt.leftBottom ? "leftOrBottom" : "rightOrTop";
+			}			
+			this.renderingOptions = { "shape-rendering": "crispEdges" };
+		},
+		setWindow: function(scale, offset){
+			// summary:
+			//		Set the drawing "window" for the axis.
+			// scale: Number
+			//		The new scale for the axis.
+			// offset: Number
+			//		The new offset for the axis.
+			// returns: dojox/charting/axis2d/Default
+			//		The reference to the axis for functional chaining.
+			if(scale != this.scale){
+				// if scale changed we need to recompute new max label size
+				this._invalidMaxLabelSize = true;
+			}
+			return this.inherited(arguments);
+		},
+
+		_groupLabelWidth: function(labels, font, wcLimit){
+			if(!labels.length){
+				return 0;
+			}
+			if(labels.length > 50){
+				// let's avoid degenerated cases
+				labels.length = 50;
+			}
+			if(lang.isObject(labels[0])){
+				labels = df.map(labels, function(label){ return label.text; });
+			}
+			if(wcLimit){
+				labels = df.map(labels, function(label){
+					return lang.trim(label).length == 0 ? "" : label.substring(0, wcLimit) + this.trailingSymbol;
+				}, this);
+			}
+			var s = labels.join("<br>");
+			return g._base._getTextBox(s, {font: font}).w || 0;
+		},
+
+		_getMaxLabelSize: function(min, max, span, rotation, font, size){
+			if(this._maxLabelSize == null && arguments.length == 6){
+				var o = this.opt;
+				// everything might have changed, reset the minMinorStep value
+				this.scaler.minMinorStep = this._prevMinMinorStep = 0;
+				var ob = lang.clone(o);
+				delete ob.to;
+				delete ob.from;
+				// build all the ticks from min, to max not from to to _but_ using the step
+				// that would be used if we where just displaying from to to from.
+				var sb = lin.buildScaler(min, max, span, ob, o.to - o.from);
+				sb.minMinorStep = 0;
+				this._majorStart = sb.major.start;
+				// we build all the ticks not only the ones we need to draw in order to get
+				// a correct drop rate computation that works for any offset of this scale
+				var tb = lin.buildTicks(sb, o);
+				// if there is not tick at all tb is null
+				if(size && tb){
+					var majLabelW = 0, minLabelW = 0; // non rotated versions
+					// we first collect all labels when needed
+					var tickLabelFunc = function(tick){
+						if(tick.label){
+							this.push(tick.label);
+						}
+					};
+					var labels = [];
+					if(this.opt.majorLabels){
+						arr.forEach(tb.major, tickLabelFunc, labels);
+						majLabelW = this._groupLabelWidth(labels, font, ob.maxLabelCharCount);
+						if(ob.maxLabelSize){
+							majLabelW = Math.min(ob.maxLabelSize, majLabelW);
+						}
+					}
+					// do the minor labels computation only if dropLabels is set
+					labels = [];
+					if(this.opt.dropLabels && this.opt.minorLabels){
+						arr.forEach(tb.minor, tickLabelFunc, labels);
+						minLabelW = this._groupLabelWidth(labels, font, ob.maxLabelCharCount);
+						if(ob.maxLabelSize){
+							minLabelW = Math.min(ob.maxLabelSize, minLabelW);
+						}
+					}
+					this._maxLabelSize = {
+						majLabelW: majLabelW, minLabelW: minLabelW,
+						majLabelH: size, minLabelH: size
+					};
+				}else{
+					this._maxLabelSize = null;
+				}
+			}
+			return this._maxLabelSize;
+		},
+
+		calculate: function(min, max, span){
+			this.inherited(arguments);
+			// when the scale has not changed there is no reason for minMinorStep to change
+			this.scaler.minMinorStep = this._prevMinMinorStep;
+			// we want to recompute the dropping mechanism only when the scale or the size of the axis is changing
+			// not when for example when we scroll (otherwise effect would be weird)
+			if((this._invalidMaxLabelSize || span != this._oldSpan) && (min != Infinity && max != -Infinity)){
+				this._invalidMaxLabelSize = false;
+				if(this.opt.labelSizeChange){
+					this._maxLabelSize = null;
+				}
+				this._oldSpan = span;
+				var o = this.opt;
+				var ta = this.chart.theme.axis, rotation = o.rotation % 360,
+					labelGap = this.chart.theme.axis.tick.labelGap,
+					// TODO: we use one font --- of major tick, we need to use major and minor fonts
+					font = o.font || (ta.majorTick && ta.majorTick.font) || (ta.tick && ta.tick.font),
+					size = font ? g.normalizedLength(g.splitFontString(font).size) : 0,
+					// even if we don't drop label we need to compute max size for offsets
+					labelW = this._getMaxLabelSize(min, max, span, rotation, font, size);
+				if(typeof labelGap != "number"){
+					labelGap = 4; // in pixels
+				}
+				if(labelW && o.dropLabels){
+					var cosr = Math.abs(Math.cos(rotation * Math.PI / 180)),
+						sinr = Math.abs(Math.sin(rotation * Math.PI / 180));
+					var majLabelW, minLabelW;
+					if(rotation < 0){
+						rotation += 360;
+					}
+					switch(rotation){
+						case 0:
+						case 180:
+							// trivial cases: horizontal labels
+							if(this.vertical){
+								majLabelW = minLabelW = size;
+							}else{
+								majLabelW = labelW.majLabelW;
+								minLabelW = labelW.minLabelW;
+							}
+							break;
+						case 90:
+						case 270:
+							// trivial cases: vertical
+							if(this.vertical){
+								majLabelW = labelW.majLabelW;
+								minLabelW = labelW.minLabelW;
+							}else{
+								majLabelW = minLabelW = size;
+							}
+							break;
+						default:
+							// all major labels are parallel they can't collapse except if the two ticks are
+							// closer than the height of the text * cos(90-rotation)
+							majLabelW  = this.vertical ? Math.min(labelW.majLabelW, size / cosr) : Math.min(labelW.majLabelW, size / sinr);
+							// for minor labels we need to rotated them
+							var gap1 = Math.sqrt(labelW.minLabelW * labelW.minLabelW + size * size),
+								gap2 = this.vertical ? size * cosr + labelW.minLabelW * sinr : labelW.minLabelW * cosr + size * sinr;
+							minLabelW = Math.min(gap1, gap2);
+							break;
+					}
+					// we need to check both minor and major labels fit a minor step
+					this.scaler.minMinorStep = this._prevMinMinorStep =  Math.max(majLabelW, minLabelW) + labelGap;
+					var canMinorLabel = this.scaler.minMinorStep <= this.scaler.minor.tick * this.scaler.bounds.scale;
+					if(!canMinorLabel){
+						// we can't place minor labels, let's see if we can place major ones
+						// in a major step and if not which skip interval we must follow
+						this._skipInterval = Math.floor((majLabelW + labelGap) / (this.scaler.major.tick * this.scaler.bounds.scale));
+					}else{
+						// everything fit well
+						this._skipInterval = 0;
+					}
+				}else{
+					// drop label disabled
+					this._skipInterval = 0;
+				}
+			}
+			// computes the tick subset we need for that scale/offset
+			this.ticks = lin.buildTicks(this.scaler, this.opt);
+			return this;
+		},
+
+		getOffsets: function(){
+			// summary:
+			//		Get the physical offset values for this axis (used in drawing data series). This method is not
+			//		supposed to be called by the users but internally.
+			// returns: Object
+			//		The calculated offsets in the form of { l, r, t, b } (left, right, top, bottom).
+			var s = this.scaler, offsets = { l: 0, r: 0, t: 0, b: 0 };
+			if(!s){
+				return offsets;
+			}
+			var o = this.opt,
+				ta = this.chart.theme.axis,
+				labelGap = this.chart.theme.axis.tick.labelGap,
+				// TODO: we use one font --- of major tick, we need to use major and minor fonts
+				taTitleFont = o.titleFont || (ta.title && ta.title.font),
+				taTitleGap = (o.titleGap==0) ? 0 : o.titleGap || (ta.title && ta.title.gap),
+				taMajorTick = this.chart.theme.getTick("major", o),
+				taMinorTick = this.chart.theme.getTick("minor", o),
+				tsize = taTitleFont ? g.normalizedLength(g.splitFontString(taTitleFont).size) : 0,
+				rotation = o.rotation % 360, position = o.position, 
+				leftBottom = position !== "rightOrTop",
+				cosr = Math.abs(Math.cos(rotation * Math.PI / 180)),
+				sinr = Math.abs(Math.sin(rotation * Math.PI / 180));
+			this.trailingSymbol = (o.trailingSymbol === undefined || o.trailingSymbol === null) ?
+				this.trailingSymbol : o.trailingSymbol;
+			if(typeof labelGap != "number"){
+				labelGap = 4; // in pixels
+			}
+			if(rotation < 0){
+				rotation += 360;
+			}
+			var maxLabelSize = this._getMaxLabelSize(); // don't need parameters, calculate has been called before => we use cached value
+			if(maxLabelSize){
+				var side;
+				var labelWidth = Math.ceil(Math.max(maxLabelSize.majLabelW, maxLabelSize.minLabelW)) + 1,
+					size = Math.ceil(Math.max(maxLabelSize.majLabelH, maxLabelSize.minLabelH)) + 1;
+				if(this.vertical){
+					side = leftBottom ? "l" : "r";
+					switch(rotation){
+						case 0:
+						case 180:
+							offsets[side] = position === "center" ? 0 : labelWidth;
+							offsets.t = offsets.b = size / 2;
+							break;
+						case 90:
+						case 270:
+							offsets[side] = size;
+							offsets.t = offsets.b = labelWidth / 2;
+							break;
+						default:
+							if(rotation <= centerAnchorLimit || (180 < rotation && rotation <= (180 + centerAnchorLimit))){
+								offsets[side] = size * sinr / 2 + labelWidth * cosr;
+								offsets[leftBottom ? "t" : "b"] = size * cosr / 2 + labelWidth * sinr;
+								offsets[leftBottom ? "b" : "t"] = size * cosr / 2;
+							}else if(rotation > (360 - centerAnchorLimit) || (180 > rotation && rotation > (180 - centerAnchorLimit))){
+								offsets[side] = size * sinr / 2 + labelWidth * cosr;
+								offsets[leftBottom ? "b" : "t"] = size * cosr / 2 + labelWidth * sinr;
+								offsets[leftBottom ? "t" : "b"] = size * cosr / 2;
+							}else if(rotation < 90 || (180 < rotation && rotation < 270)){
+								offsets[side] = size * sinr + labelWidth * cosr;
+								offsets[leftBottom ? "t" : "b"] = size * cosr + labelWidth * sinr;
+							}else{
+								offsets[side] = size * sinr + labelWidth * cosr;
+								offsets[leftBottom ? "b" : "t"] = size * cosr + labelWidth * sinr;
+							}
+							break;
+					}
+					if(position === "center"){
+					    offsets[side] = 0;
+					}
+					else{					
+					    offsets[side] += labelGap + Math.max(taMajorTick.length > 0?taMajorTick.length:0,
+														 taMinorTick.length > 0?taMinorTick.length:0) + (o.title ? (tsize + taTitleGap) : 0);
+					}
+				}else{
+					side = leftBottom ? "b" : "t";
+					switch(rotation){
+						case 0:
+						case 180:
+							offsets[side] = position === "center" ? 0 : size;
+							offsets.l = offsets.r = labelWidth / 2;
+							break;
+						case 90:
+						case 270:
+							offsets[side] = labelWidth;
+							offsets.l = offsets.r = size / 2;
+							break;
+						default:
+							if((90 - centerAnchorLimit) <= rotation && rotation <= 90 || (270 - centerAnchorLimit) <= rotation && rotation <= 270){
+								offsets[side] = size * cosr / 2 + labelWidth * sinr;
+								offsets[leftBottom ? "r" : "l"] = size * sinr / 2 + labelWidth * cosr;
+								offsets[leftBottom ? "l" : "r"] = size * sinr / 2;
+							}else if(90 <= rotation && rotation <= (90 + centerAnchorLimit) || 270 <= rotation && rotation <= (270 + centerAnchorLimit)){
+								offsets[side] = size * cosr / 2 + labelWidth * sinr;
+								offsets[leftBottom ? "l" : "r"] = size * sinr / 2 + labelWidth * cosr;
+								offsets[leftBottom ? "r" : "l"] = size * sinr / 2;
+							}else if(rotation < centerAnchorLimit || (180 < rotation && rotation < (180 + centerAnchorLimit))){
+								offsets[side] = size * cosr + labelWidth * sinr;
+								offsets[leftBottom ? "r" : "l"] = size * sinr + labelWidth * cosr;
+							}else{
+								offsets[side] = size * cosr + labelWidth * sinr;
+								offsets[leftBottom ? "l" : "r"] = size * sinr + labelWidth * cosr;
+							}
+							break;
+					}
+					if(position === "center"){
+					    offsets[side] = 0;
+					}
+					else{					
+					offsets[side] += labelGap + Math.max(taMajorTick.length > 0?taMajorTick.length:0,
+														 taMinorTick.length > 0?taMinorTick.length:0) + (o.title ? (tsize + taTitleGap) : 0);
+					}
+				}
+			}
+			return offsets;	//	Object
+		},
+		cleanGroup: function(creator){
+			if(this.opt.enableCache && this.group){
+				this._lineFreePool = this._lineFreePool.concat(this._lineUsePool);
+				this._lineUsePool = [];
+				this._textFreePool = this._textFreePool.concat(this._textUsePool);
+				this._textUsePool = [];
+			}
+			this.inherited(arguments);
+		},
+		createText: function(labelType, creator, x, y, align, textContent, font, fontColor, labelWidth){
+			if(!this.opt.enableCache || labelType=="html"){
+				return acommon.createText[labelType](
+						this.chart,
+						creator,
+						x,
+						y,
+						align,
+						textContent,
+						font,
+						fontColor,
+						labelWidth
+					);
+			}
+			var text;
+			if(this._textFreePool.length > 0){
+				text = this._textFreePool.pop();
+				text.setShape({x: x, y: y, text: textContent, align: align});
+				// For now all items share the same font, no need to re-set it
+				//.setFont(font).setFill(fontColor);
+				// was cleared, add it back
+				creator.add(text);
+			}else{
+				text = acommon.createText[labelType](
+						this.chart,
+						creator,
+						x,
+						y,
+						align,
+						textContent,
+						font,
+						fontColor						
+					);			
+			}
+			this._textUsePool.push(text);
+			return text;
+		},
+		createLine: function(creator, params){
+			var line;
+			if(this.opt.enableCache && this._lineFreePool.length > 0){
+				line = this._lineFreePool.pop();
+				line.setShape(params);
+				// was cleared, add it back
+				creator.add(line);
+			}else{
+				line = creator.createLine(params);
+			}
+			if(this.opt.enableCache){
+				this._lineUsePool.push(line);
+			}
+			return line;
+		},
+		render: function(dim, offsets){
+			// summary:
+			//		Render/draw the axis.
+			// dim: Object
+			//		An object of the form { width, height}.
+			// offsets: Object
+			//		An object of the form { l, r, t, b }.
+			// returns: dojox/charting/axis2d/Default
+			//		The reference to the axis for functional chaining.
+			
+			var isRtl = this._isRtl();	// chart mirroring
+			if(!this.dirty || !this.scaler){
+				return this;	//	dojox/charting/axis2d/Default
+			}
+			// prepare variable
+			var o = this.opt, ta = this.chart.theme.axis, position = o.position, 
+			       leftBottom = position !== "rightOrTop", rotation = o.rotation % 360,
+				start, stop, titlePos, titleRotation=0, titleOffset, axisVector, tickVector, anchorOffset, labelOffset, labelAlign,
+				labelGap = this.chart.theme.axis.tick.labelGap,
+				// TODO: we use one font --- of major tick, we need to use major and minor fonts
+				taFont = o.font || (ta.majorTick && ta.majorTick.font) || (ta.tick && ta.tick.font),
+				taTitleFont = o.titleFont || (ta.title && ta.title.font),
+				// TODO: we use one font color --- we need to use different colors
+				taFontColor = o.fontColor || (ta.majorTick && ta.majorTick.fontColor) || (ta.tick && ta.tick.fontColor) || "black",
+				taTitleFontColor = o.titleFontColor || (ta.title && ta.title.fontColor) || "black",
+				taTitleGap = (o.titleGap==0) ? 0 : o.titleGap || (ta.title && ta.title.gap) || 15,
+				taTitleOrientation = o.titleOrientation || (ta.title && ta.title.orientation) || "axis",
+				taMajorTick = this.chart.theme.getTick("major", o),
+				taMinorTick = this.chart.theme.getTick("minor", o),
+				taMicroTick = this.chart.theme.getTick("micro", o),
+
+				taStroke = "stroke" in o ? o.stroke : ta.stroke,
+				size = taFont ? g.normalizedLength(g.splitFontString(taFont).size) : 0,
+				cosr = Math.abs(Math.cos(rotation * Math.PI / 180)),
+				sinr = Math.abs(Math.sin(rotation * Math.PI / 180)),
+				tsize = taTitleFont ? g.normalizedLength(g.splitFontString(taTitleFont).size) : 0;
+			if(typeof labelGap != "number"){
+				labelGap = 4; // in pixels
+			}
+			if(rotation < 0){
+				rotation += 360;
+			}
+			var cachedLabelW = this._getMaxLabelSize();
+			cachedLabelW = cachedLabelW && cachedLabelW.majLabelW;
+			if(this.vertical){
+				start = {y: dim.height - offsets.b};
+				stop  = {y: offsets.t};
+				titlePos = {y: (dim.height - offsets.b + offsets.t)/2};
+				titleOffset = size * sinr + (cachedLabelW || 0) * cosr + labelGap + Math.max(taMajorTick.length > 0?taMajorTick.length:0,
+																		 					 taMinorTick.length > 0?taMinorTick.length:0) +
+					tsize + taTitleGap;
+				axisVector = {x: 0, y: -1};
+				labelOffset = {x: 0, y: 0};
+				tickVector = {x: 1, y: 0};
+				anchorOffset = {x: labelGap, y: 0};
+				switch(rotation){
+					case 0:
+						labelAlign = "end";
+						labelOffset.y = size * 0.4;
+						break;
+					case 90:
+						labelAlign = "middle";
+						labelOffset.x = -size;
+						break;
+					case 180:
+						labelAlign = "start";
+						labelOffset.y = -size * 0.4;
+						break;
+					case 270:
+						labelAlign = "middle";
+						break;
+					default:
+						if(rotation < centerAnchorLimit){
+							labelAlign = "end";
+							labelOffset.y = size * 0.4;
+						}else if(rotation < 90){
+							labelAlign = "end";
+							labelOffset.y = size * 0.4;
+						}else if(rotation < (180 - centerAnchorLimit)){
+							labelAlign = "start";
+						}else if(rotation < (180 + centerAnchorLimit)){
+							labelAlign = "start";
+							labelOffset.y = -size * 0.4;
+						}else if(rotation < 270){
+							labelAlign = "start";
+							labelOffset.x = leftBottom ? 0 : size * 0.4;
+						}else if(rotation < (360 - centerAnchorLimit)){
+							labelAlign = "end";
+							labelOffset.x = leftBottom ? 0 : size * 0.4;
+						}else{
+							labelAlign = "end";
+							labelOffset.y = size * 0.4;
+						}
+				}
+				if(leftBottom){
+					start.x = stop.x = position === "center" ? dim.width/2 : offsets.l;
+					titleRotation = (taTitleOrientation && taTitleOrientation == "away") ? 90 : 270;
+					titlePos.x = offsets.l - titleOffset + (titleRotation == 270 ? tsize : 0);
+					tickVector.x = -1;
+					anchorOffset.x = -anchorOffset.x;
+				}else{
+					start.x = stop.x = dim.width - offsets.r;
+					titleRotation = (taTitleOrientation && taTitleOrientation == "axis") ? 90 : 270;
+					titlePos.x = dim.width - offsets.r + titleOffset - (titleRotation == 270 ? 0 : tsize);
+					switch(labelAlign){
+						case "start":
+							labelAlign = "end";
+							break;
+						case "end":
+							labelAlign = "start";
+							break;
+						case "middle":
+							labelOffset.x += size;
+							break;
+					}
+				}
+			}else{
+				start = {x: offsets.l};
+				stop  = {x: dim.width - offsets.r};
+				titlePos = {x: (dim.width - offsets.r + offsets.l)/2};
+				titleOffset = size * cosr + (cachedLabelW || 0) * sinr + labelGap + Math.max(taMajorTick.length > 0?taMajorTick.length:0,
+																		 					 taMinorTick.length > 0?taMinorTick.length:0) +
+					tsize + taTitleGap;
+				axisVector = {x: isRtl ? -1 : 1, y: 0}; 	// chart mirroring
+				labelOffset = {x: 0, y: 0};
+				tickVector = {x: 0, y: 1};
+				anchorOffset = {x: 0, y: labelGap};
+				switch(rotation){
+					case 0:
+						labelAlign = "middle";
+						labelOffset.y = size;
+						break;
+					case 90:
+						labelAlign = "start";
+						labelOffset.x = -size * 0.4;
+						break;
+					case 180:
+						labelAlign = "middle";
+						break;
+					case 270:
+						labelAlign = "end";
+						labelOffset.x = size * 0.4;
+						break;
+					default:
+						if(rotation < (90 - centerAnchorLimit)){
+							labelAlign = "start";
+							labelOffset.y = leftBottom ? size : 0;
+						}else if(rotation < (90 + centerAnchorLimit)){
+							labelAlign = "start";
+							labelOffset.x = -size * 0.4;
+						}else if(rotation < 180){
+							labelAlign = "start";
+							labelOffset.y = leftBottom ? 0 : -size;
+						}else if(rotation < (270 - centerAnchorLimit)){
+							labelAlign = "end";
+							labelOffset.y = leftBottom ? 0 : -size;
+						}else if(rotation < (270 + centerAnchorLimit)){
+							labelAlign = "end";
+							labelOffset.y = leftBottom ? size * 0.4 : 0;
+						}else{
+							labelAlign = "end";
+							labelOffset.y = leftBottom ? size : 0;
+						}
+				}
+				if(leftBottom){
+					start.y = stop.y = position === "center" ? dim.height/2 : dim.height - offsets.b;
+					titleRotation = (taTitleOrientation && taTitleOrientation == "axis") ? 180 : 0;
+					titlePos.y = dim.height - offsets.b + titleOffset - (titleRotation ? tsize : 0);
+				}else{
+					start.y = stop.y = offsets.t;
+					titleRotation = (taTitleOrientation && taTitleOrientation == "away") ? 180 : 0;
+					titlePos.y = offsets.t - titleOffset + (titleRotation ? 0 : tsize);
+					tickVector.y = -1;
+					anchorOffset.y = -anchorOffset.y;
+					switch(labelAlign){
+						case "start":
+							labelAlign = "end";
+							break;
+						case "end":
+							labelAlign = "start";
+							break;
+						case "middle":
+							labelOffset.y -= size;
+							break;
+					}
+				}
+			}
+
+			// render shapes
+
+			this.cleanGroup();
+
+			var s = this.group,
+				c = this.scaler,
+				t = this.ticks,
+				f = lin.getTransformerFromModel(this.scaler),
+				// GFX Canvas now supports labels, so let's _not_ fallback to HTML anymore on canvas, just use
+				// HTML labels if explicitly asked + no rotation + no IE + no Opera
+				labelType = (!o.title || !titleRotation) && !rotation && this.opt.htmlLabels && !has("ie") && !has("opera") ? "html" : "gfx",
+				dx = tickVector.x * taMajorTick.length,
+				dy = tickVector.y * taMajorTick.length,
+				skip = this._skipInterval;
+
+			s.createLine({
+				x1: start.x,
+				y1: start.y,
+				x2: stop.x,
+				y2: stop.y
+			}).setStroke(taStroke);
+
+			//create axis title
+			if(o.title){
+				var axisTitle = acommon.createText[labelType](
+					this.chart,
+					s,
+					titlePos.x,
+					titlePos.y,
+					"middle",
+					o.title,
+					taTitleFont,
+					taTitleFontColor
+				);
+				if(labelType == "html"){
+					this.htmlElements.push(axisTitle);
+				}else{
+					//as soon as rotation is provided, labelType won't be "html"
+					//rotate gfx labels
+					axisTitle.setTransform(g.matrix.rotategAt(titleRotation, titlePos.x, titlePos.y));
+				}
+			}
+
+			// go out nicely instead of try/catch
+			if(t == null){
+				this.dirty = false;
+				return this;
+			}
+
+			var rel = (t.major.length > 0)?(t.major[0].value - this._majorStart) / c.major.tick:0;
+			var canLabel = this.opt.majorLabels;
+			arr.forEach(t.major, function(tick, i){
+				var offset = f(tick.value), elem,
+					x = (isRtl ? stop.x : start.x) + axisVector.x * offset, // chart mirroring
+					y = start.y + axisVector.y * offset;
+				i += rel;
+				this.createLine(s, {
+					x1: x, y1: y,
+					x2: x + dx,
+					y2: y + dy
+				}).setStroke(taMajorTick);
+				if(tick.label && (!skip || (i - (1 + skip)) % (1 + skip) == 0)){
+					var label = o.maxLabelCharCount ? this.getTextWithLimitCharCount(tick.label, taFont, o.maxLabelCharCount) : {
+						text: tick.label,
+						truncated: false
+					};
+					label = o.maxLabelSize ? this.getTextWithLimitLength(label.text, taFont, o.maxLabelSize, label.truncated) : label;
+					elem = this.createText(labelType,
+						s,
+						x + (taMajorTick.length > 0 ? dx : 0) + anchorOffset.x + (rotation ? 0 : labelOffset.x),
+						y + (taMajorTick.length > 0 ? dy : 0) + anchorOffset.y + (rotation ? 0 : labelOffset.y),
+						labelAlign,
+						label.text,
+						taFont,
+						taFontColor
+						//cachedLabelW
+					);
+					// if bidi support was required, the textDir is "auto" and truncation
+					// took place, we need to update the dir of the element for cases as:
+					// Fool label: 111111W (W for bidi character)
+					// truncated label: 11...
+					// in this case for auto textDir the dir will be "ltr" which is wrong.
+					if(label.truncated){
+						this.chart.formatTruncatedLabel(elem, tick.label, labelType);
+					}
+					label.truncated && this.labelTooltip(elem, this.chart, tick.label, label.text, taFont, labelType);
+					if(labelType == "html"){
+						this.htmlElements.push(elem);
+					}else if(rotation){
+						elem.setTransform([
+							{dx: labelOffset.x, dy: labelOffset.y},
+							g.matrix.rotategAt(
+								rotation,
+								x + (taMajorTick.length > 0 ? dx : 0) + anchorOffset.x,
+								y + (taMajorTick.length > 0 ? dy : 0) + anchorOffset.y
+							)
+						]);
+					}
+				}
+			}, this);
+
+			dx = tickVector.x * taMinorTick.length;
+			dy = tickVector.y * taMinorTick.length;
+			canLabel = this.opt.minorLabels && c.minMinorStep <= c.minor.tick * c.bounds.scale;
+			arr.forEach(t.minor, function(tick){
+				var offset = f(tick.value), elem,
+					x = (isRtl ? stop.x : start.x)  + axisVector.x * offset,
+					y = start.y + axisVector.y * offset; // chart mirroring
+				this.createLine(s, {
+					x1: x, y1: y,
+					x2: x + dx,
+					y2: y + dy
+				}).setStroke(taMinorTick);
+				if(canLabel && tick.label){
+					var label = o.maxLabelCharCount ? this.getTextWithLimitCharCount(tick.label, taFont, o.maxLabelCharCount) : {
+						text: tick.label,
+						truncated: false
+					};
+					label = o.maxLabelSize ? this.getTextWithLimitLength(label.text, taFont, o.maxLabelSize, label.truncated) : label;
+					elem = this.createText(labelType,
+						s,
+						x + (taMinorTick.length > 0 ? dx : 0) + anchorOffset.x + (rotation ? 0 : labelOffset.x),
+						y + (taMinorTick.length  > 0 ? dy : 0) + anchorOffset.y + (rotation ? 0 : labelOffset.y),
+						labelAlign,
+						label.text,
+						taFont,
+						taFontColor
+						//cachedLabelW
+					);
+					// if bidi support was required, the textDir is "auto" and truncation
+					// took place, we need to update the dir of the element for cases as:
+					// Fool label: 111111W (W for bidi character)
+					// truncated label: 11...
+					// in this case for auto textDir the dir will be "ltr" which is wrong.
+					if(label.truncated){
+						this.chart.formatTruncatedLabel(elem, tick.label, labelType);
+					}
+					label.truncated && this.labelTooltip(elem, this.chart, tick.label, label.text, taFont, labelType);
+					if(labelType == "html"){
+						this.htmlElements.push(elem);
+					}else if(rotation){
+						elem.setTransform([
+							{dx: labelOffset.x, dy: labelOffset.y},
+							g.matrix.rotategAt(
+								rotation,
+								x + (taMinorTick.length > 0 ? dx : 0) + anchorOffset.x,
+								y + (taMinorTick.length > 0 ? dy : 0) + anchorOffset.y
+							)
+						]);
+					}
+				}
+			}, this);
+
+			dx = tickVector.x * taMicroTick.length;
+			dy = tickVector.y * taMicroTick.length;
+			arr.forEach(t.micro, function(tick){
+				var offset = f(tick.value),
+					x = start.x + axisVector.x * offset,
+					y = start.y + axisVector.y * offset;
+					this.createLine(s, {
+						x1: x, y1: y,
+						x2: x + dx,
+						y2: y + dy
+					}).setStroke(taMicroTick);
+			}, this);
+
+			this.dirty = false;
+			return this;	//	dojox/charting/axis2d/Default
+		},
+		labelTooltip: function(elem, chart, label, truncatedLabel, font, elemType){
+			var modules = ["dijit/Tooltip"];
+			var aroundRect = {type: "rect"}, position = ["above", "below"],
+				fontWidth = g._base._getTextBox(truncatedLabel, {font: font}).w || 0,
+				fontHeight = font ? g.normalizedLength(g.splitFontString(font).size) : 0;
+			if(elemType == "html"){
+				lang.mixin(aroundRect, domGeom.position(elem.firstChild, true));
+				aroundRect.width = Math.ceil(fontWidth);
+				aroundRect.height = Math.ceil(fontHeight);
+				this._events.push({
+					shape:  dojo,
+					handle: connect.connect(elem.firstChild, "onmouseover", this, function(e){
+						require(modules, function(Tooltip){
+							Tooltip.show(label, aroundRect, position);
+						});
+					})
+				});
+				this._events.push({
+					shape:  dojo,
+					handle: connect.connect(elem.firstChild, "onmouseout", this, function(e){
+						require(modules, function(Tooltip){
+							Tooltip.hide(aroundRect);
+						});
+					})
+				});
+			}else{
+				var shp = elem.getShape(),
+					lt = chart.getCoords();
+				aroundRect = lang.mixin(aroundRect, {
+					x: shp.x - fontWidth / 2,
+					y: shp.y
+				});
+				aroundRect.x += lt.x;
+				aroundRect.y += lt.y;
+				aroundRect.x = Math.round(aroundRect.x);
+				aroundRect.y = Math.round(aroundRect.y);
+				aroundRect.width = Math.ceil(fontWidth);
+				aroundRect.height = Math.ceil(fontHeight);
+				this._events.push({
+					shape:  elem,
+					handle: elem.connect("onmouseenter", this, function(e){
+						require(modules, function(Tooltip){
+							Tooltip.show(label, aroundRect, position);
+						});
+					})
+				});
+				this._events.push({
+					shape:  elem,
+					handle: elem.connect("onmouseleave", this, function(e){
+						require(modules, function(Tooltip){
+							Tooltip.hide(aroundRect);
+						});
+					})
+				});
+			}
+		},
+		_isRtl: function(){
+			return false;
+		}
+	});
+	return has("dojo-bidi")? declare("dojox.charting.axis2d.Default", [Default, BidiDefault]) : Default;
+});
+},
+'dojox/gfx/fx':function(){
+define(["dojo/_base/lang", "./_base", "./matrix", "dojo/_base/Color", "dojo/_base/array", "dojo/_base/fx", "dojo/_base/connect", "dojo/sniff"], 
+  function(lang, g, m, Color, arr, fx, Hub, has){
+	var fxg = g.fx = {};
+
+	// Generic interpolators. Should they be moved to dojox.fx?
+
+	function InterpolNumber(start, end){
+		this.start = start, this.end = end;
+	}
+	InterpolNumber.prototype.getValue = function(r){
+		return (this.end - this.start) * r + this.start;
+	};
+
+	function InterpolUnit(start, end, units){
+		this.start = start, this.end = end;
+		this.units = units;
+	}
+	InterpolUnit.prototype.getValue = function(r){
+		return (this.end - this.start) * r + this.start + this.units;
+	};
+
+	function InterpolColor(start, end){
+		this.start = start, this.end = end;
+		this.temp = new Color();
+	}
+	InterpolColor.prototype.getValue = function(r){
+		return Color.blendColors(this.start, this.end, r, this.temp);
+	};
+
+	function InterpolValues(values){
+		this.values = values;
+		this.length = values.length;
+	}
+	InterpolValues.prototype.getValue = function(r){
+		return this.values[Math.min(Math.floor(r * this.length), this.length - 1)];
+	};
+
+	function InterpolObject(values, def){
+		this.values = values;
+		this.def = def ? def : {};
+	}
+	InterpolObject.prototype.getValue = function(r){
+		var ret = lang.clone(this.def);
+		for(var i in this.values){
+			ret[i] = this.values[i].getValue(r);
+		}
+		return ret;
+	};
+
+	function InterpolTransform(stack, original){
+		this.stack = stack;
+		this.original = original;
+	}
+	InterpolTransform.prototype.getValue = function(r){
+		var ret = [];
+		arr.forEach(this.stack, function(t){
+			if(t instanceof m.Matrix2D){
+				ret.push(t);
+				return;
+			}
+			if(t.name == "original" && this.original){
+				ret.push(this.original);
+				return;
+			}
+ 			// Adding support for custom matrices
+ 			if(t.name == "matrix"){
+ 				if((t.start instanceof m.Matrix2D) && (t.end instanceof m.Matrix2D)){
+ 					var transfMatrix = new m.Matrix2D();
+ 					for(var p in t.start) {
+ 						transfMatrix[p] = (t.end[p] - t.start[p])*r + t.start[p];
+ 					}
+ 					ret.push(transfMatrix);
+ 				}
+ 				return;
+ 			}
+			if(!(t.name in m)){ return; }
+			var f = m[t.name];
+			if(typeof f != "function"){
+				// constant
+				ret.push(f);
+				return;
+			}
+			var val = arr.map(t.start, function(v, i){
+							return (t.end[i] - v) * r + v;
+						}),
+				matrix = f.apply(m, val);
+			if(matrix instanceof m.Matrix2D){
+				ret.push(matrix);
+			}
+		}, this);
+		return ret;
+	};
+
+	var transparent = new Color(0, 0, 0, 0);
+
+	function getColorInterpol(prop, obj, name, def){
+		if(prop.values){
+			return new InterpolValues(prop.values);
+		}
+		var value, start, end;
+		if(prop.start){
+			start = g.normalizeColor(prop.start);
+		}else{
+			start = value = obj ? (name ? obj[name] : obj) : def;
+		}
+		if(prop.end){
+			end = g.normalizeColor(prop.end);
+		}else{
+			if(!value){
+				value = obj ? (name ? obj[name] : obj) : def;
+			}
+			end = value;
+		}
+		return new InterpolColor(start, end);
+	}
+
+	function getNumberInterpol(prop, obj, name, def){
+		if(prop.values){
+			return new InterpolValues(prop.values);
+		}
+		var value, start, end;
+		if(prop.start){
+			start = prop.start;
+		}else{
+			start = value = obj ? obj[name] : def;
+		}
+		if(prop.end){
+			end = prop.end;
+		}else{
+			if(typeof value != "number"){
+				value = obj ? obj[name] : def;
+			}
+			end = value;
+		}
+		return new InterpolNumber(start, end);
+	}
+
+	fxg.animateStroke = function(/*Object*/ args){
+		// summary:
+		//		Returns an animation which will change stroke properties over time.
+		// args:
+		//		an object defining the animation setting.
+		// example:
+		//	|	fxg.animateStroke{{
+		//	|		shape: shape,
+		//	|		duration: 500,
+		//	|		color: {start: "red", end: "green"},
+		//	|		width: {end: 15},
+		//	|		join:  {values: ["miter", "bevel", "round"]}
+		//	|	}).play();
+		if(!args.easing){ args.easing = fx._defaultEasing; }
+		var anim = new fx.Animation(args), shape = args.shape, stroke;
+		Hub.connect(anim, "beforeBegin", anim, function(){
+			stroke = shape.getStroke();
+			var prop = args.color, values = {}, value, start, end;
+			if(prop){
+				values.color = getColorInterpol(prop, stroke, "color", transparent);
+			}
+			prop = args.style;
+			if(prop && prop.values){
+				values.style = new InterpolValues(prop.values);
+			}
+			prop = args.width;
+			if(prop){
+				values.width = getNumberInterpol(prop, stroke, "width", 1);
+			}
+			prop = args.cap;
+			if(prop && prop.values){
+				values.cap = new InterpolValues(prop.values);
+			}
+			prop = args.join;
+			if(prop){
+				if(prop.values){
+					values.join = new InterpolValues(prop.values);
+				}else{
+					start = prop.start ? prop.start : (stroke && stroke.join || 0);
+					end = prop.end ? prop.end : (stroke && stroke.join || 0);
+					if(typeof start == "number" && typeof end == "number"){
+						values.join = new InterpolNumber(start, end);
+					}
+				}
+			}
+			this.curve = new InterpolObject(values, stroke);
+		});
+		Hub.connect(anim, "onAnimate", shape, "setStroke");
+		return anim; // dojo.Animation
+	};
+
+	fxg.animateFill = function(/*Object*/ args){
+		// summary:
+		//		Returns an animation which will change fill color over time.
+		//		Only solid fill color is supported at the moment
+		// args:
+		//		an object defining the animation setting.
+		// example:
+		//	|	gfx.animateFill{{
+		//	|		shape: shape,
+		//	|		duration: 500,
+		//	|		color: {start: "red", end: "green"}
+		//	|	}).play();
+		if(!args.easing){ args.easing = fx._defaultEasing; }
+		var anim = new fx.Animation(args), shape = args.shape, fill;
+		Hub.connect(anim, "beforeBegin", anim, function(){
+			fill = shape.getFill();
+			var prop = args.color, values = {};
+			if(prop){
+				this.curve = getColorInterpol(prop, fill, "", transparent);
+			}
+		});
+		Hub.connect(anim, "onAnimate", shape, "setFill");
+		return anim; // dojo.Animation
+	};
+
+	fxg.animateFont = function(/*Object*/ args){
+		// summary:
+		//		Returns an animation which will change font properties over time.
+		// args:
+		//		an object defining the animation setting.
+		// example:
+		//	|	gfx.animateFont{{
+		//	|		shape: shape,
+		//	|		duration: 500,
+		//	|		variant: {values: ["normal", "small-caps"]},
+		//	|		size:  {end: 10, units: "pt"}
+		//	|	}).play();
+		if(!args.easing){ args.easing = fx._defaultEasing; }
+		var anim = new fx.Animation(args), shape = args.shape, font;
+		Hub.connect(anim, "beforeBegin", anim, function(){
+			font = shape.getFont();
+			var prop = args.style, values = {}, value, start, end;
+			if(prop && prop.values){
+				values.style = new InterpolValues(prop.values);
+			}
+			prop = args.variant;
+			if(prop && prop.values){
+				values.variant = new InterpolValues(prop.values);
+			}
+			prop = args.weight;
+			if(prop && prop.values){
+				values.weight = new InterpolValues(prop.values);
+			}
+			prop = args.family;
+			if(prop && prop.values){
+				values.family = new InterpolValues(prop.values);
+			}
+			prop = args.size;
+			if(prop && prop.units){
+				start = parseFloat(prop.start ? prop.start : (shape.font && shape.font.size || "0"));
+				end = parseFloat(prop.end ? prop.end : (shape.font && shape.font.size || "0"));
+				values.size = new InterpolUnit(start, end, prop.units);
+			}
+			this.curve = new InterpolObject(values, font);
+		});
+		Hub.connect(anim, "onAnimate", shape, "setFont");
+		return anim; // dojo.Animation
+	};
+
+	fxg.animateTransform = function(/*Object*/ args){
+		// summary:
+		//		Returns an animation which will change transformation over time.
+		// args:
+		//		an object defining the animation setting.
+		// example:
+		//	|	gfx.animateTransform{{
+		//	|		shape: shape,
+		//	|		duration: 500,
+		//	|		transform: [
+		//	|			{name: "translate", start: [0, 0], end: [200, 200]},
+		//	|			{name: "original"}
+		//	|		]
+		//	|	}).play();
+		if(!args.easing){ args.easing = fx._defaultEasing; }
+		var anim = new fx.Animation(args), shape = args.shape, original;
+		Hub.connect(anim, "beforeBegin", anim, function(){
+			original = shape.getTransform();
+			this.curve = new InterpolTransform(args.transform, original);
+		});
+		Hub.connect(anim, "onAnimate", shape, "setTransform");
+		if(g.renderer === "svg" && has("ie") >= 10){
+			// fix http://bugs.dojotoolkit.org/ticket/16879
+			var handlers = [
+					Hub.connect(anim, "onBegin", anim, function(){
+						var parent = shape.getParent();
+						while(parent && parent.getParent){
+							parent = parent.getParent();
+						}
+						if(parent){
+							shape.__svgContainer = parent.rawNode.parentNode;
+						}
+					}),
+					Hub.connect(anim, "onAnimate", anim, function(){
+						try{
+							if(shape.__svgContainer){
+								var ov = shape.__svgContainer.style.visibility;
+								shape.__svgContainer.style.visibility = "visible";
+								var pokeNode = shape.__svgContainer.offsetHeight;
+								shape.__svgContainer.style.visibility = ov;
+							}
+						}catch(e){}
+					}),
+					Hub.connect(anim, "onEnd", anim, function(){
+						arr.forEach(handlers, Hub.disconnect);
+						if(shape.__svgContainer){
+							var ov = shape.__svgContainer.style.visibility;
+							var sn = shape.__svgContainer;
+							shape.__svgContainer.style.visibility = "visible";
+							setTimeout(function(){
+								try{
+									sn.style.visibility = ov;
+									sn = null;
+								}catch(e){}
+							},100);
+						}
+						delete shape.__svgContainer;
+					})
+				];
+		}
+		return anim; // dojo.Animation
+	};
+	
+	return fxg;
+});
+},
+'dojox/color/_base':function(){
+define(["../main", "dojo/_base/lang", "dojo/_base/Color", "dojo/colors"],
+	function(dojox, lang, Color, colors){
+
+var cx = lang.getObject("color", true, dojox);
+/*===== cx = dojox.color =====*/
+		
+//	alias all the dojo.Color mechanisms
+cx.Color=Color;
+cx.blend=Color.blendColors;
+cx.fromRgb=Color.fromRgb;
+cx.fromHex=Color.fromHex;
+cx.fromArray=Color.fromArray;
+cx.fromString=Color.fromString;
+
+//	alias the dojo.colors mechanisms
+cx.greyscale=colors.makeGrey;
+
+lang.mixin(cx,{
+	fromCmy: function(/* Object|Array|int */cyan, /*int*/magenta, /*int*/yellow){
+		// summary:
+		//		Create a dojox.color.Color from a CMY defined color.
+		//		All colors should be expressed as 0-100 (percentage)
+	
+		if(lang.isArray(cyan)){
+			magenta=cyan[1], yellow=cyan[2], cyan=cyan[0];
+		} else if(lang.isObject(cyan)){
+			magenta=cyan.m, yellow=cyan.y, cyan=cyan.c;
+		}
+		cyan/=100, magenta/=100, yellow/=100;
+	
+		var r=1-cyan, g=1-magenta, b=1-yellow;
+		return new Color({ r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255) });	//	dojox.color.Color
+	},
+	
+	fromCmyk: function(/* Object|Array|int */cyan, /*int*/magenta, /*int*/yellow, /*int*/black){
+		// summary:
+		//		Create a dojox.color.Color from a CMYK defined color.
+		//		All colors should be expressed as 0-100 (percentage)
+	
+		if(lang.isArray(cyan)){
+			magenta=cyan[1], yellow=cyan[2], black=cyan[3], cyan=cyan[0];
+		} else if(lang.isObject(cyan)){
+			magenta=cyan.m, yellow=cyan.y, black=cyan.b, cyan=cyan.c;
+		}
+		cyan/=100, magenta/=100, yellow/=100, black/=100;
+		var r,g,b;
+		r = 1-Math.min(1, cyan*(1-black)+black);
+		g = 1-Math.min(1, magenta*(1-black)+black);
+		b = 1-Math.min(1, yellow*(1-black)+black);
+		return new Color({ r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255) });	//	dojox.color.Color
+	},
+		
+	fromHsl: function(/* Object|Array|int */hue, /* int */saturation, /* int */luminosity){
+		// summary:
+		//		Create a dojox.color.Color from an HSL defined color.
+		//		hue from 0-359 (degrees), saturation and luminosity 0-100.
+	
+		if(lang.isArray(hue)){
+			saturation=hue[1], luminosity=hue[2], hue=hue[0];
+		} else if(lang.isObject(hue)){
+			saturation=hue.s, luminosity=hue.l, hue=hue.h;
+		}
+		saturation/=100;
+		luminosity/=100;
+	
+		while(hue<0){ hue+=360; }
+		while(hue>=360){ hue-=360; }
+		
+		var r, g, b;
+		if(hue<120){
+			r=(120-hue)/60, g=hue/60, b=0;
+		} else if (hue<240){
+			r=0, g=(240-hue)/60, b=(hue-120)/60;
+		} else {
+			r=(hue-240)/60, g=0, b=(360-hue)/60;
+		}
+		
+		r=2*saturation*Math.min(r, 1)+(1-saturation);
+		g=2*saturation*Math.min(g, 1)+(1-saturation);
+		b=2*saturation*Math.min(b, 1)+(1-saturation);
+		if(luminosity<0.5){
+			r*=luminosity, g*=luminosity, b*=luminosity;
+		}else{
+			r=(1-luminosity)*r+2*luminosity-1;
+			g=(1-luminosity)*g+2*luminosity-1;
+			b=(1-luminosity)*b+2*luminosity-1;
+		}
+		return new Color({ r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255) });	//	dojox.color.Color
+	}
+});
+	
+cx.fromHsv = function(/* Object|Array|int */hue, /* int */saturation, /* int */value){
+	// summary:
+	//		Create a dojox.color.Color from an HSV defined color.
+	//		hue from 0-359 (degrees), saturation and value 0-100.
+
+	if(lang.isArray(hue)){
+		saturation=hue[1], value=hue[2], hue=hue[0];
+	} else if (lang.isObject(hue)){
+		saturation=hue.s, value=hue.v, hue=hue.h;
+	}
+	
+	if(hue==360){ hue=0; }
+	saturation/=100;
+	value/=100;
+	
+	var r, g, b;
+	if(saturation==0){
+		r=value, b=value, g=value;
+	}else{
+		var hTemp=hue/60, i=Math.floor(hTemp), f=hTemp-i;
+		var p=value*(1-saturation);
+		var q=value*(1-(saturation*f));
+		var t=value*(1-(saturation*(1-f)));
+		switch(i){
+			case 0:{ r=value, g=t, b=p; break; }
+			case 1:{ r=q, g=value, b=p; break; }
+			case 2:{ r=p, g=value, b=t; break; }
+			case 3:{ r=p, g=q, b=value; break; }
+			case 4:{ r=t, g=p, b=value; break; }
+			case 5:{ r=value, g=p, b=q; break; }
+		}
+	}
+	return new Color({ r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255) });	//	dojox.color.Color
+};
+lang.extend(Color,{
+	toCmy: function(){
+		// summary:
+		//		Convert this Color to a CMY definition.
+		var cyan=1-(this.r/255), magenta=1-(this.g/255), yellow=1-(this.b/255);
+		return { c:Math.round(cyan*100), m:Math.round(magenta*100), y:Math.round(yellow*100) };		//	Object
+	},
+		
+	toCmyk: function(){
+		// summary:
+		//		Convert this Color to a CMYK definition.
+		var cyan, magenta, yellow, black;
+		var r=this.r/255, g=this.g/255, b=this.b/255;
+		black = Math.min(1-r, 1-g, 1-b);
+		cyan = (1-r-black)/(1-black);
+		magenta = (1-g-black)/(1-black);
+		yellow = (1-b-black)/(1-black);
+		return { c:Math.round(cyan*100), m:Math.round(magenta*100), y:Math.round(yellow*100), b:Math.round(black*100) };	//	Object
+	},
+		
+	toHsl: function(){
+		// summary:
+		//		Convert this Color to an HSL definition.
+		var r=this.r/255, g=this.g/255, b=this.b/255;
+		var min = Math.min(r, b, g), max = Math.max(r, g, b);
+		var delta = max-min;
+		var h=0, s=0, l=(min+max)/2;
+		if(l>0 && l<1){
+			s = delta/((l<0.5)?(2*l):(2-2*l));
+		}
+		if(delta>0){
+			if(max==r && max!=g){
+				h+=(g-b)/delta;
+			}
+			if(max==g && max!=b){
+				h+=(2+(b-r)/delta);
+			}
+			if(max==b && max!=r){
+				h+=(4+(r-g)/delta);
+			}
+			h*=60;
+		}
+		return { h:h, s:Math.round(s*100), l:Math.round(l*100) };	//	Object
+	},
+	
+	toHsv: function(){
+		// summary:
+		//		Convert this Color to an HSV definition.
+		var r=this.r/255, g=this.g/255, b=this.b/255;
+		var min = Math.min(r, b, g), max = Math.max(r, g, b);
+		var delta = max-min;
+		var h = null, s = (max==0)?0:(delta/max);
+		if(s==0){
+			h = 0;
+		}else{
+			if(r==max){
+				h = 60*(g-b)/delta;
+			}else if(g==max){
+				h = 120 + 60*(b-r)/delta;
+			}else{
+				h = 240 + 60*(r-g)/delta;
+			}
+	
+			if(h<0){ h+=360; }
+		}
+		return { h:h, s:Math.round(s*100), v:Math.round(max*100) };	//	Object
+	}
+});
+
+return cx;
+});
+},
+'dojox/gfx/path':function(){
+define(["./_base", "dojo/_base/lang","dojo/_base/declare", "./matrix", "./shape"],
+	function(g, lang, declare, matrix, shapeLib){
+
+	// module:
+	//		dojox/gfx/path
+
+	var Path = declare("dojox.gfx.path.Path", shapeLib.Shape, {
+		// summary:
+		//		a generalized path shape
+
+		constructor: function(rawNode){
+			// summary:
+			//		a path constructor
+			// rawNode: Node
+			//		a DOM node to be used by this path object
+			this.shape = lang.clone(g.defaultPath);
+			this.segments = [];
+			this.tbbox = null;
+			this.absolute = true;
+			this.last = {};
+			this.rawNode = rawNode;
+			this.segmented = false;
+		},
+
+		// mode manipulations
+		setAbsoluteMode: function(mode){
+			// summary:
+			//		sets an absolute or relative mode for path points
+			// mode: Boolean
+			//		true/false or "absolute"/"relative" to specify the mode
+			this._confirmSegmented();
+			this.absolute = typeof mode == "string" ? (mode == "absolute") : mode;
+			return this; // self
+		},
+		getAbsoluteMode: function(){
+			// summary:
+			//		returns a current value of the absolute mode
+			this._confirmSegmented();
+			return this.absolute; // Boolean
+		},
+
+		getBoundingBox: function(){
+			// summary:
+			//		returns the bounding box {x, y, width, height} or null
+			this._confirmSegmented();
+			return (this.bbox && ("l" in this.bbox)) ? {x: this.bbox.l, y: this.bbox.t, width: this.bbox.r - this.bbox.l, height: this.bbox.b - this.bbox.t} : null; // dojox/gfx.Rectangle
+		},
+
+		_getRealBBox: function(){
+			// summary:
+			//		returns an array of four points or null
+			//		four points represent four corners of the untransformed bounding box
+			this._confirmSegmented();
+			if(this.tbbox){
+				return this.tbbox;	// Array
+			}
+			var bbox = this.bbox, matrix = this._getRealMatrix();
+			this.bbox = null;
+			for(var i = 0, len = this.segments.length; i < len; ++i){
+				this._updateWithSegment(this.segments[i], matrix);
+			}
+			var t = this.bbox;
+			this.bbox = bbox;
+			this.tbbox = t ? [
+				{x: t.l, y: t.t},
+				{x: t.r, y: t.t},
+				{x: t.r, y: t.b},
+				{x: t.l, y: t.b}
+			] : null;
+			return this.tbbox;	// Array
+		},
+
+		getLastPosition: function(){
+			// summary:
+			//		returns the last point in the path, or null
+			this._confirmSegmented();
+			return "x" in this.last ? this.last : null; // Object
+		},
+
+		_applyTransform: function(){
+			this.tbbox = null;
+			return this.inherited(arguments);
+		},
+
+		// segment interpretation
+		_updateBBox: function(x, y, m){
+			// summary:
+			//		updates the bounding box of path with new point
+			// x: Number
+			//		an x coordinate
+			// y: Number
+			//		a y coordinate
+
+			if(m){
+				var t = matrix.multiplyPoint(m, x, y);
+				x = t.x;
+				y = t.y;
+			}
+
+			// we use {l, b, r, t} representation of a bbox
+			if(this.bbox && ("l" in this.bbox)){
+				if(this.bbox.l > x) this.bbox.l = x;
+				if(this.bbox.r < x) this.bbox.r = x;
+				if(this.bbox.t > y) this.bbox.t = y;
+				if(this.bbox.b < y) this.bbox.b = y;
+			}else{
+				this.bbox = {l: x, b: y, r: x, t: y};
+			}
+		},
+		_updateWithSegment: function(segment, matrix){
+			// summary:
+			//		updates the bounding box of path with new segment
+			// segment: Object
+			//		a segment
+			var n = segment.args, l = n.length, i;
+			// update internal variables: bbox, absolute, last
+			switch(segment.action){
+				case "M":
+				case "L":
+				case "C":
+				case "S":
+				case "Q":
+				case "T":
+					for(i = 0; i < l; i += 2){
+						this._updateBBox(n[i], n[i + 1], matrix);
+					}
+					this.last.x = n[l - 2];
+					this.last.y = n[l - 1];
+					this.absolute = true;
+					break;
+				case "H":
+					for(i = 0; i < l; ++i){
+						this._updateBBox(n[i], this.last.y, matrix);
+					}
+					this.last.x = n[l - 1];
+					this.absolute = true;
+					break;
+				case "V":
+					for(i = 0; i < l; ++i){
+						this._updateBBox(this.last.x, n[i], matrix);
+					}
+					this.last.y = n[l - 1];
+					this.absolute = true;
+					break;
+				case "m":
+					var start = 0;
+					if(!("x" in this.last)){
+						this._updateBBox(this.last.x = n[0], this.last.y = n[1], matrix);
+						start = 2;
+					}
+					for(i = start; i < l; i += 2){
+						this._updateBBox(this.last.x += n[i], this.last.y += n[i + 1], matrix);
+					}
+					this.absolute = false;
+					break;
+				case "l":
+				case "t":
+					for(i = 0; i < l; i += 2){
+						this._updateBBox(this.last.x += n[i], this.last.y += n[i + 1], matrix);
+					}
+					this.absolute = false;
+					break;
+				case "h":
+					for(i = 0; i < l; ++i){
+						this._updateBBox(this.last.x += n[i], this.last.y, matrix);
+					}
+					this.absolute = false;
+					break;
+				case "v":
+					for(i = 0; i < l; ++i){
+						this._updateBBox(this.last.x, this.last.y += n[i], matrix);
+					}
+					this.absolute = false;
+					break;
+				case "c":
+					for(i = 0; i < l; i += 6){
+						this._updateBBox(this.last.x + n[i], this.last.y + n[i + 1], matrix);
+						this._updateBBox(this.last.x + n[i + 2], this.last.y + n[i + 3], matrix);
+						this._updateBBox(this.last.x += n[i + 4], this.last.y += n[i + 5], matrix);
+					}
+					this.absolute = false;
+					break;
+				case "s":
+				case "q":
+					for(i = 0; i < l; i += 4){
+						this._updateBBox(this.last.x + n[i], this.last.y + n[i + 1], matrix);
+						this._updateBBox(this.last.x += n[i + 2], this.last.y += n[i + 3], matrix);
+					}
+					this.absolute = false;
+					break;
+				case "A":
+					for(i = 0; i < l; i += 7){
+						this._updateBBox(n[i + 5], n[i + 6], matrix);
+					}
+					this.last.x = n[l - 2];
+					this.last.y = n[l - 1];
+					this.absolute = true;
+					break;
+				case "a":
+					for(i = 0; i < l; i += 7){
+						this._updateBBox(this.last.x += n[i + 5], this.last.y += n[i + 6], matrix);
+					}
+					this.absolute = false;
+					break;
+			}
+			// add an SVG path segment
+			var path = [segment.action];
+			for(i = 0; i < l; ++i){
+				path.push(g.formatNumber(n[i], true));
+			}
+			if(typeof this.shape.path == "string"){
+				this.shape.path += path.join("");
+			}else{
+				for(i = 0, l = path.length; i < l; ++i){
+					this.shape.path.push(path[i]);
+				}
+			}
+		},
+
+		// a dictionary, which maps segment type codes to a number of their arguments
+		_validSegments: {m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0},
+
+		_pushSegment: function(action, args){
+			// summary:
+			//		adds a segment
+			// action: String
+			//		valid SVG code for a segment's type
+			// args: Array
+			//		a list of parameters for this segment
+			this.tbbox = null;
+			var group = this._validSegments[action.toLowerCase()], segment;
+			if(typeof group == "number"){
+				if(group){
+					if(args.length >= group){
+						segment = {action: action, args: args.slice(0, args.length - args.length % group)};
+						this.segments.push(segment);
+						this._updateWithSegment(segment);
+					}
+				}else{
+					segment = {action: action, args: []};
+					this.segments.push(segment);
+					this._updateWithSegment(segment);
+				}
+			}
+		},
+
+		_collectArgs: function(array, args){
+			// summary:
+			//		converts an array of arguments to plain numeric values
+			// array: Array
+			//		an output argument (array of numbers)
+			// args: Array
+			//		an input argument (can be values of Boolean, Number, dojox/gfx.Point, or an embedded array of them)
+			for(var i = 0; i < args.length; ++i){
+				var t = args[i];
+				if(typeof t == "boolean"){
+					array.push(t ? 1 : 0);
+				}else if(typeof t == "number"){
+					array.push(t);
+				}else if(t instanceof Array){
+					this._collectArgs(array, t);
+				}else if("x" in t && "y" in t){
+					array.push(t.x, t.y);
+				}
+			}
+		},
+
+		// segments
+		moveTo: function(){
+			// summary:
+			//		forms a move segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "M" : "m", args);
+			return this; // self
+		},
+		lineTo: function(){
+			// summary:
+			//		forms a line segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "L" : "l", args);
+			return this; // self
+		},
+		hLineTo: function(){
+			// summary:
+			//		forms a horizontal line segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "H" : "h", args);
+			return this; // self
+		},
+		vLineTo: function(){
+			// summary:
+			//		forms a vertical line segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "V" : "v", args);
+			return this; // self
+		},
+		curveTo: function(){
+			// summary:
+			//		forms a curve segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "C" : "c", args);
+			return this; // self
+		},
+		smoothCurveTo: function(){
+			// summary:
+			//		forms a smooth curve segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "S" : "s", args);
+			return this; // self
+		},
+		qCurveTo: function(){
+			// summary:
+			//		forms a quadratic curve segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "Q" : "q", args);
+			return this; // self
+		},
+		qSmoothCurveTo: function(){
+			// summary:
+			//		forms a quadratic smooth curve segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "T" : "t", args);
+			return this; // self
+		},
+		arcTo: function(){
+			// summary:
+			//		forms an elliptic arc segment
+			this._confirmSegmented();
+			var args = [];
+			this._collectArgs(args, arguments);
+			this._pushSegment(this.absolute ? "A" : "a", args);
+			return this; // self
+		},
+		closePath: function(){
+			// summary:
+			//		closes a path
+			this._confirmSegmented();
+			this._pushSegment("Z", []);
+			return this; // self
+		},
+
+		_confirmSegmented: function() {
+			if (!this.segmented) {
+				var path = this.shape.path;
+				// switch to non-updating version of path building
+				this.shape.path = [];
+				this._setPath(path);
+				// switch back to the string path
+				this.shape.path = this.shape.path.join("");
+				// become segmented
+				this.segmented = true;
+			}
+		},
+
+		// setShape
+		_setPath: function(path){
+			// summary:
+			//		forms a path using an SVG path string
+			// path: String
+			//		an SVG path string
+			var p = lang.isArray(path) ? path : path.match(g.pathSvgRegExp);
+			this.segments = [];
+			this.absolute = true;
+			this.bbox = {};
+			this.last = {};
+			if(!p) return;
+			// create segments
+			var action = "",	// current action
+				args = [],		// current arguments
+				l = p.length;
+			for(var i = 0; i < l; ++i){
+				var t = p[i], x = parseFloat(t);
+				if(isNaN(x)){
+					if(action){
+						this._pushSegment(action, args);
+					}
+					args = [];
+					action = t;
+				}else{
+					args.push(x);
+				}
+			}
+			this._pushSegment(action, args);
+		},
+		setShape: function(newShape){
+			// summary:
+			//		forms a path using a shape
+			// newShape: Object
+			//		an SVG path string or a path object (see dojox/gfx.defaultPath)
+			this.inherited(arguments, [typeof newShape == "string" ? {path: newShape} : newShape]);
+
+			this.segmented = false;
+			this.segments = [];
+			if(!g.lazyPathSegmentation){
+				this._confirmSegmented();
+			}
+			return this; // self
+		},
+
+		// useful constant for descendants
+		_2PI: Math.PI * 2
+	});
+
+	var TextPath = declare("dojox.gfx.path.TextPath", Path, {
+		// summary:
+		//		a generalized TextPath shape
+
+		constructor: function(rawNode){
+			// summary:
+			//		a TextPath shape constructor
+			// rawNode: Node
+			//		a DOM node to be used by this TextPath object
+			if(!("text" in this)){
+				this.text = lang.clone(g.defaultTextPath);
+			}
+			if(!("fontStyle" in this)){
+				this.fontStyle = lang.clone(g.defaultFont);
+			}
+		},
+		getText: function(){
+			// summary:
+			//		returns the current text object or null
+			return this.text;	// Object
+		},
+		setText: function(newText){
+			// summary:
+			//		sets a text to be drawn along the path
+			this.text = g.makeParameters(this.text,
+				typeof newText == "string" ? {text: newText} : newText);
+			this._setText();
+			return this;	// self
+		},
+		getFont: function(){
+			// summary:
+			//		returns the current font object or null
+			return this.fontStyle;	// Object
+		},
+		setFont: function(newFont){
+			// summary:
+			//		sets a font for text
+			this.fontStyle = typeof newFont == "string" ?
+				g.splitFontString(newFont) :
+				g.makeParameters(g.defaultFont, newFont);
+			this._setFont();
+			return this;	// self
+		}
+	});
+
+	/*=====
+	g.Path = Path;
+	g.TextPath = TextPath;
+	=====*/
+
+	return g.path = {
+		// summary:
+		//		This module contains the core graphics Path API.
+		//		Path command format follows the W3C SVG 1.0 Path api.
+
+		Path: Path,
+		TextPath: TextPath
+	};
+});
+},
+'dojox/gfx/svg':function(){
+define(["dojo/_base/lang", "dojo/_base/sniff", "dojo/_base/window", "dojo/dom", "dojo/_base/declare", "dojo/_base/array",
+  "dojo/dom-geometry", "dojo/dom-attr", "dojo/_base/Color", "./_base", "./shape", "./path"],
+function(lang, has, win, dom, declare, arr, domGeom, domAttr, Color, g, gs, pathLib){
+
+	var svg = g.svg = {
+		// summary:
+		//		This the graphics rendering bridge for browsers compliant with W3C SVG1.0.
+		//		This is the preferred renderer to use for interactive and accessible graphics.
+	};
+	svg.useSvgWeb = (typeof window.svgweb != "undefined");
+
+	// Need to detect iOS in order to workaround bug when
+	// touching nodes with text
+	var uagent = navigator.userAgent,
+		safMobile = has("ios"),
+		android = has("android"),
+		textRenderingFix = has("chrome") || (android && android>=4) ? "auto" : "optimizeLegibility";// #16099, #16461
+
+	function _createElementNS(ns, nodeType){
+		// summary:
+		//		Internal helper to deal with creating elements that
+		//		are namespaced.  Mainly to get SVG markup output
+		//		working on IE.
+		if(win.doc.createElementNS){
+			return win.doc.createElementNS(ns,nodeType);
+		}else{
+			return win.doc.createElement(nodeType);
+		}
+	}
+	
+	function _setAttributeNS(node, ns, attr, value){
+		if(node.setAttributeNS){
+			return node.setAttributeNS(ns, attr, value);
+		}else{
+			return node.setAttribute(attr, value);
+		}
+	}
+
+	function _createTextNode(text){
+		if(svg.useSvgWeb){
+			return win.doc.createTextNode(text, true);
+		}else{
+			return win.doc.createTextNode(text);
+		}
+	}
+
+	function _createFragment(){
+		if(svg.useSvgWeb){
+			return win.doc.createDocumentFragment(true);
+		}else{
+			return win.doc.createDocumentFragment();
+		}
+	}
+
+	svg.xmlns = {
+		xlink: "http://www.w3.org/1999/xlink",
+		svg:   "http://www.w3.org/2000/svg"
+	};
+
+	svg.getRef = function(name){
+		// summary:
+		//		looks up a node by its external name
+		// name: String
+		//		an SVG external reference
+		// returns:
+		//      returns a DOM Node specified by the name argument or null
+		if(!name || name == "none") return null;
+		if(name.match(/^url\(#.+\)$/)){
+			return dom.byId(name.slice(5, -1));	// Node
+		}
+		// alternative representation of a reference
+		if(name.match(/^#dojoUnique\d+$/)){
+			// we assume here that a reference was generated by dojox/gfx
+			return dom.byId(name.slice(1));	// Node
+		}
+		return null;	// Node
+	};
+
+	svg.dasharray = {
+		solid:				"none",
+		shortdash:			[4, 1],
+		shortdot:			[1, 1],
+		shortdashdot:		[4, 1, 1, 1],
+		shortdashdotdot:	[4, 1, 1, 1, 1, 1],
+		dot:				[1, 3],
+		dash:				[4, 3],
+		longdash:			[8, 3],
+		dashdot:			[4, 3, 1, 3],
+		longdashdot:		[8, 3, 1, 3],
+		longdashdotdot:		[8, 3, 1, 3, 1, 3]
+	};
+
+	var clipCount = 0;
+
+	svg.Shape = declare("dojox.gfx.svg.Shape", gs.Shape, {
+		// summary:
+		//		SVG-specific implementation of dojox/gfx/shape.Shape methods
+
+		destroy: function(){
+			if(this.fillStyle && "type" in this.fillStyle){
+				var fill = this.rawNode.getAttribute("fill"),
+					ref  = svg.getRef(fill);
+				if(ref){
+					ref.parentNode.removeChild(ref);
+				}
+			}
+			if(this.clip){
+				var clipPathProp = this.rawNode.getAttribute("clip-path");
+				if(clipPathProp){
+					var clipNode = dom.byId(clipPathProp.match(/gfx_clip[\d]+/)[0]);
+					if(clipNode){ clipNode.parentNode.removeChild(clipNode); }
+				}
+			}
+			gs.Shape.prototype.destroy.apply(this, arguments);
+		},
+
+		setFill: function(fill){
+			// summary:
+			//		sets a fill object (SVG)
+			// fill: Object
+			//		a fill object
+			//		(see dojox/gfx.defaultLinearGradient,
+			//		dojox/gfx.defaultRadialGradient,
+			//		dojox/gfx.defaultPattern,
+			//		or dojo/_base/Color)
+
+			if(!fill){
+				// don't fill
+				this.fillStyle = null;
+				this.rawNode.setAttribute("fill", "none");
+				this.rawNode.setAttribute("fill-opacity", 0);
+				return this;
+			}
+			var f;
+			// FIXME: slightly magical. We're using the outer scope's "f", but setting it later
+			var setter = function(x){
+					// we assume that we're executing in the scope of the node to mutate
+					this.setAttribute(x, f[x].toFixed(8));
+				};
+			if(typeof(fill) == "object" && "type" in fill){
+				// gradient
+				switch(fill.type){
+					case "linear":
+						f = g.makeParameters(g.defaultLinearGradient, fill);
+						var gradient = this._setFillObject(f, "linearGradient");
+						arr.forEach(["x1", "y1", "x2", "y2"], setter, gradient);
+						break;
+					case "radial":
+						f = g.makeParameters(g.defaultRadialGradient, fill);
+						var grad = this._setFillObject(f, "radialGradient");
+						arr.forEach(["cx", "cy", "r"], setter, grad);
+						break;
+					case "pattern":
+						f = g.makeParameters(g.defaultPattern, fill);
+						var pattern = this._setFillObject(f, "pattern");
+						arr.forEach(["x", "y", "width", "height"], setter, pattern);
+						break;
+				}
+				this.fillStyle = f;
+				return this;
+			}
+			// color object
+			f = g.normalizeColor(fill);
+			this.fillStyle = f;
+			this.rawNode.setAttribute("fill", f.toCss());
+			this.rawNode.setAttribute("fill-opacity", f.a);
+			this.rawNode.setAttribute("fill-rule", "evenodd");
+			return this;	// self
+		},
+
+		setStroke: function(stroke){
+			// summary:
+			//		sets a stroke object (SVG)
+			// stroke: Object
+			//		a stroke object (see dojox/gfx.defaultStroke)
+
+			var rn = this.rawNode;
+			if(!stroke){
+				// don't stroke
+				this.strokeStyle = null;
+				rn.setAttribute("stroke", "none");
+				rn.setAttribute("stroke-opacity", 0);
+				return this;
+			}
+			// normalize the stroke
+			if(typeof stroke == "string" || lang.isArray(stroke) || stroke instanceof Color){
+				stroke = { color: stroke };
+			}
+			var s = this.strokeStyle = g.makeParameters(g.defaultStroke, stroke);
+			s.color = g.normalizeColor(s.color);
+			// generate attributes
+			if(s){
+				rn.setAttribute("stroke", s.color.toCss());
+				rn.setAttribute("stroke-opacity", s.color.a);
+				rn.setAttribute("stroke-width",   s.width);
+				rn.setAttribute("stroke-linecap", s.cap);
+				if(typeof s.join == "number"){
+					rn.setAttribute("stroke-linejoin",   "miter");
+					rn.setAttribute("stroke-miterlimit", s.join);
+				}else{
+					rn.setAttribute("stroke-linejoin",   s.join);
+				}
+				var da = s.style.toLowerCase();
+				if(da in svg.dasharray){
+					da = svg.dasharray[da];
+				}
+				if(da instanceof Array){
+					da = lang._toArray(da);
+					var i;
+					for(i = 0; i < da.length; ++i){
+						da[i] *= s.width;
+					}
+					if(s.cap != "butt"){
+						for(i = 0; i < da.length; i += 2){
+							da[i] -= s.width;
+							if(da[i] < 1){ da[i] = 1; }
+						}
+						for(i = 1; i < da.length; i += 2){
+							da[i] += s.width;
+						}
+					}
+					da = da.join(",");
+				}
+				rn.setAttribute("stroke-dasharray", da);
+				rn.setAttribute("dojoGfxStrokeStyle", s.style);
+			}
+			return this;	// self
+		},
+
+		_getParentSurface: function(){
+			var surface = this.parent;
+			for(; surface && !(surface instanceof g.Surface); surface = surface.parent);
+			return surface;
+		},
+
+		_setFillObject: function(f, nodeType){
+			var svgns = svg.xmlns.svg;
+			this.fillStyle = f;
+			var surface = this._getParentSurface(),
+				defs = surface.defNode,
+				fill = this.rawNode.getAttribute("fill"),
+				ref  = svg.getRef(fill);
+			if(ref){
+				fill = ref;
+				if(fill.tagName.toLowerCase() != nodeType.toLowerCase()){
+					var id = fill.id;
+					fill.parentNode.removeChild(fill);
+					fill = _createElementNS(svgns, nodeType);
+					fill.setAttribute("id", id);
+					defs.appendChild(fill);
+				}else{
+					while(fill.childNodes.length){
+						fill.removeChild(fill.lastChild);
+					}
+				}
+			}else{
+				fill = _createElementNS(svgns, nodeType);
+				fill.setAttribute("id", g._base._getUniqueId());
+				defs.appendChild(fill);
+			}
+			if(nodeType == "pattern"){
+				fill.setAttribute("patternUnits", "userSpaceOnUse");
+				var img = _createElementNS(svgns, "image");
+				img.setAttribute("x", 0);
+				img.setAttribute("y", 0);
+				img.setAttribute("width",  f.width .toFixed(8));
+				img.setAttribute("height", f.height.toFixed(8));
+				_setAttributeNS(img, svg.xmlns.xlink, "xlink:href", f.src);
+				fill.appendChild(img);
+			}else{
+				fill.setAttribute("gradientUnits", "userSpaceOnUse");
+				for(var i = 0; i < f.colors.length; ++i){
+					var c = f.colors[i], t = _createElementNS(svgns, "stop"),
+						cc = c.color = g.normalizeColor(c.color);
+					t.setAttribute("offset",       c.offset.toFixed(8));
+					t.setAttribute("stop-color",   cc.toCss());
+					t.setAttribute("stop-opacity", cc.a);
+					fill.appendChild(t);
+				}
+			}
+			this.rawNode.setAttribute("fill", "url(#" + fill.getAttribute("id") +")");
+			this.rawNode.removeAttribute("fill-opacity");
+			this.rawNode.setAttribute("fill-rule", "evenodd");
+			return fill;
+		},
+
+		_applyTransform: function() {
+			var matrix = this.matrix;
+			if(matrix){
+				var tm = this.matrix;
+				this.rawNode.setAttribute("transform", "matrix(" +
+					tm.xx.toFixed(8) + "," + tm.yx.toFixed(8) + "," +
+					tm.xy.toFixed(8) + "," + tm.yy.toFixed(8) + "," +
+					tm.dx.toFixed(8) + "," + tm.dy.toFixed(8) + ")");
+			}else{
+				this.rawNode.removeAttribute("transform");
+			}
+			return this;
+		},
+
+		setRawNode: function(rawNode){
+			// summary:
+			//		assigns and clears the underlying node that will represent this
+			//		shape. Once set, transforms, gradients, etc, can be applied.
+			//		(no fill & stroke by default)
+			var r = this.rawNode = rawNode;
+			if(this.shape.type!="image"){
+				r.setAttribute("fill", "none");
+			}
+			r.setAttribute("fill-opacity", 0);
+			r.setAttribute("stroke", "none");
+			r.setAttribute("stroke-opacity", 0);
+			r.setAttribute("stroke-width", 1);
+			r.setAttribute("stroke-linecap", "butt");
+			r.setAttribute("stroke-linejoin", "miter");
+			r.setAttribute("stroke-miterlimit", 4);
+			// Bind GFX object with SVG node for ease of retrieval - that is to
+			// save code/performance to keep this association elsewhere
+			r.__gfxObject__ = this;
+		},
+
+		setShape: function(newShape){
+			// summary:
+			//		sets a shape object (SVG)
+			// newShape: Object
+			//		a shape object
+			//		(see dojox/gfx.defaultPath,
+			//		dojox/gfx.defaultPolyline,
+			//		dojox/gfx.defaultRect,
+			//		dojox/gfx.defaultEllipse,
+			//		dojox/gfx.defaultCircle,
+			//		dojox/gfx.defaultLine,
+			//		or dojox/gfx.defaultImage)
+			this.shape = g.makeParameters(this.shape, newShape);
+			for(var i in this.shape){
+				if(i != "type"){
+					this.rawNode.setAttribute(i, this.shape[i]);
+				}
+			}
+			this.bbox = null;
+			return this;	// self
+		},
+
+		// move family
+
+		_moveToFront: function(){
+			// summary:
+			//		moves a shape to front of its parent's list of shapes (SVG)
+			this.rawNode.parentNode.appendChild(this.rawNode);
+			return this;	// self
+		},
+		_moveToBack: function(){
+			// summary:
+			//		moves a shape to back of its parent's list of shapes (SVG)
+			this.rawNode.parentNode.insertBefore(this.rawNode, this.rawNode.parentNode.firstChild);
+			return this;	// self
+		},
+		setClip: function(clip){
+			// summary:
+			//		sets the clipping area of this shape.
+			// description:
+			//		This method overrides the dojox/gfx/shape.Shape.setClip() method.
+			// clip: Object
+			//		an object that defines the clipping geometry, or null to remove clip.
+			this.inherited(arguments);
+			var clipType = clip ? "width" in clip ? "rect" : 
+							"cx" in clip ? "ellipse" : 
+							"points" in clip ? "polyline" : "d" in clip ? "path" : null : null;
+			if(clip && !clipType){
+				return this;
+			}
+			if(clipType === "polyline"){
+				clip = lang.clone(clip);
+				clip.points = clip.points.join(",");
+			}
+			var clipNode, clipShape,
+				clipPathProp = domAttr.get(this.rawNode, "clip-path");
+			if(clipPathProp){
+				clipNode = dom.byId(clipPathProp.match(/gfx_clip[\d]+/)[0]);
+				if(clipNode){ // may be null if not in the DOM anymore
+					clipNode.removeChild(clipNode.childNodes[0]);
+				}
+			}
+			if(clip){
+				if(clipNode){
+					clipShape = _createElementNS(svg.xmlns.svg, clipType);
+					clipNode.appendChild(clipShape);
+				}else{
+					var idIndex = ++clipCount;
+					var clipId = "gfx_clip" + idIndex;
+					var clipUrl = "url(#" + clipId + ")";
+					this.rawNode.setAttribute("clip-path", clipUrl);
+					clipNode = _createElementNS(svg.xmlns.svg, "clipPath");
+					clipShape = _createElementNS(svg.xmlns.svg, clipType);
+					clipNode.appendChild(clipShape);
+					this.rawNode.parentNode.insertBefore(clipNode, this.rawNode);
+					domAttr.set(clipNode, "id", clipId);
+				}
+				domAttr.set(clipShape, clip);
+			}else{
+				//remove clip-path
+				this.rawNode.removeAttribute("clip-path");
+				if(clipNode){
+					clipNode.parentNode.removeChild(clipNode);
+				}
+			}
+			return this;
+		},
+		_removeClipNode: function(){
+			var clipNode, clipPathProp = domAttr.get(this.rawNode, "clip-path");
+			if(clipPathProp){
+				clipNode = dom.byId(clipPathProp.match(/gfx_clip[\d]+/)[0]);
+				if(clipNode){
+					clipNode.parentNode.removeChild(clipNode);
+				}
+			}
+			return clipNode;
+		}
+	});
+
+
+	svg.Group = declare("dojox.gfx.svg.Group", svg.Shape, {
+		// summary:
+		//		a group shape (SVG), which can be used
+		//		to logically group shapes (e.g, to propagate matricies)
+		constructor: function(){
+			gs.Container._init.call(this);
+		},
+		setRawNode: function(rawNode){
+			// summary:
+			//		sets a raw SVG node to be used by this shape
+			// rawNode: Node
+			//		an SVG node
+			this.rawNode = rawNode;
+			// Bind GFX object with SVG node for ease of retrieval - that is to
+			// save code/performance to keep this association elsewhere
+			this.rawNode.__gfxObject__ = this;
+		},
+		destroy: function(){
+			// summary:
+			//		Releases all internal resources owned by this shape. Once this method has been called,
+			//		the instance is considered disposed and should not be used anymore.
+			this.clear(true);
+			// avoid this.inherited
+			svg.Shape.prototype.destroy.apply(this, arguments);
+		}
+	});
+	svg.Group.nodeType = "g";
+
+	svg.Rect = declare("dojox.gfx.svg.Rect", [svg.Shape, gs.Rect], {
+		// summary:
+		//		a rectangle shape (SVG)
+		setShape: function(newShape){
+			// summary:
+			//		sets a rectangle shape object (SVG)
+			// newShape: Object
+			//		a rectangle shape object
+			this.shape = g.makeParameters(this.shape, newShape);
+			this.bbox = null;
+			for(var i in this.shape){
+				if(i != "type" && i != "r"){
+					this.rawNode.setAttribute(i, this.shape[i]);
+				}
+			}
+			if(this.shape.r != null){
+				this.rawNode.setAttribute("ry", this.shape.r);
+				this.rawNode.setAttribute("rx", this.shape.r);
+			}
+			return this;	// self
+		}
+	});
+	svg.Rect.nodeType = "rect";
+
+	svg.Ellipse = declare("dojox.gfx.svg.Ellipse", [svg.Shape, gs.Ellipse], {});
+	svg.Ellipse.nodeType = "ellipse";
+
+	svg.Circle = declare("dojox.gfx.svg.Circle", [svg.Shape, gs.Circle], {});
+	svg.Circle.nodeType = "circle";
+
+	svg.Line = declare("dojox.gfx.svg.Line", [svg.Shape, gs.Line], {});
+	svg.Line.nodeType = "line";
+
+	svg.Polyline = declare("dojox.gfx.svg.Polyline", [svg.Shape, gs.Polyline], {
+		// summary:
+		//		a polyline/polygon shape (SVG)
+		setShape: function(points, closed){
+			// summary:
+			//		sets a polyline/polygon shape object (SVG)
+			// points: Object|Array
+			//		a polyline/polygon shape object, or an array of points
+			if(points && points instanceof Array){
+				this.shape = g.makeParameters(this.shape, { points: points });
+				if(closed && this.shape.points.length){
+					this.shape.points.push(this.shape.points[0]);
+				}
+			}else{
+				this.shape = g.makeParameters(this.shape, points);
+			}
+			this.bbox = null;
+			this._normalizePoints();
+			var attr = [], p = this.shape.points;
+			for(var i = 0; i < p.length; ++i){
+				attr.push(p[i].x.toFixed(8), p[i].y.toFixed(8));
+			}
+			this.rawNode.setAttribute("points", attr.join(" "));
+			return this;	// self
+		}
+	});
+	svg.Polyline.nodeType = "polyline";
+
+	svg.Image = declare("dojox.gfx.svg.Image", [svg.Shape, gs.Image], {
+		// summary:
+		//		an image (SVG)
+		setShape: function(newShape){
+			// summary:
+			//		sets an image shape object (SVG)
+			// newShape: Object
+			//		an image shape object
+			this.shape = g.makeParameters(this.shape, newShape);
+			this.bbox = null;
+			var rawNode = this.rawNode;
+			for(var i in this.shape){
+				if(i != "type" && i != "src"){
+					rawNode.setAttribute(i, this.shape[i]);
+				}
+			}
+			rawNode.setAttribute("preserveAspectRatio", "none");
+			_setAttributeNS(rawNode, svg.xmlns.xlink, "xlink:href", this.shape.src);
+			// Bind GFX object with SVG node for ease of retrieval - that is to
+			// save code/performance to keep this association elsewhere
+			rawNode.__gfxObject__ = this;
+			return this;	// self
+		}
+	});
+	svg.Image.nodeType = "image";
+
+	svg.Text = declare("dojox.gfx.svg.Text", [svg.Shape, gs.Text], {
+		// summary:
+		//		an anchored text (SVG)
+		setShape: function(newShape){
+			// summary:
+			//		sets a text shape object (SVG)
+			// newShape: Object
+			//		a text shape object
+			this.shape = g.makeParameters(this.shape, newShape);
+			this.bbox = null;
+			var r = this.rawNode, s = this.shape;
+			r.setAttribute("x", s.x);
+			r.setAttribute("y", s.y);
+			r.setAttribute("text-anchor", s.align);
+			r.setAttribute("text-decoration", s.decoration);
+			r.setAttribute("rotate", s.rotated ? 90 : 0);
+			r.setAttribute("kerning", s.kerning ? "auto" : 0);
+			r.setAttribute("text-rendering", textRenderingFix);
+
+			// update the text content
+			if(r.firstChild){
+				r.firstChild.nodeValue = s.text;
+			}else{
+				r.appendChild(_createTextNode(s.text));
+			}
+			return this;	// self
+		},
+		getTextWidth: function(){
+			// summary:
+			//		get the text width in pixels
+			var rawNode = this.rawNode,
+				oldParent = rawNode.parentNode,
+				_measurementNode = rawNode.cloneNode(true);
+			_measurementNode.style.visibility = "hidden";
+
+			// solution to the "orphan issue" in FF
+			var _width = 0, _text = _measurementNode.firstChild.nodeValue;
+			oldParent.appendChild(_measurementNode);
+
+			// solution to the "orphan issue" in Opera
+			// (nodeValue == "" hangs firefox)
+			if(_text!=""){
+				while(!_width){
+//Yang: work around svgweb bug 417 -- http://code.google.com/p/svgweb/issues/detail?id=417
+if (_measurementNode.getBBox)
+					_width = parseInt(_measurementNode.getBBox().width);
+else
+	_width = 68;
+				}
+			}
+			oldParent.removeChild(_measurementNode);
+			return _width;
+		},
+		getBoundingBox: function(){
+			var s = this.getShape(), bbox = null;
+			if(s.text){
+				// try/catch the FF native getBBox error.
+				try {
+					bbox = this.rawNode.getBBox();
+				} catch (e) {
+					// under FF when the node is orphan (all other browsers return a 0ed bbox.
+					bbox = {x:0, y:0, width:0, height:0};
+				}
+			}
+			return bbox;
+		}
+	});
+	svg.Text.nodeType = "text";
+
+	svg.Path = declare("dojox.gfx.svg.Path", [svg.Shape, pathLib.Path], {
+		// summary:
+		//		a path shape (SVG)
+		_updateWithSegment: function(segment){
+			// summary:
+			//		updates the bounding box of path with new segment
+			// segment: Object
+			//		a segment
+			this.inherited(arguments);
+			if(typeof(this.shape.path) == "string"){
+				this.rawNode.setAttribute("d", this.shape.path);
+			}
+		},
+		setShape: function(newShape){
+			// summary:
+			//		forms a path using a shape (SVG)
+			// newShape: Object
+			//		an SVG path string or a path object (see dojox/gfx.defaultPath)
+			this.inherited(arguments);
+			if(this.shape.path){
+				this.rawNode.setAttribute("d", this.shape.path);
+			}else{
+				this.rawNode.removeAttribute("d");
+			}
+			return this;	// self
+		}
+	});
+	svg.Path.nodeType = "path";
+
+	svg.TextPath = declare("dojox.gfx.svg.TextPath", [svg.Shape, pathLib.TextPath], {
+		// summary:
+		//		a textpath shape (SVG)
+		_updateWithSegment: function(segment){
+			// summary:
+			//		updates the bounding box of path with new segment
+			// segment: Object
+			//		a segment
+			this.inherited(arguments);
+			this._setTextPath();
+		},
+		setShape: function(newShape){
+			// summary:
+			//		forms a path using a shape (SVG)
+			// newShape: Object
+			//		an SVG path string or a path object (see dojox/gfx.defaultPath)
+			this.inherited(arguments);
+			this._setTextPath();
+			return this;	// self
+		},
+		_setTextPath: function(){
+			if(typeof this.shape.path != "string"){ return; }
+			var r = this.rawNode;
+			if(!r.firstChild){
+				var tp = _createElementNS(svg.xmlns.svg, "textPath"),
+					tx = _createTextNode("");
+				tp.appendChild(tx);
+				r.appendChild(tp);
+			}
+			var ref  = r.firstChild.getAttributeNS(svg.xmlns.xlink, "href"),
+				path = ref && svg.getRef(ref);
+			if(!path){
+				var surface = this._getParentSurface();
+				if(surface){
+					var defs = surface.defNode;
+					path = _createElementNS(svg.xmlns.svg, "path");
+					var id = g._base._getUniqueId();
+					path.setAttribute("id", id);
+					defs.appendChild(path);
+					_setAttributeNS(r.firstChild, svg.xmlns.xlink, "xlink:href", "#" + id);
+				}
+			}
+			if(path){
+				path.setAttribute("d", this.shape.path);
+			}
+		},
+		_setText: function(){
+			var r = this.rawNode;
+			if(!r.firstChild){
+				var tp = _createElementNS(svg.xmlns.svg, "textPath"),
+					tx = _createTextNode("");
+				tp.appendChild(tx);
+				r.appendChild(tp);
+			}
+			r = r.firstChild;
+			var t = this.text;
+			r.setAttribute("alignment-baseline", "middle");
+			switch(t.align){
+				case "middle":
+					r.setAttribute("text-anchor", "middle");
+					r.setAttribute("startOffset", "50%");
+					break;
+				case "end":
+					r.setAttribute("text-anchor", "end");
+					r.setAttribute("startOffset", "100%");
+					break;
+				default:
+					r.setAttribute("text-anchor", "start");
+					r.setAttribute("startOffset", "0%");
+					break;
+			}
+			//r.parentNode.setAttribute("alignment-baseline", "central");
+			//r.setAttribute("dominant-baseline", "central");
+			r.setAttribute("baseline-shift", "0.5ex");
+			r.setAttribute("text-decoration", t.decoration);
+			r.setAttribute("rotate", t.rotated ? 90 : 0);
+			r.setAttribute("kerning", t.kerning ? "auto" : 0);
+			r.firstChild.data = t.text;
+		}
+	});
+	svg.TextPath.nodeType = "text";
+
+	// Fix for setDimension bug:
+	// http://bugs.dojotoolkit.org/ticket/16100
+	// (https://code.google.com/p/chromium/issues/detail?id=162628)
+	var hasSvgSetAttributeBug = (function(){ var matches = /WebKit\/(\d*)/.exec(uagent); return matches ? matches[1] : 0})() > 534;
+
+	svg.Surface = declare("dojox.gfx.svg.Surface", gs.Surface, {
+		// summary:
+		//		a surface object to be used for drawings (SVG)
+		constructor: function(){
+			gs.Container._init.call(this);
+		},
+		destroy: function(){
+			// no need to call svg.Container.clear to remove the children raw
+			// nodes since the surface raw node will be removed. So, only dispose at gfx level	
+			gs.Container.clear.call(this, true); 
+			this.defNode = null;	// release the external reference
+			this.inherited(arguments);
+		},
+		setDimensions: function(width, height){
+			// summary:
+			//		sets the width and height of the rawNode
+			// width: String
+			//		width of surface, e.g., "100px"
+			// height: String
+			//		height of surface, e.g., "100px"
+			if(!this.rawNode){ return this; }
+			this.rawNode.setAttribute("width",  width);
+			this.rawNode.setAttribute("height", height);
+			if(hasSvgSetAttributeBug){
+				this.rawNode.style.width =  width;
+				this.rawNode.style.height =  height;
+			}
+			return this;	// self
+		},
+		getDimensions: function(){
+			// summary:
+			//		returns an object with properties "width" and "height"
+			var t = this.rawNode ? {
+				width:  g.normalizedLength(this.rawNode.getAttribute("width")),
+				height: g.normalizedLength(this.rawNode.getAttribute("height"))} : null;
+			return t;	// Object
+		}
+	});
+
+	svg.createSurface = function(parentNode, width, height){
+		// summary:
+		//		creates a surface (SVG)
+		// parentNode: Node
+		//		a parent node
+		// width: String|Number
+		//		width of surface, e.g., "100px" or 100
+		// height: String|Number
+		//		height of surface, e.g., "100px" or 100
+		// returns: dojox/gfx/shape.Surface
+		//     newly created surface
+
+		var s = new svg.Surface();
+		s.rawNode = _createElementNS(svg.xmlns.svg, "svg");
+		s.rawNode.setAttribute("overflow", "hidden");
+		if(width){
+			s.rawNode.setAttribute("width",  width);
+		}
+		if(height){
+			s.rawNode.setAttribute("height", height);
+		}
+
+		var defNode = _createElementNS(svg.xmlns.svg, "defs");
+		s.rawNode.appendChild(defNode);
+		s.defNode = defNode;
+
+		s._parent = dom.byId(parentNode);
+		s._parent.appendChild(s.rawNode);
+
+		g._base._fixMsTouchAction(s);
+
+		return s;	// dojox/gfx.Surface
+	};
+
+	// Extenders
+
+	var Font = {
+		_setFont: function(){
+			// summary:
+			//		sets a font object (SVG)
+			var f = this.fontStyle;
+			// next line doesn't work in Firefox 2 or Opera 9
+			//this.rawNode.setAttribute("font", dojox.gfx.makeFontString(this.fontStyle));
+			this.rawNode.setAttribute("font-style", f.style);
+			this.rawNode.setAttribute("font-variant", f.variant);
+			this.rawNode.setAttribute("font-weight", f.weight);
+			this.rawNode.setAttribute("font-size", f.size);
+			this.rawNode.setAttribute("font-family", f.family);
+		}
+	};
+
+	var C = gs.Container;
+	var Container = svg.Container = {
+		openBatch: function() {
+			// summary:
+			//		starts a new batch, subsequent new child shapes will be held in
+			//		the batch instead of appending to the container directly
+			if(!this._batch){
+				this.fragment = _createFragment();
+			}
+			++this._batch;
+			return this;
+		},
+		closeBatch: function() {
+			// summary:
+			//		submits the current batch, append all pending child shapes to DOM
+			this._batch = this._batch > 0 ? --this._batch : 0;
+			if (this.fragment && !this._batch) {
+				this.rawNode.appendChild(this.fragment);
+				delete this.fragment;
+			}
+			return this;
+		},
+		add: function(shape){
+			// summary:
+			//		adds a shape to a group/surface
+			// shape: dojox/gfx/shape.Shape
+			//		an VML shape object
+			if(this != shape.getParent()){
+				if (this.fragment) {
+					this.fragment.appendChild(shape.rawNode);
+				} else {
+					this.rawNode.appendChild(shape.rawNode);
+				}
+				C.add.apply(this, arguments);
+				// update clipnode with new parent
+				shape.setClip(shape.clip);
+			}
+			return this;	// self
+		},
+		remove: function(shape, silently){
+			// summary:
+			//		remove a shape from a group/surface
+			// shape: dojox/gfx/shape.Shape
+			//		an VML shape object
+			// silently: Boolean?
+			//		if true, regenerate a picture
+			if(this == shape.getParent()){
+				if(this.rawNode == shape.rawNode.parentNode){
+					this.rawNode.removeChild(shape.rawNode);
+				}
+				if(this.fragment && this.fragment == shape.rawNode.parentNode){
+					this.fragment.removeChild(shape.rawNode);
+				}
+				// remove clip node from parent 
+				shape._removeClipNode();
+				C.remove.apply(this, arguments);
+			}
+			return this;	// self
+		},
+		clear: function(){
+			// summary:
+			//		removes all shapes from a group/surface
+			var r = this.rawNode;
+			while(r.lastChild){
+				r.removeChild(r.lastChild);
+			}
+			var defNode = this.defNode;
+			if(defNode){
+				while(defNode.lastChild){
+					defNode.removeChild(defNode.lastChild);
+				}
+				r.appendChild(defNode);
+			}
+			return C.clear.apply(this, arguments);
+		},
+		getBoundingBox: C.getBoundingBox,
+		_moveChildToFront: C._moveChildToFront,
+		_moveChildToBack:  C._moveChildToBack
+	};
+
+	var Creator = svg.Creator = {
+		// summary:
+		//		SVG shape creators
+		createObject: function(shapeType, rawShape){
+			// summary:
+			//		creates an instance of the passed shapeType class
+			// shapeType: Function
+			//		a class constructor to create an instance of
+			// rawShape: Object
+			//		properties to be passed in to the classes "setShape" method
+			if(!this.rawNode){ return null; }
+			var shape = new shapeType(),
+				node = _createElementNS(svg.xmlns.svg, shapeType.nodeType);
+
+			shape.setRawNode(node);
+			shape.setShape(rawShape);
+			// rawNode.appendChild() will be done inside this.add(shape) below
+			this.add(shape);
+			return shape;	// dojox/gfx/shape.Shape
+		}
+	};
+
+	lang.extend(svg.Text, Font);
+	lang.extend(svg.TextPath, Font);
+
+	lang.extend(svg.Group, Container);
+	lang.extend(svg.Group, gs.Creator);
+	lang.extend(svg.Group, Creator);
+
+	lang.extend(svg.Surface, Container);
+	lang.extend(svg.Surface, gs.Creator);
+	lang.extend(svg.Surface, Creator);
+
+	// Mouse/Touch event
+	svg.fixTarget = function(event, gfxElement) {
+		// summary:
+		//		Adds the gfxElement to event.gfxTarget if none exists. This new
+		//		property will carry the GFX element associated with this event.
+		// event: Object
+		//		The current input event (MouseEvent or TouchEvent)
+		// gfxElement: Object
+		//		The GFX target element
+		if (!event.gfxTarget) {
+			if (safMobile && event.target.wholeText) {
+				// Workaround iOS bug when touching text nodes
+				event.gfxTarget = event.target.parentElement.__gfxObject__;
+			} else {
+				event.gfxTarget = event.target.__gfxObject__;
+			}
+		}
+		return true;
+	};
+
+	// some specific override for svgweb + flash
+	if(svg.useSvgWeb){
+		// override createSurface()
+		svg.createSurface = function(parentNode, width, height){
+			var s = new svg.Surface();
+
+			// ensure width / height
+			if(!width || !height){
+				var pos = domGeom.position(parentNode);
+				width  = width  || pos.w;
+				height = height || pos.h;
+			}
+
+			// ensure id
+			parentNode = dom.byId(parentNode);
+			var id = parentNode.id ? parentNode.id+'_svgweb' : g._base._getUniqueId();
+
+			// create dynamic svg root
+			var mockSvg = _createElementNS(svg.xmlns.svg, 'svg');
+			mockSvg.id = id;
+			mockSvg.setAttribute('width', width);
+			mockSvg.setAttribute('height', height);
+			svgweb.appendChild(mockSvg, parentNode);
+
+			// notice: any call to the raw node before flash init will fail.
+			mockSvg.addEventListener('SVGLoad', function(){
+				// become loaded
+				s.rawNode = this;
+				s.isLoaded = true;
+
+				// init defs
+				var defNode = _createElementNS(svg.xmlns.svg, "defs");
+				s.rawNode.appendChild(defNode);
+				s.defNode = defNode;
+
+				// notify application
+				if (s.onLoad)
+					s.onLoad(s);
+			}, false);
+
+			// flash not loaded yet
+			s.isLoaded = false;
+			return s;
+		};
+
+		// override Surface.destroy()
+		svg.Surface.extend({
+			destroy: function(){
+				var mockSvg = this.rawNode;
+				svgweb.removeChild(mockSvg, mockSvg.parentNode);
+			}
+		});
+
+		// override connect() & disconnect() for Shape & Surface event processing
+		var _eventsProcessing = {
+			connect: function(name, object, method){
+				// connect events using the mock addEventListener() provided by svgweb
+				if (name.substring(0, 2)==='on') { name = name.substring(2); }
+				if (arguments.length == 2) {
+					method = object;
+				} else {
+					method = lang.hitch(object, method);
+				}
+				this.getEventSource().addEventListener(name, method, false);
+				return [this, name, method];
+			},
+			disconnect: function(token){
+				// disconnect events using the mock removeEventListener() provided by svgweb
+				this.getEventSource().removeEventListener(token[1], token[2], false);
+				delete token[0];
+			}
+		};
+
+		lang.extend(svg.Shape, _eventsProcessing);
+		lang.extend(svg.Surface, _eventsProcessing);
+	}
+
+	return svg;
+});
+},
+'dojo/colors':function(){
+define(["./_base/kernel", "./_base/lang", "./_base/Color", "./_base/array"], function(dojo, lang, Color, ArrayUtil){
+	// module:
+	//		dojo/colors
+
+	/*=====
+	return {
+		// summary:
+		//		Color utilities, extending Base dojo.Color
+	};
+	=====*/
+
+	var ColorExt = {};
+	lang.setObject("dojo.colors", ColorExt);
+
+//TODO: this module appears to break naming conventions
+
+	// this is a standard conversion prescribed by the CSS3 Color Module
+	var hue2rgb = function(m1, m2, h){
+		if(h < 0){ ++h; }
+		if(h > 1){ --h; }
+		var h6 = 6 * h;
+		if(h6 < 1){ return m1 + (m2 - m1) * h6; }
+		if(2 * h < 1){ return m2; }
+		if(3 * h < 2){ return m1 + (m2 - m1) * (2 / 3 - h) * 6; }
+		return m1;
+	};
+	// Override base Color.fromRgb with the impl in this module
+	dojo.colorFromRgb = Color.fromRgb = function(/*String*/ color, /*dojo/_base/Color?*/ obj){
+		// summary:
+		//		get rgb(a) array from css-style color declarations
+		// description:
+		//		this function can handle all 4 CSS3 Color Module formats: rgb,
+		//		rgba, hsl, hsla, including rgb(a) with percentage values.
+		var m = color.toLowerCase().match(/^(rgba?|hsla?)\(([\s\.\-,%0-9]+)\)/);
+		if(m){
+			var c = m[2].split(/\s*,\s*/), l = c.length, t = m[1], a;
+			if((t == "rgb" && l == 3) || (t == "rgba" && l == 4)){
+				var r = c[0];
+				if(r.charAt(r.length - 1) == "%"){
+					// 3 rgb percentage values
+					a = ArrayUtil.map(c, function(x){
+						return parseFloat(x) * 2.56;
+					});
+					if(l == 4){ a[3] = c[3]; }
+					return Color.fromArray(a, obj); // dojo/_base/Color
+				}
+				return Color.fromArray(c, obj); // dojo/_base/Color
+			}
+			if((t == "hsl" && l == 3) || (t == "hsla" && l == 4)){
+				// normalize hsl values
+				var H = ((parseFloat(c[0]) % 360) + 360) % 360 / 360,
+					S = parseFloat(c[1]) / 100,
+					L = parseFloat(c[2]) / 100,
+					// calculate rgb according to the algorithm
+					// recommended by the CSS3 Color Module
+					m2 = L <= 0.5 ? L * (S + 1) : L + S - L * S,
+					m1 = 2 * L - m2;
+				a = [
+					hue2rgb(m1, m2, H + 1 / 3) * 256,
+					hue2rgb(m1, m2, H) * 256,
+					hue2rgb(m1, m2, H - 1 / 3) * 256,
+					1
+				];
+				if(l == 4){ a[3] = c[3]; }
+				return Color.fromArray(a, obj); // dojo/_base/Color
+			}
+		}
+		return null;	// dojo/_base/Color
+	};
+
+	var confine = function(c, low, high){
+		// summary:
+		//		sanitize a color component by making sure it is a number,
+		//		and clamping it to valid values
+		c = Number(c);
+		return isNaN(c) ? high : c < low ? low : c > high ? high : c;	// Number
+	};
+
+	Color.prototype.sanitize = function(){
+		// summary:
+		//		makes sure that the object has correct attributes
+		var t = this;
+		t.r = Math.round(confine(t.r, 0, 255));
+		t.g = Math.round(confine(t.g, 0, 255));
+		t.b = Math.round(confine(t.b, 0, 255));
+		t.a = confine(t.a, 0, 1);
+		return this;	// dojo/_base/Color
+	};
+
+	ColorExt.makeGrey = Color.makeGrey = function(/*Number*/ g, /*Number?*/ a){
+		// summary:
+		//		creates a greyscale color with an optional alpha
+		return Color.fromArray([g, g, g, a]);	// dojo/_base/Color
+	};
+
+	// mixin all CSS3 named colors not already in _base, along with SVG 1.0 variant spellings
+	lang.mixin(Color.named, {
+		"aliceblue":	[240,248,255],
+		"antiquewhite": [250,235,215],
+		"aquamarine":	[127,255,212],
+		"azure":	[240,255,255],
+		"beige":	[245,245,220],
+		"bisque":	[255,228,196],
+		"blanchedalmond":	[255,235,205],
+		"blueviolet":	[138,43,226],
+		"brown":	[165,42,42],
+		"burlywood":	[222,184,135],
+		"cadetblue":	[95,158,160],
+		"chartreuse":	[127,255,0],
+		"chocolate":	[210,105,30],
+		"coral":	[255,127,80],
+		"cornflowerblue":	[100,149,237],
+		"cornsilk": [255,248,220],
+		"crimson":	[220,20,60],
+		"cyan": [0,255,255],
+		"darkblue": [0,0,139],
+		"darkcyan": [0,139,139],
+		"darkgoldenrod":	[184,134,11],
+		"darkgray": [169,169,169],
+		"darkgreen":	[0,100,0],
+		"darkgrey": [169,169,169],
+		"darkkhaki":	[189,183,107],
+		"darkmagenta":	[139,0,139],
+		"darkolivegreen":	[85,107,47],
+		"darkorange":	[255,140,0],
+		"darkorchid":	[153,50,204],
+		"darkred":	[139,0,0],
+		"darksalmon":	[233,150,122],
+		"darkseagreen": [143,188,143],
+		"darkslateblue":	[72,61,139],
+		"darkslategray":	[47,79,79],
+		"darkslategrey":	[47,79,79],
+		"darkturquoise":	[0,206,209],
+		"darkviolet":	[148,0,211],
+		"deeppink": [255,20,147],
+		"deepskyblue":	[0,191,255],
+		"dimgray":	[105,105,105],
+		"dimgrey":	[105,105,105],
+		"dodgerblue":	[30,144,255],
+		"firebrick":	[178,34,34],
+		"floralwhite":	[255,250,240],
+		"forestgreen":	[34,139,34],
+		"gainsboro":	[220,220,220],
+		"ghostwhite":	[248,248,255],
+		"gold": [255,215,0],
+		"goldenrod":	[218,165,32],
+		"greenyellow":	[173,255,47],
+		"grey": [128,128,128],
+		"honeydew": [240,255,240],
+		"hotpink":	[255,105,180],
+		"indianred":	[205,92,92],
+		"indigo":	[75,0,130],
+		"ivory":	[255,255,240],
+		"khaki":	[240,230,140],
+		"lavender": [230,230,250],
+		"lavenderblush":	[255,240,245],
+		"lawngreen":	[124,252,0],
+		"lemonchiffon": [255,250,205],
+		"lightblue":	[173,216,230],
+		"lightcoral":	[240,128,128],
+		"lightcyan":	[224,255,255],
+		"lightgoldenrodyellow": [250,250,210],
+		"lightgray":	[211,211,211],
+		"lightgreen":	[144,238,144],
+		"lightgrey":	[211,211,211],
+		"lightpink":	[255,182,193],
+		"lightsalmon":	[255,160,122],
+		"lightseagreen":	[32,178,170],
+		"lightskyblue": [135,206,250],
+		"lightslategray":	[119,136,153],
+		"lightslategrey":	[119,136,153],
+		"lightsteelblue":	[176,196,222],
+		"lightyellow":	[255,255,224],
+		"limegreen":	[50,205,50],
+		"linen":	[250,240,230],
+		"magenta":	[255,0,255],
+		"mediumaquamarine": [102,205,170],
+		"mediumblue":	[0,0,205],
+		"mediumorchid": [186,85,211],
+		"mediumpurple": [147,112,219],
+		"mediumseagreen":	[60,179,113],
+		"mediumslateblue":	[123,104,238],
+		"mediumspringgreen":	[0,250,154],
+		"mediumturquoise":	[72,209,204],
+		"mediumvioletred":	[199,21,133],
+		"midnightblue": [25,25,112],
+		"mintcream":	[245,255,250],
+		"mistyrose":	[255,228,225],
+		"moccasin": [255,228,181],
+		"navajowhite":	[255,222,173],
+		"oldlace":	[253,245,230],
+		"olivedrab":	[107,142,35],
+		"orange":	[255,165,0],
+		"orangered":	[255,69,0],
+		"orchid":	[218,112,214],
+		"palegoldenrod":	[238,232,170],
+		"palegreen":	[152,251,152],
+		"paleturquoise":	[175,238,238],
+		"palevioletred":	[219,112,147],
+		"papayawhip":	[255,239,213],
+		"peachpuff":	[255,218,185],
+		"peru": [205,133,63],
+		"pink": [255,192,203],
+		"plum": [221,160,221],
+		"powderblue":	[176,224,230],
+		"rosybrown":	[188,143,143],
+		"royalblue":	[65,105,225],
+		"saddlebrown":	[139,69,19],
+		"salmon":	[250,128,114],
+		"sandybrown":	[244,164,96],
+		"seagreen": [46,139,87],
+		"seashell": [255,245,238],
+		"sienna":	[160,82,45],
+		"skyblue":	[135,206,235],
+		"slateblue":	[106,90,205],
+		"slategray":	[112,128,144],
+		"slategrey":	[112,128,144],
+		"snow": [255,250,250],
+		"springgreen":	[0,255,127],
+		"steelblue":	[70,130,180],
+		"tan":	[210,180,140],
+		"thistle":	[216,191,216],
+		"tomato":	[255,99,71],
+		"turquoise":	[64,224,208],
+		"violet":	[238,130,238],
+		"wheat":	[245,222,179],
+		"whitesmoke":	[245,245,245],
+		"yellowgreen":	[154,205,50]
+	});
+
+	return Color;	// TODO: return ColorExt, not Color
+});
+},
+'dojo/fx/easing':function(){
+define(["../_base/lang"], function(lang){
+
+// module:
+//		dojo/fx/easing
+
+var easingFuncs = {
+	// summary:
+	//		Collection of easing functions to use beyond the default
+	//		`dojo._defaultEasing` function.
+	// description:
+	//		Easing functions are used to manipulate the iteration through
+	//		an `dojo.Animation`s _Line. _Line being the properties of an Animation,
+	//		and the easing function progresses through that Line determining
+	//		how quickly (or slowly) it should go. Or more accurately: modify
+	//		the value of the _Line based on the percentage of animation completed.
+	//
+	//		All functions follow a simple naming convention of "ease type" + "when".
+	//		If the name of the function ends in Out, the easing described appears
+	//		towards the end of the animation. "In" means during the beginning,
+	//		and InOut means both ranges of the Animation will applied, both
+	//		beginning and end.
+	//
+	//		One does not call the easing function directly, it must be passed to
+	//		the `easing` property of an animation.
+	// example:
+	//	|	dojo.require("dojo.fx.easing");
+	//	|	var anim = dojo.fadeOut({
+	//	|		node: 'node',
+	//	|		duration: 2000,
+	//	|		//	note there is no ()
+	//	|		easing: dojo.fx.easing.quadIn
+	//	|	}).play();
+	//
+
+	linear: function(/* Decimal? */n){
+		// summary:
+		//		A linear easing function
+		return n;
+	},
+
+	quadIn: function(/* Decimal? */n){
+		return Math.pow(n, 2);
+	},
+
+	quadOut: function(/* Decimal? */n){
+		return n * (n - 2) * -1;
+	},
+
+	quadInOut: function(/* Decimal? */n){
+		n = n * 2;
+		if(n < 1){ return Math.pow(n, 2) / 2; }
+		return -1 * ((--n) * (n - 2) - 1) / 2;
+	},
+
+	cubicIn: function(/* Decimal? */n){
+		return Math.pow(n, 3);
+	},
+
+	cubicOut: function(/* Decimal? */n){
+		return Math.pow(n - 1, 3) + 1;
+	},
+
+	cubicInOut: function(/* Decimal? */n){
+		n = n * 2;
+		if(n < 1){ return Math.pow(n, 3) / 2; }
+		n -= 2;
+		return (Math.pow(n, 3) + 2) / 2;
+	},
+
+	quartIn: function(/* Decimal? */n){
+		return Math.pow(n, 4);
+	},
+
+	quartOut: function(/* Decimal? */n){
+		return -1 * (Math.pow(n - 1, 4) - 1);
+	},
+
+	quartInOut: function(/* Decimal? */n){
+		n = n * 2;
+		if(n < 1){ return Math.pow(n, 4) / 2; }
+		n -= 2;
+		return -1 / 2 * (Math.pow(n, 4) - 2);
+	},
+
+	quintIn: function(/* Decimal? */n){
+		return Math.pow(n, 5);
+	},
+
+	quintOut: function(/* Decimal? */n){
+		return Math.pow(n - 1, 5) + 1;
+	},
+
+	quintInOut: function(/* Decimal? */n){
+		n = n * 2;
+		if(n < 1){ return Math.pow(n, 5) / 2; }
+		n -= 2;
+		return (Math.pow(n, 5) + 2) / 2;
+	},
+
+	sineIn: function(/* Decimal? */n){
+		return -1 * Math.cos(n * (Math.PI / 2)) + 1;
+	},
+
+	sineOut: function(/* Decimal? */n){
+		return Math.sin(n * (Math.PI / 2));
+	},
+
+	sineInOut: function(/* Decimal? */n){
+		return -1 * (Math.cos(Math.PI * n) - 1) / 2;
+	},
+
+	expoIn: function(/* Decimal? */n){
+		return (n == 0) ? 0 : Math.pow(2, 10 * (n - 1));
+	},
+
+	expoOut: function(/* Decimal? */n){
+		return (n == 1) ? 1 : (-1 * Math.pow(2, -10 * n) + 1);
+	},
+
+	expoInOut: function(/* Decimal? */n){
+		if(n == 0){ return 0; }
+		if(n == 1){ return 1; }
+		n = n * 2;
+		if(n < 1){ return Math.pow(2, 10 * (n - 1)) / 2; }
+		--n;
+		return (-1 * Math.pow(2, -10 * n) + 2) / 2;
+	},
+
+	circIn: function(/* Decimal? */n){
+		return -1 * (Math.sqrt(1 - Math.pow(n, 2)) - 1);
+	},
+
+	circOut: function(/* Decimal? */n){
+		n = n - 1;
+		return Math.sqrt(1 - Math.pow(n, 2));
+	},
+
+	circInOut: function(/* Decimal? */n){
+		n = n * 2;
+		if(n < 1){ return -1 / 2 * (Math.sqrt(1 - Math.pow(n, 2)) - 1); }
+		n -= 2;
+		return 1 / 2 * (Math.sqrt(1 - Math.pow(n, 2)) + 1);
+	},
+
+	backIn: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that starts away from the target,
+		//		and quickly accelerates towards the end value.
+		//
+		//		Use caution when the easing will cause values to become
+		//		negative as some properties cannot be set to negative values.
+		var s = 1.70158;
+		return Math.pow(n, 2) * ((s + 1) * n - s);
+	},
+
+	backOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that pops past the range briefly, and slowly comes back.
+		// description:
+		//		An easing function that pops past the range briefly, and slowly comes back.
+		//
+		//		Use caution when the easing will cause values to become negative as some
+		//		properties cannot be set to negative values.
+
+		n = n - 1;
+		var s = 1.70158;
+		return Math.pow(n, 2) * ((s + 1) * n + s) + 1;
+	},
+
+	backInOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function combining the effects of `backIn` and `backOut`
+		// description:
+		//		An easing function combining the effects of `backIn` and `backOut`.
+		//		Use caution when the easing will cause values to become negative
+		//		as some properties cannot be set to negative values.
+		var s = 1.70158 * 1.525;
+		n = n * 2;
+		if(n < 1){ return (Math.pow(n, 2) * ((s + 1) * n - s)) / 2; }
+		n-=2;
+		return (Math.pow(n, 2) * ((s + 1) * n + s) + 2) / 2;
+	},
+
+	elasticIn: function(/* Decimal? */n){
+		// summary:
+		//		An easing function the elastically snaps from the start value
+		// description:
+		//		An easing function the elastically snaps from the start value
+		//
+		//		Use caution when the elasticity will cause values to become negative
+		//		as some properties cannot be set to negative values.
+		if(n == 0 || n == 1){ return n; }
+		var p = .3;
+		var s = p / 4;
+		n = n - 1;
+		return -1 * Math.pow(2, 10 * n) * Math.sin((n - s) * (2 * Math.PI) / p);
+	},
+
+	elasticOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that elasticly snaps around the target value,
+		//		near the end of the Animation
+		// description:
+		//		An easing function that elasticly snaps around the target value,
+		//		near the end of the Animation
+		//
+		//		Use caution when the elasticity will cause values to become
+		//		negative as some properties cannot be set to negative values.
+		if(n==0 || n == 1){ return n; }
+		var p = .3;
+		var s = p / 4;
+		return Math.pow(2, -10 * n) * Math.sin((n - s) * (2 * Math.PI) / p) + 1;
+	},
+
+	elasticInOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that elasticly snaps around the value, near
+		//		the beginning and end of the Animation.
+		// description:
+		//		An easing function that elasticly snaps around the value, near
+		//		the beginning and end of the Animation.
+		//
+		//		Use caution when the elasticity will cause values to become
+		//		negative as some properties cannot be set to negative values.
+		if(n == 0) return 0;
+		n = n * 2;
+		if(n == 2) return 1;
+		var p = .3 * 1.5;
+		var s = p / 4;
+		if(n < 1){
+			n -= 1;
+			return -.5 * (Math.pow(2, 10 * n) * Math.sin((n - s) * (2 * Math.PI) / p));
+		}
+		n -= 1;
+		return .5 * (Math.pow(2, -10 * n) * Math.sin((n - s) * (2 * Math.PI) / p)) + 1;
+	},
+
+	bounceIn: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that 'bounces' near the beginning of an Animation
+		return (1 - easingFuncs.bounceOut(1 - n)); // Decimal
+	},
+
+	bounceOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that 'bounces' near the end of an Animation
+		var s = 7.5625;
+		var p = 2.75;
+		var l;
+		if(n < (1 / p)){
+			l = s * Math.pow(n, 2);
+		}else if(n < (2 / p)){
+			n -= (1.5 / p);
+			l = s * Math.pow(n, 2) + .75;
+		}else if(n < (2.5 / p)){
+			n -= (2.25 / p);
+			l = s * Math.pow(n, 2) + .9375;
+		}else{
+			n -= (2.625 / p);
+			l = s * Math.pow(n, 2) + .984375;
+		}
+		return l;
+	},
+
+	bounceInOut: function(/* Decimal? */n){
+		// summary:
+		//		An easing function that 'bounces' at the beginning and end of the Animation
+		if(n < 0.5){ return easingFuncs.bounceIn(n * 2) / 2; }
+		return (easingFuncs.bounceOut(n * 2 - 1) / 2) + 0.5; // Decimal
+	}
+};
+
+lang.setObject("dojo.fx.easing", easingFuncs);
+
+return easingFuncs;
+});
 },
 'dojo/errors/CancelError':function(){
 define(["./create"], function(create){
