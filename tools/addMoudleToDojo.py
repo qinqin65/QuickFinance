@@ -1,7 +1,8 @@
 import sys
 import os
+import re
 
-IGNORE_KEYWORD = '/dojo/'
+IGNORE_REG = '(^//|^require$|^module$|^exports$|^$)'
 SPLIT_KEYWORD = "'dojo/errors/CancelError'"
 LINESEP = '\n'
 LOADED = []
@@ -73,14 +74,14 @@ class moudleFileHandler(fileHandler):
         self.loadedMoudles = []
 
     def getRightMoudleName(self, moudleName):
-        moudles = moudleName.split('/')
+        moudles = re.sub('!.*', '', moudleName).split('/')
         if moudles[-1] == '':
             rightMoudleName = 'main'
         elif moudles[-1] == '..':
             rightMoudleName = ''.join(self.dojoMoudle.split('/')[-2:-1])
         else:
             rightMoudleName = '/'.join(filter(lambda item:not item.startswith('.'), moudles))
-        return rightMoudleName.strip('!')
+        return rightMoudleName
 
     def getDependencyMoudles(self):
         moudles = []
@@ -89,10 +90,11 @@ class moudleFileHandler(fileHandler):
         startPos = self.content.find(startString)
         endPos = self.content.find(endString)
         dependcyMoudles = self.content[startPos + len(startString):endPos]
+        dependcyMoudles = re.sub('//.*', '', dependcyMoudles)
         tmpMoudles = dependcyMoudles.split(',')
         for tmpMoudle in tmpMoudles:
             moudle = tmpMoudle.strip().strip('"')
-            if moudle.startswith(IGNORE_KEYWORD):
+            if re.match(IGNORE_REG, moudle):
                 continue
             if moudle == '..':
                 moudle = os.path.join(''.join(self.dojoMoudle.split('/')[0:1]), self.getRightMoudleName(''))

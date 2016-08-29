@@ -30709,6 +30709,4843 @@ lang.setObject("dojo.fx.easing", easingFuncs);
 return easingFuncs;
 });
 },
+'dijit/Destroyable':function(){
+define([
+	"dojo/_base/array", // array.forEach array.map
+	"dojo/aspect",
+	"dojo/_base/declare"
+], function(array, aspect, declare){
+
+	// module:
+	//		dijit/Destroyable
+
+	return declare("dijit.Destroyable", null, {
+		// summary:
+		//		Mixin to track handles and release them when instance is destroyed.
+		// description:
+		//		Call this.own(...) on list of handles (returned from dojo/aspect, dojo/on,
+		//		dojo/Stateful::watch, or any class (including widgets) with a destroyRecursive() or destroy() method.
+		//		Then call destroy() later to destroy this instance and release the resources.
+
+		destroy: function(/*Boolean*/ preserveDom){
+			// summary:
+			//		Destroy this class, releasing any resources registered via own().
+			this._destroyed = true;
+		},
+
+		own: function(){
+			// summary:
+			//		Track specified handles and remove/destroy them when this instance is destroyed, unless they were
+			//		already removed/destroyed manually.
+			// tags:
+			//		protected
+			// returns:
+			//		The array of specified handles, so you can do for example:
+			//	|		var handle = this.own(on(...))[0];
+
+			var cleanupMethods = [
+				"destroyRecursive",
+				"destroy",
+				"remove"
+			];
+
+			array.forEach(arguments, function(handle){
+				// When this.destroy() is called, destroy handle.  Since I'm using aspect.before(),
+				// the handle will be destroyed before a subclass's destroy() method starts running, before it calls
+				// this.inherited() or even if it doesn't call this.inherited() at all.  If that's an issue, make an
+				// onDestroy() method and connect to that instead.
+				var destroyMethodName;
+				var odh = aspect.before(this, "destroy", function (preserveDom){
+					handle[destroyMethodName](preserveDom);
+				});
+
+				// Callback for when handle is manually destroyed.
+				var hdhs = [];
+				function onManualDestroy(){
+					odh.remove();
+					array.forEach(hdhs, function(hdh){
+						hdh.remove();
+					});
+				}
+
+				// Setup listeners for manual destroy of handle.
+				// Also computes destroyMethodName, used in listener above.
+				if(handle.then){
+					// Special path for Promises.  Detect when Promise is resolved, rejected, or
+					// canceled (nb: cancelling a Promise causes it to be rejected).
+					destroyMethodName = "cancel";
+					handle.then(onManualDestroy, onManualDestroy);
+				}else{
+					// Path for other handles.  Just use AOP to detect when handle is manually destroyed.
+					array.forEach(cleanupMethods, function(cleanupMethod){
+						if(typeof handle[cleanupMethod] === "function"){
+							if(!destroyMethodName){
+								// Use first matching method name in above listener (prefer destroyRecursive() to destroy())
+								destroyMethodName = cleanupMethod;
+							}
+							hdhs.push(aspect.after(handle, cleanupMethod, onManualDestroy, true));
+						}
+					});
+				}
+			}, this);
+
+			return arguments;		// handle
+		}
+	});
+});
+},
+'dijit/_WidgetBase':function(){
+define([
+	"require", // require.toUrl
+	"dojo/_base/array", // array.forEach array.map
+	"dojo/aspect",
+	"dojo/_base/config", // config.blankGif
+	"dojo/_base/connect", // connect.connect
+	"dojo/_base/declare", // declare
+	"dojo/dom", // dom.byId
+	"dojo/dom-attr", // domAttr.set domAttr.remove
+	"dojo/dom-class", // domClass.add domClass.replace
+	"dojo/dom-construct", // domConstruct.destroy domConstruct.place
+	"dojo/dom-geometry", // isBodyLtr
+	"dojo/dom-style", // domStyle.set, domStyle.get
+	"dojo/has",
+	"dojo/_base/kernel",
+	"dojo/_base/lang", // mixin(), isArray(), etc.
+	"dojo/on",
+	"dojo/ready",
+	"dojo/Stateful", // Stateful
+	"dojo/topic",
+	"dojo/_base/window", // win.body()
+	"./Destroyable",
+	"dojo/has!dojo-bidi?./_BidiMixin",
+	"./registry"    // registry.getUniqueId(), registry.findWidgets()
+], function(require, array, aspect, config, connect, declare,
+			dom, domAttr, domClass, domConstruct, domGeometry, domStyle, has, kernel,
+			lang, on, ready, Stateful, topic, win, Destroyable, _BidiMixin, registry){
+
+	// module:
+	//		dijit/_WidgetBase
+
+	// Flag to make dijit load modules the app didn't explicitly request, for backwards compatibility
+	has.add("dijit-legacy-requires", !kernel.isAsync);
+
+	// Flag to enable support for textdir attribute
+	has.add("dojo-bidi", false);
+
+
+	// For back-compat, remove in 2.0.
+	if(has("dijit-legacy-requires")){
+		ready(0, function(){
+			var requires = ["dijit/_base/manager"];
+			require(requires);	// use indirection so modules not rolled into a build
+		});
+	}
+
+	// Nested hash listing attributes for each tag, all strings in lowercase.
+	// ex: {"div": {"style": true, "tabindex" true}, "form": { ...
+	var tagAttrs = {};
+
+	function getAttrs(obj){
+		var ret = {};
+		for(var attr in obj){
+			ret[attr.toLowerCase()] = true;
+		}
+		return ret;
+	}
+
+	function nonEmptyAttrToDom(attr){
+		// summary:
+		//		Returns a setter function that copies the attribute to this.domNode,
+		//		or removes the attribute from this.domNode, depending on whether the
+		//		value is defined or not.
+		return function(val){
+			domAttr[val ? "set" : "remove"](this.domNode, attr, val);
+			this._set(attr, val);
+		};
+	}
+
+	function isEqual(a, b){
+		//	summary:
+		//		Function that determines whether two values are identical,
+		//		taking into account that NaN is not normally equal to itself
+		//		in JS.
+
+		return a === b || (/* a is NaN */ a !== a && /* b is NaN */ b !== b);
+	}
+
+	var _WidgetBase = declare("dijit._WidgetBase", [Stateful, Destroyable], {
+		// summary:
+		//		Future base class for all Dijit widgets.
+		// description:
+		//		Future base class for all Dijit widgets.
+		//		_Widget extends this class adding support for various features needed by desktop.
+		//
+		//		Provides stubs for widget lifecycle methods for subclasses to extend, like postMixInProperties(), buildRendering(),
+		//		postCreate(), startup(), and destroy(), and also public API methods like set(), get(), and watch().
+		//
+		//		Widgets can provide custom setters/getters for widget attributes, which are called automatically by set(name, value).
+		//		For an attribute XXX, define methods _setXXXAttr() and/or _getXXXAttr().
+		//
+		//		_setXXXAttr can also be a string/hash/array mapping from a widget attribute XXX to the widget's DOMNodes:
+		//
+		//		- DOM node attribute
+		// |		_setFocusAttr: {node: "focusNode", type: "attribute"}
+		// |		_setFocusAttr: "focusNode"	(shorthand)
+		// |		_setFocusAttr: ""		(shorthand, maps to this.domNode)
+		//		Maps this.focus to this.focusNode.focus, or (last example) this.domNode.focus
+		//
+		//		- DOM node innerHTML
+		//	|		_setTitleAttr: { node: "titleNode", type: "innerHTML" }
+		//		Maps this.title to this.titleNode.innerHTML
+		//
+		//		- DOM node innerText
+		//	|		_setTitleAttr: { node: "titleNode", type: "innerText" }
+		//		Maps this.title to this.titleNode.innerText
+		//
+		//		- DOM node CSS class
+		// |		_setMyClassAttr: { node: "domNode", type: "class" }
+		//		Maps this.myClass to this.domNode.className
+		//
+		//		If the value of _setXXXAttr is an array, then each element in the array matches one of the
+		//		formats of the above list.
+		//
+		//		If the custom setter is null, no action is performed other than saving the new value
+		//		in the widget (in this).
+		//
+		//		If no custom setter is defined for an attribute, then it will be copied
+		//		to this.focusNode (if the widget defines a focusNode), or this.domNode otherwise.
+		//		That's only done though for attributes that match DOMNode attributes (title,
+		//		alt, aria-labelledby, etc.)
+
+		// id: [const] String
+		//		A unique, opaque ID string that can be assigned by users or by the
+		//		system. If the developer passes an ID which is known not to be
+		//		unique, the specified ID is ignored and the system-generated ID is
+		//		used instead.
+		id: "",
+		_setIdAttr: "domNode", // to copy to this.domNode even for auto-generated id's
+
+		// lang: [const] String
+		//		Rarely used.  Overrides the default Dojo locale used to render this widget,
+		//		as defined by the [HTML LANG](http://www.w3.org/TR/html401/struct/dirlang.html#adef-lang) attribute.
+		//		Value must be among the list of locales specified during by the Dojo bootstrap,
+		//		formatted according to [RFC 3066](http://www.ietf.org/rfc/rfc3066.txt) (like en-us).
+		lang: "",
+		// set on domNode even when there's a focus node.	but don't set lang="", since that's invalid.
+		_setLangAttr: nonEmptyAttrToDom("lang"),
+
+		// dir: [const] String
+		//		Bi-directional support, as defined by the [HTML DIR](http://www.w3.org/TR/html401/struct/dirlang.html#adef-dir)
+		//		attribute. Either left-to-right "ltr" or right-to-left "rtl".  If undefined, widgets renders in page's
+		//		default direction.
+		dir: "",
+		// set on domNode even when there's a focus node.	but don't set dir="", since that's invalid.
+		_setDirAttr: nonEmptyAttrToDom("dir"), // to set on domNode even when there's a focus node
+
+		// class: String
+		//		HTML class attribute
+		"class": "",
+		_setClassAttr: { node: "domNode", type: "class" },
+
+		// Override automatic assigning type --> focusNode, it causes exception on IE6-8.
+		// Instead, type must be specified as ${type} in the template, as part of the original DOM.
+		_setTypeAttr: null,
+
+		// style: String||Object
+		//		HTML style attributes as cssText string or name/value hash
+		style: "",
+
+		// title: String
+		//		HTML title attribute.
+		//
+		//		For form widgets this specifies a tooltip to display when hovering over
+		//		the widget (just like the native HTML title attribute).
+		//
+		//		For TitlePane or for when this widget is a child of a TabContainer, AccordionContainer,
+		//		etc., it's used to specify the tab label, accordion pane title, etc.  In this case it's
+		//		interpreted as HTML.
+		title: "",
+
+		// tooltip: String
+		//		When this widget's title attribute is used to for a tab label, accordion pane title, etc.,
+		//		this specifies the tooltip to appear when the mouse is hovered over that text.
+		tooltip: "",
+
+		// baseClass: [protected] String
+		//		Root CSS class of the widget (ex: dijitTextBox), used to construct CSS classes to indicate
+		//		widget state.
+		baseClass: "",
+
+		// srcNodeRef: [readonly] DomNode
+		//		pointer to original DOM node
+		srcNodeRef: null,
+
+		// domNode: [readonly] DomNode
+		//		This is our visible representation of the widget! Other DOM
+		//		Nodes may by assigned to other properties, usually through the
+		//		template system's data-dojo-attach-point syntax, but the domNode
+		//		property is the canonical "top level" node in widget UI.
+		domNode: null,
+
+		// containerNode: [readonly] DomNode
+		//		Designates where children of the source DOM node will be placed.
+		//		"Children" in this case refers to both DOM nodes and widgets.
+		//		For example, for myWidget:
+		//
+		//		|	<div data-dojo-type=myWidget>
+		//		|		<b> here's a plain DOM node
+		//		|		<span data-dojo-type=subWidget>and a widget</span>
+		//		|		<i> and another plain DOM node </i>
+		//		|	</div>
+		//
+		//		containerNode would point to:
+		//
+		//		|		<b> here's a plain DOM node
+		//		|		<span data-dojo-type=subWidget>and a widget</span>
+		//		|		<i> and another plain DOM node </i>
+		//
+		//		In templated widgets, "containerNode" is set via a
+		//		data-dojo-attach-point assignment.
+		//
+		//		containerNode must be defined for any widget that accepts innerHTML
+		//		(like ContentPane or BorderContainer or even Button), and conversely
+		//		is null for widgets that don't, like TextBox.
+		containerNode: null,
+
+		// ownerDocument: [const] Document?
+		//		The document this widget belongs to.  If not specified to constructor, will default to
+		//		srcNodeRef.ownerDocument, or if no sourceRef specified, then to the document global
+		ownerDocument: null,
+		_setOwnerDocumentAttr: function(val){
+			// this setter is merely to avoid automatically trying to set this.domNode.ownerDocument
+			this._set("ownerDocument", val);
+		},
+
+		/*=====
+		// _started: [readonly] Boolean
+		//		startup() has completed.
+		_started: false,
+		=====*/
+
+		// attributeMap: [protected] Object
+		//		Deprecated.	Instead of attributeMap, widget should have a _setXXXAttr attribute
+		//		for each XXX attribute to be mapped to the DOM.
+		//
+		//		attributeMap sets up a "binding" between attributes (aka properties)
+		//		of the widget and the widget's DOM.
+		//		Changes to widget attributes listed in attributeMap will be
+		//		reflected into the DOM.
+		//
+		//		For example, calling set('title', 'hello')
+		//		on a TitlePane will automatically cause the TitlePane's DOM to update
+		//		with the new title.
+		//
+		//		attributeMap is a hash where the key is an attribute of the widget,
+		//		and the value reflects a binding to a:
+		//
+		//		- DOM node attribute
+		// |		focus: {node: "focusNode", type: "attribute"}
+		//		Maps this.focus to this.focusNode.focus
+		//
+		//		- DOM node innerHTML
+		//	|		title: { node: "titleNode", type: "innerHTML" }
+		//		Maps this.title to this.titleNode.innerHTML
+		//
+		//		- DOM node innerText
+		//	|		title: { node: "titleNode", type: "innerText" }
+		//		Maps this.title to this.titleNode.innerText
+		//
+		//		- DOM node CSS class
+		// |		myClass: { node: "domNode", type: "class" }
+		//		Maps this.myClass to this.domNode.className
+		//
+		//		If the value is an array, then each element in the array matches one of the
+		//		formats of the above list.
+		//
+		//		There are also some shorthands for backwards compatibility:
+		//
+		//		- string --> { node: string, type: "attribute" }, for example:
+		//
+		//	|	"focusNode" ---> { node: "focusNode", type: "attribute" }
+		//
+		//		- "" --> { node: "domNode", type: "attribute" }
+		attributeMap: {},
+
+		// _blankGif: [protected] String
+		//		Path to a blank 1x1 image.
+		//		Used by `<img>` nodes in templates that really get their image via CSS background-image.
+		_blankGif: config.blankGif || require.toUrl("dojo/resources/blank.gif"),
+
+		//////////// INITIALIZATION METHODS ///////////////////////////////////////
+
+		/*=====
+		constructor: function(params, srcNodeRef){
+			// summary:
+			//		Create the widget.
+			// params: Object|null
+			//		Hash of initialization parameters for widget, including scalar values (like title, duration etc.)
+			//		and functions, typically callbacks like onClick.
+			//		The hash can contain any of the widget's properties, excluding read-only properties.
+			// srcNodeRef: DOMNode|String?
+			//		If a srcNodeRef (DOM node) is specified:
+			//
+			//		- use srcNodeRef.innerHTML as my contents
+			//		- if this is a behavioral widget then apply behavior to that srcNodeRef
+			//		- otherwise, replace srcNodeRef with my generated DOM tree
+		},
+		=====*/
+
+		_introspect: function(){
+			// summary:
+			//		Collect metadata about this widget (only once per class, not once per instance):
+			//
+			//			- list of attributes with custom setters, storing in this.constructor._setterAttrs
+			//			- generate this.constructor._onMap, mapping names like "mousedown" to functions like onMouseDown
+
+			var ctor = this.constructor;
+			if(!ctor._setterAttrs){
+				var proto = ctor.prototype,
+					attrs = ctor._setterAttrs = [], // attributes with custom setters
+					onMap = (ctor._onMap = {});
+
+				// Items in this.attributeMap are like custom setters.  For back-compat, remove for 2.0.
+				for(var name in proto.attributeMap){
+					attrs.push(name);
+				}
+
+				// Loop over widget properties, collecting properties with custom setters and filling in ctor._onMap.
+				for(name in proto){
+					if(/^on/.test(name)){
+						onMap[name.substring(2).toLowerCase()] = name;
+					}
+
+					if(/^_set[A-Z](.*)Attr$/.test(name)){
+						name = name.charAt(4).toLowerCase() + name.substr(5, name.length - 9);
+						if(!proto.attributeMap || !(name in proto.attributeMap)){
+							attrs.push(name);
+						}
+					}
+				}
+
+				// Note: this isn't picking up info on properties like aria-label and role, that don't have custom setters
+				// but that set() maps to attributes on this.domNode or this.focusNode
+			}
+		},
+
+		postscript: function(/*Object?*/params, /*DomNode|String*/srcNodeRef){
+			// summary:
+			//		Kicks off widget instantiation.  See create() for details.
+			// tags:
+			//		private
+
+			// Note that we skip calling this.inherited(), i.e. dojo/Stateful::postscript(), because 1.x widgets don't
+			// expect their custom setters to get called until after buildRendering().  Consider changing for 2.0.
+
+			this.create(params, srcNodeRef);
+		},
+
+		create: function(params, srcNodeRef){
+			// summary:
+			//		Kick off the life-cycle of a widget
+			// description:
+			//		Create calls a number of widget methods (postMixInProperties, buildRendering, postCreate,
+			//		etc.), some of which of you'll want to override. See http://dojotoolkit.org/reference-guide/dijit/_WidgetBase.html
+			//		for a discussion of the widget creation lifecycle.
+			//
+			//		Of course, adventurous developers could override create entirely, but this should
+			//		only be done as a last resort.
+			// params: Object|null
+			//		Hash of initialization parameters for widget, including scalar values (like title, duration etc.)
+			//		and functions, typically callbacks like onClick.
+			//		The hash can contain any of the widget's properties, excluding read-only properties.
+			// srcNodeRef: DOMNode|String?
+			//		If a srcNodeRef (DOM node) is specified:
+			//
+			//		- use srcNodeRef.innerHTML as my contents
+			//		- if this is a behavioral widget then apply behavior to that srcNodeRef
+			//		- otherwise, replace srcNodeRef with my generated DOM tree
+			// tags:
+			//		private
+
+			// First time widget is instantiated, scan prototype to figure out info about custom setters etc.
+			this._introspect();
+
+			// store pointer to original DOM tree
+			this.srcNodeRef = dom.byId(srcNodeRef);
+
+			// No longer used, remove for 2.0.
+			this._connects = [];
+			this._supportingWidgets = [];
+
+			// this is here for back-compat, remove in 2.0 (but check NodeList-instantiate.html test)
+			if(this.srcNodeRef && (typeof this.srcNodeRef.id == "string")){
+				this.id = this.srcNodeRef.id;
+			}
+
+			// mix in our passed parameters
+			if(params){
+				this.params = params;
+				lang.mixin(this, params);
+			}
+			this.postMixInProperties();
+
+			// Generate an id for the widget if one wasn't specified, or it was specified as id: undefined.
+			// Do this before buildRendering() because it might expect the id to be there.
+			if(!this.id){
+				this.id = registry.getUniqueId(this.declaredClass.replace(/\./g, "_"));
+				if(this.params){
+					// if params contains {id: undefined}, prevent _applyAttributes() from processing it
+					delete this.params.id;
+				}
+			}
+
+			// The document and <body> node this widget is associated with
+			this.ownerDocument = this.ownerDocument || (this.srcNodeRef ? this.srcNodeRef.ownerDocument : document);
+			this.ownerDocumentBody = win.body(this.ownerDocument);
+
+			registry.add(this);
+
+			this.buildRendering();
+
+			var deleteSrcNodeRef;
+
+			if(this.domNode){
+				// Copy attributes listed in attributeMap into the [newly created] DOM for the widget.
+				// Also calls custom setters for all attributes with custom setters.
+				this._applyAttributes();
+
+				// If srcNodeRef was specified, then swap out original srcNode for this widget's DOM tree.
+				// For 2.0, move this after postCreate().  postCreate() shouldn't depend on the
+				// widget being attached to the DOM since it isn't when a widget is created programmatically like
+				// new MyWidget({}).	See #11635.
+				var source = this.srcNodeRef;
+				if(source && source.parentNode && this.domNode !== source){
+					source.parentNode.replaceChild(this.domNode, source);
+					deleteSrcNodeRef = true;
+				}
+
+				// Note: for 2.0 may want to rename widgetId to dojo._scopeName + "_widgetId",
+				// assuming that dojo._scopeName even exists in 2.0
+				this.domNode.setAttribute("widgetId", this.id);
+			}
+			this.postCreate();
+
+			// If srcNodeRef has been processed and removed from the DOM (e.g. TemplatedWidget) then delete it to allow GC.
+			// I think for back-compatibility it isn't deleting srcNodeRef until after postCreate() has run.
+			if(deleteSrcNodeRef){
+				delete this.srcNodeRef;
+			}
+
+			this._created = true;
+		},
+
+		_applyAttributes: function(){
+			// summary:
+			//		Step during widget creation to copy  widget attributes to the
+			//		DOM according to attributeMap and _setXXXAttr objects, and also to call
+			//		custom _setXXXAttr() methods.
+			//
+			//		Skips over blank/false attribute values, unless they were explicitly specified
+			//		as parameters to the widget, since those are the default anyway,
+			//		and setting tabIndex="" is different than not setting tabIndex at all.
+			//
+			//		For backwards-compatibility reasons attributeMap overrides _setXXXAttr when
+			//		_setXXXAttr is a hash/string/array, but _setXXXAttr as a functions override attributeMap.
+			// tags:
+			//		private
+
+			// Call this.set() for each property that was either specified as parameter to constructor,
+			// or is in the list found above.	For correlated properties like value and displayedValue, the one
+			// specified as a parameter should take precedence.
+			// Particularly important for new DateTextBox({displayedValue: ...}) since DateTextBox's default value is
+			// NaN and thus is not ignored like a default value of "".
+
+			// Step 1: Save the current values of the widget properties that were specified as parameters to the constructor.
+			// Generally this.foo == this.params.foo, except if postMixInProperties() changed the value of this.foo.
+			var params = {};
+			for(var key in this.params || {}){
+				params[key] = this._get(key);
+			}
+
+			// Step 2: Call set() for each property with a non-falsy value that wasn't passed as a parameter to the constructor
+			array.forEach(this.constructor._setterAttrs, function(key){
+				if(!(key in params)){
+					var val = this._get(key);
+					if(val){
+						this.set(key, val);
+					}
+				}
+			}, this);
+
+			// Step 3: Call set() for each property that was specified as parameter to constructor.
+			// Use params hash created above to ignore side effects from step #2 above.
+			for(key in params){
+				this.set(key, params[key]);
+			}
+		},
+
+		postMixInProperties: function(){
+			// summary:
+			//		Called after the parameters to the widget have been read-in,
+			//		but before the widget template is instantiated. Especially
+			//		useful to set properties that are referenced in the widget
+			//		template.
+			// tags:
+			//		protected
+		},
+
+		buildRendering: function(){
+			// summary:
+			//		Construct the UI for this widget, setting this.domNode.
+			//		Most widgets will mixin `dijit._TemplatedMixin`, which implements this method.
+			// tags:
+			//		protected
+
+			if(!this.domNode){
+				// Create root node if it wasn't created by _TemplatedMixin
+				this.domNode = this.srcNodeRef || this.ownerDocument.createElement("div");
+			}
+
+			// baseClass is a single class name or occasionally a space-separated list of names.
+			// Add those classes to the DOMNode.  If RTL mode then also add with Rtl suffix.
+			// TODO: make baseClass custom setter
+			if(this.baseClass){
+				var classes = this.baseClass.split(" ");
+				if(!this.isLeftToRight()){
+					classes = classes.concat(array.map(classes, function(name){
+						return name + "Rtl";
+					}));
+				}
+				domClass.add(this.domNode, classes);
+			}
+		},
+
+		postCreate: function(){
+			// summary:
+			//		Processing after the DOM fragment is created
+			// description:
+			//		Called after the DOM fragment has been created, but not necessarily
+			//		added to the document.  Do not include any operations which rely on
+			//		node dimensions or placement.
+			// tags:
+			//		protected
+		},
+
+		startup: function(){
+			// summary:
+			//		Processing after the DOM fragment is added to the document
+			// description:
+			//		Called after a widget and its children have been created and added to the page,
+			//		and all related widgets have finished their create() cycle, up through postCreate().
+			//
+			//		Note that startup() may be called while the widget is still hidden, for example if the widget is
+			//		inside a hidden dijit/Dialog or an unselected tab of a dijit/layout/TabContainer.
+			//		For widgets that need to do layout, it's best to put that layout code inside resize(), and then
+			//		extend dijit/layout/_LayoutWidget so that resize() is called when the widget is visible.
+			if(this._started){
+				return;
+			}
+			this._started = true;
+			array.forEach(this.getChildren(), function(obj){
+				if(!obj._started && !obj._destroyed && lang.isFunction(obj.startup)){
+					obj.startup();
+					obj._started = true;
+				}
+			});
+		},
+
+		//////////// DESTROY FUNCTIONS ////////////////////////////////
+
+		destroyRecursive: function(/*Boolean?*/ preserveDom){
+			// summary:
+			//		Destroy this widget and its descendants
+			// description:
+			//		This is the generic "destructor" function that all widget users
+			//		should call to cleanly discard with a widget. Once a widget is
+			//		destroyed, it is removed from the manager object.
+			// preserveDom:
+			//		If true, this method will leave the original DOM structure
+			//		alone of descendant Widgets. Note: This will NOT work with
+			//		dijit._TemplatedMixin widgets.
+
+			this._beingDestroyed = true;
+			this.destroyDescendants(preserveDom);
+			this.destroy(preserveDom);
+		},
+
+		destroy: function(/*Boolean*/ preserveDom){
+			// summary:
+			//		Destroy this widget, but not its descendants.  Descendants means widgets inside of
+			//		this.containerNode.   Will also destroy any resources (including widgets) registered via this.own().
+			//
+			//		This method will also destroy internal widgets such as those created from a template,
+			//		assuming those widgets exist inside of this.domNode but outside of this.containerNode.
+			//
+			//		For 2.0 it's planned that this method will also destroy descendant widgets, so apps should not
+			//		depend on the current ability to destroy a widget without destroying its descendants.   Generally
+			//		they should use destroyRecursive() for widgets with children.
+			// preserveDom: Boolean
+			//		If true, this method will leave the original DOM structure alone.
+			//		Note: This will not yet work with _TemplatedMixin widgets
+
+			this._beingDestroyed = true;
+			this.uninitialize();
+
+			function destroy(w){
+				if(w.destroyRecursive){
+					w.destroyRecursive(preserveDom);
+				}else if(w.destroy){
+					w.destroy(preserveDom);
+				}
+			}
+
+			// Back-compat, remove for 2.0
+			array.forEach(this._connects, lang.hitch(this, "disconnect"));
+			array.forEach(this._supportingWidgets, destroy);
+
+			// Destroy supporting widgets, but not child widgets under this.containerNode (for 2.0, destroy child widgets
+			// here too).   if() statement is to guard against exception if destroy() called multiple times (see #15815).
+			if(this.domNode){
+				array.forEach(registry.findWidgets(this.domNode, this.containerNode), destroy);
+			}
+
+			this.destroyRendering(preserveDom);
+			registry.remove(this.id);
+			this._destroyed = true;
+		},
+
+		destroyRendering: function(/*Boolean?*/ preserveDom){
+			// summary:
+			//		Destroys the DOM nodes associated with this widget.
+			// preserveDom:
+			//		If true, this method will leave the original DOM structure alone
+			//		during tear-down. Note: this will not work with _Templated
+			//		widgets yet.
+			// tags:
+			//		protected
+
+			if(this.bgIframe){
+				this.bgIframe.destroy(preserveDom);
+				delete this.bgIframe;
+			}
+
+			if(this.domNode){
+				if(preserveDom){
+					domAttr.remove(this.domNode, "widgetId");
+				}else{
+					domConstruct.destroy(this.domNode);
+				}
+				delete this.domNode;
+			}
+
+			if(this.srcNodeRef){
+				if(!preserveDom){
+					domConstruct.destroy(this.srcNodeRef);
+				}
+				delete this.srcNodeRef;
+			}
+		},
+
+		destroyDescendants: function(/*Boolean?*/ preserveDom){
+			// summary:
+			//		Recursively destroy the children of this widget and their
+			//		descendants.
+			// preserveDom:
+			//		If true, the preserveDom attribute is passed to all descendant
+			//		widget's .destroy() method. Not for use with _Templated
+			//		widgets.
+
+			// get all direct descendants and destroy them recursively
+			array.forEach(this.getChildren(), function(widget){
+				if(widget.destroyRecursive){
+					widget.destroyRecursive(preserveDom);
+				}
+			});
+		},
+
+		uninitialize: function(){
+			// summary:
+			//		Deprecated. Override destroy() instead to implement custom widget tear-down
+			//		behavior.
+			// tags:
+			//		protected
+			return false;
+		},
+
+		////////////////// GET/SET, CUSTOM SETTERS, ETC. ///////////////////
+
+		_setStyleAttr: function(/*String||Object*/ value){
+			// summary:
+			//		Sets the style attribute of the widget according to value,
+			//		which is either a hash like {height: "5px", width: "3px"}
+			//		or a plain string
+			// description:
+			//		Determines which node to set the style on based on style setting
+			//		in attributeMap.
+			// tags:
+			//		protected
+
+			var mapNode = this.domNode;
+
+			// Note: technically we should revert any style setting made in a previous call
+			// to his method, but that's difficult to keep track of.
+
+			if(lang.isObject(value)){
+				domStyle.set(mapNode, value);
+			}else{
+				if(mapNode.style.cssText){
+					mapNode.style.cssText += "; " + value;
+				}else{
+					mapNode.style.cssText = value;
+				}
+			}
+
+			this._set("style", value);
+		},
+
+		_attrToDom: function(/*String*/ attr, /*String*/ value, /*Object?*/ commands){
+			// summary:
+			//		Reflect a widget attribute (title, tabIndex, duration etc.) to
+			//		the widget DOM, as specified by commands parameter.
+			//		If commands isn't specified then it's looked up from attributeMap.
+			//		Note some attributes like "type"
+			//		cannot be processed this way as they are not mutable.
+			// attr:
+			//		Name of member variable (ex: "focusNode" maps to this.focusNode) pointing
+			//		to DOMNode inside the widget, or alternately pointing to a subwidget
+			// tags:
+			//		private
+
+			commands = arguments.length >= 3 ? commands : this.attributeMap[attr];
+
+			array.forEach(lang.isArray(commands) ? commands : [commands], function(command){
+
+				// Get target node and what we are doing to that node
+				var mapNode = this[command.node || command || "domNode"];	// DOM node
+				var type = command.type || "attribute";	// class, innerHTML, innerText, or attribute
+
+				switch(type){
+					case "attribute":
+						if(lang.isFunction(value)){ // functions execute in the context of the widget
+							value = lang.hitch(this, value);
+						}
+
+						// Get the name of the DOM node attribute; usually it's the same
+						// as the name of the attribute in the widget (attr), but can be overridden.
+						// Also maps handler names to lowercase, like onSubmit --> onsubmit
+						var attrName = command.attribute ? command.attribute :
+							(/^on[A-Z][a-zA-Z]*$/.test(attr) ? attr.toLowerCase() : attr);
+
+						if(mapNode.tagName){
+							// Normal case, mapping to a DOMNode.  Note that modern browsers will have a mapNode.set()
+							// method, but for consistency we still call domAttr
+							domAttr.set(mapNode, attrName, value);
+						}else{
+							// mapping to a sub-widget
+							mapNode.set(attrName, value);
+						}
+						break;
+					case "innerText":
+						mapNode.innerHTML = "";
+						mapNode.appendChild(this.ownerDocument.createTextNode(value));
+						break;
+					case "innerHTML":
+						mapNode.innerHTML = value;
+						break;
+					case "class":
+						domClass.replace(mapNode, value, this[attr]);
+						break;
+				}
+			}, this);
+		},
+
+		get: function(name){
+			// summary:
+			//		Get a property from a widget.
+			// name:
+			//		The property to get.
+			// description:
+			//		Get a named property from a widget. The property may
+			//		potentially be retrieved via a getter method. If no getter is defined, this
+			//		just retrieves the object's property.
+			//
+			//		For example, if the widget has properties `foo` and `bar`
+			//		and a method named `_getFooAttr()`, calling:
+			//		`myWidget.get("foo")` would be equivalent to calling
+			//		`widget._getFooAttr()` and `myWidget.get("bar")`
+			//		would be equivalent to the expression
+			//		`widget.bar2`
+			var names = this._getAttrNames(name);
+			return this[names.g] ? this[names.g]() : this._get(name);
+		},
+
+		set: function(name, value){
+			// summary:
+			//		Set a property on a widget
+			// name:
+			//		The property to set.
+			// value:
+			//		The value to set in the property.
+			// description:
+			//		Sets named properties on a widget which may potentially be handled by a
+			//		setter in the widget.
+			//
+			//		For example, if the widget has properties `foo` and `bar`
+			//		and a method named `_setFooAttr()`, calling
+			//		`myWidget.set("foo", "Howdy!")` would be equivalent to calling
+			//		`widget._setFooAttr("Howdy!")` and `myWidget.set("bar", 3)`
+			//		would be equivalent to the statement `widget.bar = 3;`
+			//
+			//		set() may also be called with a hash of name/value pairs, ex:
+			//
+			//	|	myWidget.set({
+			//	|		foo: "Howdy",
+			//	|		bar: 3
+			//	|	});
+			//
+			//	This is equivalent to calling `set(foo, "Howdy")` and `set(bar, 3)`
+
+			if(typeof name === "object"){
+				for(var x in name){
+					this.set(x, name[x]);
+				}
+				return this;
+			}
+			var names = this._getAttrNames(name),
+				setter = this[names.s];
+			if(lang.isFunction(setter)){
+				// use the explicit setter
+				var result = setter.apply(this, Array.prototype.slice.call(arguments, 1));
+			}else{
+				// Mapping from widget attribute to DOMNode/subwidget attribute/value/etc.
+				// Map according to:
+				//		1. attributeMap setting, if one exists (TODO: attributeMap deprecated, remove in 2.0)
+				//		2. _setFooAttr: {...} type attribute in the widget (if one exists)
+				//		3. apply to focusNode or domNode if standard attribute name, excluding funcs like onClick.
+				// Checks if an attribute is a "standard attribute" by whether the DOMNode JS object has a similar
+				// attribute name (ex: accept-charset attribute matches jsObject.acceptCharset).
+				// Note also that Tree.focusNode() is a function not a DOMNode, so test for that.
+				var defaultNode = this.focusNode && !lang.isFunction(this.focusNode) ? "focusNode" : "domNode",
+					tag = this[defaultNode] && this[defaultNode].tagName,
+					attrsForTag = tag && (tagAttrs[tag] || (tagAttrs[tag] = getAttrs(this[defaultNode]))),
+					map = name in this.attributeMap ? this.attributeMap[name] :
+						names.s in this ? this[names.s] :
+							((attrsForTag && names.l in attrsForTag && typeof value != "function") ||
+								/^aria-|^data-|^role$/.test(name)) ? defaultNode : null;
+				if(map != null){
+					this._attrToDom(name, value, map);
+				}
+				this._set(name, value);
+			}
+			return result || this;
+		},
+
+		_attrPairNames: {}, // shared between all widgets
+		_getAttrNames: function(name){
+			// summary:
+			//		Helper function for get() and set().
+			//		Caches attribute name values so we don't do the string ops every time.
+			// tags:
+			//		private
+
+			var apn = this._attrPairNames;
+			if(apn[name]){
+				return apn[name];
+			}
+			var uc = name.replace(/^[a-z]|-[a-zA-Z]/g, function(c){
+				return c.charAt(c.length - 1).toUpperCase();
+			});
+			return (apn[name] = {
+				n: name + "Node",
+				s: "_set" + uc + "Attr", // converts dashes to camel case, ex: accept-charset --> _setAcceptCharsetAttr
+				g: "_get" + uc + "Attr",
+				l: uc.toLowerCase()        // lowercase name w/out dashes, ex: acceptcharset
+			});
+		},
+
+		_set: function(/*String*/ name, /*anything*/ value){
+			// summary:
+			//		Helper function to set new value for specified property, and call handlers
+			//		registered with watch() if the value has changed.
+			var oldValue = this[name];
+			this[name] = value;
+			if(this._created && !isEqual(oldValue, value)){
+				if(this._watchCallbacks){
+					this._watchCallbacks(name, oldValue, value);
+				}
+				this.emit("attrmodified-" + name, {
+					detail: {
+						prevValue: oldValue,
+						newValue: value
+					}
+				});
+			}
+		},
+
+		_get: function(/*String*/ name){
+			// summary:
+			//		Helper function to get value for specified property stored by this._set(),
+			//		i.e. for properties with custom setters.  Used mainly by custom getters.
+			//
+			//		For example, CheckBox._getValueAttr() calls this._get("value").
+
+			// future: return name in this.props ? this.props[name] : this[name];
+			return this[name];
+		},
+
+		emit: function(/*String*/ type, /*Object?*/ eventObj, /*Array?*/ callbackArgs){
+			// summary:
+			//		Used by widgets to signal that a synthetic event occurred, ex:
+			//	|	myWidget.emit("attrmodified-selectedChildWidget", {}).
+			//
+			//		Emits an event on this.domNode named type.toLowerCase(), based on eventObj.
+			//		Also calls onType() method, if present, and returns value from that method.
+			//		By default passes eventObj to callback, but will pass callbackArgs instead, if specified.
+			//		Modifies eventObj by adding missing parameters (bubbles, cancelable, widget).
+			// tags:
+			//		protected
+
+			// Specify fallback values for bubbles, cancelable in case they are not set in eventObj.
+			// Also set pointer to widget, although since we can't add a pointer to the widget for native events
+			// (see #14729), maybe we shouldn't do it here?
+			eventObj = eventObj || {};
+			if(eventObj.bubbles === undefined){
+				eventObj.bubbles = true;
+			}
+			if(eventObj.cancelable === undefined){
+				eventObj.cancelable = true;
+			}
+			if(!eventObj.detail){
+				eventObj.detail = {};
+			}
+			eventObj.detail.widget = this;
+
+			var ret, callback = this["on" + type];
+			if(callback){
+				ret = callback.apply(this, callbackArgs ? callbackArgs : [eventObj]);
+			}
+
+			// Emit event, but avoid spurious emit()'s as parent sets properties on child during startup/destroy
+			if(this._started && !this._beingDestroyed){
+				on.emit(this.domNode, type.toLowerCase(), eventObj);
+			}
+
+			return ret;
+		},
+
+		on: function(/*String|Function*/ type, /*Function*/ func){
+			// summary:
+			//		Call specified function when event occurs, ex: myWidget.on("click", function(){ ... }).
+			// type:
+			//		Name of event (ex: "click") or extension event like touch.press.
+			// description:
+			//		Call specified function when event `type` occurs, ex: `myWidget.on("click", function(){ ... })`.
+			//		Note that the function is not run in any particular scope, so if (for example) you want it to run in the
+			//		widget's scope you must do `myWidget.on("click", lang.hitch(myWidget, func))`.
+
+			// For backwards compatibility, if there's an onType() method in the widget then connect to that.
+			// Remove in 2.0.
+			var widgetMethod = this._onMap(type);
+			if(widgetMethod){
+				return aspect.after(this, widgetMethod, func, true);
+			}
+
+			// Otherwise, just listen for the event on this.domNode.
+			return this.own(on(this.domNode, type, func))[0];
+		},
+
+		_onMap: function(/*String|Function*/ type){
+			// summary:
+			//		Maps on() type parameter (ex: "mousemove") to method name (ex: "onMouseMove").
+			//		If type is a synthetic event like touch.press then returns undefined.
+			var ctor = this.constructor, map = ctor._onMap;
+			if(!map){
+				map = (ctor._onMap = {});
+				for(var attr in ctor.prototype){
+					if(/^on/.test(attr)){
+						map[attr.replace(/^on/, "").toLowerCase()] = attr;
+					}
+				}
+			}
+			return map[typeof type == "string" && type.toLowerCase()];	// String
+		},
+
+		toString: function(){
+			// summary:
+			//		Returns a string that represents the widget.
+			// description:
+			//		When a widget is cast to a string, this method will be used to generate the
+			//		output. Currently, it does not implement any sort of reversible
+			//		serialization.
+			return '[Widget ' + this.declaredClass + ', ' + (this.id || 'NO ID') + ']'; // String
+		},
+
+		getChildren: function(){
+			// summary:
+			//		Returns all direct children of this widget, i.e. all widgets underneath this.containerNode whose parent
+			//		is this widget.   Note that it does not return all descendants, but rather just direct children.
+			//		Analogous to [Node.childNodes](https://developer.mozilla.org/en-US/docs/DOM/Node.childNodes),
+			//		except containing widgets rather than DOMNodes.
+			//
+			//		The result intentionally excludes internally created widgets (a.k.a. supporting widgets)
+			//		outside of this.containerNode.
+			//
+			//		Note that the array returned is a simple array.  Application code should not assume
+			//		existence of methods like forEach().
+
+			return this.containerNode ? registry.findWidgets(this.containerNode) : []; // dijit/_WidgetBase[]
+		},
+
+		getParent: function(){
+			// summary:
+			//		Returns the parent widget of this widget.
+
+			return registry.getEnclosingWidget(this.domNode.parentNode);
+		},
+
+		connect: function(/*Object|null*/ obj, /*String|Function*/ event, /*String|Function*/ method){
+			// summary:
+			//		Deprecated, will be removed in 2.0, use this.own(on(...)) or this.own(aspect.after(...)) instead.
+			//
+			//		Connects specified obj/event to specified method of this object
+			//		and registers for disconnect() on widget destroy.
+			//
+			//		Provide widget-specific analog to dojo.connect, except with the
+			//		implicit use of this widget as the target object.
+			//		Events connected with `this.connect` are disconnected upon
+			//		destruction.
+			// returns:
+			//		A handle that can be passed to `disconnect` in order to disconnect before
+			//		the widget is destroyed.
+			// example:
+			//	|	var btn = new Button();
+			//	|	// when foo.bar() is called, call the listener we're going to
+			//	|	// provide in the scope of btn
+			//	|	btn.connect(foo, "bar", function(){
+			//	|		console.debug(this.toString());
+			//	|	});
+			// tags:
+			//		protected
+
+			return this.own(connect.connect(obj, event, this, method))[0];	// handle
+		},
+
+		disconnect: function(handle){
+			// summary:
+			//		Deprecated, will be removed in 2.0, use handle.remove() instead.
+			//
+			//		Disconnects handle created by `connect`.
+			// tags:
+			//		protected
+
+			handle.remove();
+		},
+
+		subscribe: function(t, method){
+			// summary:
+			//		Deprecated, will be removed in 2.0, use this.own(topic.subscribe()) instead.
+			//
+			//		Subscribes to the specified topic and calls the specified method
+			//		of this object and registers for unsubscribe() on widget destroy.
+			//
+			//		Provide widget-specific analog to dojo.subscribe, except with the
+			//		implicit use of this widget as the target object.
+			// t: String
+			//		The topic
+			// method: Function
+			//		The callback
+			// example:
+			//	|	var btn = new Button();
+			//	|	// when /my/topic is published, this button changes its label to
+			//	|	// be the parameter of the topic.
+			//	|	btn.subscribe("/my/topic", function(v){
+			//	|		this.set("label", v);
+			//	|	});
+			// tags:
+			//		protected
+			return this.own(topic.subscribe(t, lang.hitch(this, method)))[0];	// handle
+		},
+
+		unsubscribe: function(/*Object*/ handle){
+			// summary:
+			//		Deprecated, will be removed in 2.0, use handle.remove() instead.
+			//
+			//		Unsubscribes handle created by this.subscribe.
+			//		Also removes handle from this widget's list of subscriptions
+			// tags:
+			//		protected
+
+			handle.remove();
+		},
+
+		isLeftToRight: function(){
+			// summary:
+			//		Return this widget's explicit or implicit orientation (true for LTR, false for RTL)
+			// tags:
+			//		protected
+			return this.dir ? (this.dir.toLowerCase() == "ltr") : domGeometry.isBodyLtr(this.ownerDocument); //Boolean
+		},
+
+		isFocusable: function(){
+			// summary:
+			//		Return true if this widget can currently be focused
+			//		and false if not
+			return this.focus && (domStyle.get(this.domNode, "display") != "none");
+		},
+
+		placeAt: function(/*String|DomNode|DocumentFragment|dijit/_WidgetBase*/ reference, /*String|Int?*/ position){
+			// summary:
+			//		Place this widget somewhere in the DOM based
+			//		on standard domConstruct.place() conventions.
+			// description:
+			//		A convenience function provided in all _Widgets, providing a simple
+			//		shorthand mechanism to put an existing (or newly created) Widget
+			//		somewhere in the dom, and allow chaining.
+			// reference:
+			//		Widget, DOMNode, DocumentFragment, or id of widget or DOMNode
+			// position:
+			//		If reference is a widget (or id of widget), and that widget has an ".addChild" method,
+			//		it will be called passing this widget instance into that method, supplying the optional
+			//		position index passed.  In this case position (if specified) should be an integer.
+			//
+			//		If reference is a DOMNode (or id matching a DOMNode but not a widget),
+			//		the position argument can be a numeric index or a string
+			//		"first", "last", "before", or "after", same as dojo/dom-construct::place().
+			// returns: dijit/_WidgetBase
+			//		Provides a useful return of the newly created dijit._Widget instance so you
+			//		can "chain" this function by instantiating, placing, then saving the return value
+			//		to a variable.
+			// example:
+			//	|	// create a Button with no srcNodeRef, and place it in the body:
+			//	|	var button = new Button({ label:"click" }).placeAt(win.body());
+			//	|	// now, 'button' is still the widget reference to the newly created button
+			//	|	button.on("click", function(e){ console.log('click'); }));
+			// example:
+			//	|	// create a button out of a node with id="src" and append it to id="wrapper":
+			//	|	var button = new Button({},"src").placeAt("wrapper");
+			// example:
+			//	|	// place a new button as the first element of some div
+			//	|	var button = new Button({ label:"click" }).placeAt("wrapper","first");
+			// example:
+			//	|	// create a contentpane and add it to a TabContainer
+			//	|	var tc = dijit.byId("myTabs");
+			//	|	new ContentPane({ href:"foo.html", title:"Wow!" }).placeAt(tc)
+
+			var refWidget = !reference.tagName && registry.byId(reference);
+			if(refWidget && refWidget.addChild && (!position || typeof position === "number")){
+				// Adding this to refWidget and can use refWidget.addChild() to handle everything.
+				refWidget.addChild(this, position);
+			}else{
+				// "reference" is a plain DOMNode, or we can't use refWidget.addChild().   Use domConstruct.place() and
+				// target refWidget.containerNode for nested placement (position==number, "first", "last", "only"), and
+				// refWidget.domNode otherwise ("after"/"before"/"replace").  (But not supported officially, see #14946.)
+				var ref = refWidget && ("domNode" in refWidget) ?
+					(refWidget.containerNode && !/after|before|replace/.test(position || "") ?
+						refWidget.containerNode : refWidget.domNode) : dom.byId(reference, this.ownerDocument);
+				domConstruct.place(this.domNode, ref, position);
+
+				// Start this iff it has a parent widget that's already started.
+				// TODO: for 2.0 maybe it should also start the widget when this.getParent() returns null??
+				if(!this._started && (this.getParent() || {})._started){
+					this.startup();
+				}
+			}
+			return this;
+		},
+
+		defer: function(fcn, delay){
+			// summary:
+			//		Wrapper to setTimeout to avoid deferred functions executing
+			//		after the originating widget has been destroyed.
+			//		Returns an object handle with a remove method (that returns null) (replaces clearTimeout).
+			// fcn: Function
+			//		Function reference.
+			// delay: Number?
+			//		Delay, defaults to 0.
+			// tags:
+			//		protected
+
+			var timer = setTimeout(lang.hitch(this,
+				function(){
+					if(!timer){
+						return;
+					}
+					timer = null;
+					if(!this._destroyed){
+						lang.hitch(this, fcn)();
+					}
+				}),
+				delay || 0
+			);
+			return {
+				remove: function(){
+					if(timer){
+						clearTimeout(timer);
+						timer = null;
+					}
+					return null; // so this works well: handle = handle.remove();
+				}
+			};
+		}
+	});
+
+	if(has("dojo-bidi")){
+		_WidgetBase.extend(_BidiMixin);
+	}
+
+	return _WidgetBase;
+});
+},
+'dijit/main':function(){
+define([
+	"dojo/_base/kernel"
+], function(dojo){
+	// module:
+	//		dijit/main
+
+/*=====
+return {
+	// summary:
+	//		The dijit package main module.
+	//		Deprecated.   Users should access individual modules (ex: dijit/registry) directly.
+};
+=====*/
+
+	return dojo.dijit;
+});
+},
+'dijit/registry':function(){
+define([
+	"dojo/_base/array", // array.forEach array.map
+	"dojo/_base/window", // win.body
+	"./main"	// dijit._scopeName
+], function(array, win, dijit){
+
+	// module:
+	//		dijit/registry
+
+	var _widgetTypeCtr = {}, hash = {};
+
+	var registry =  {
+		// summary:
+		//		Registry of existing widget on page, plus some utility methods.
+
+		// length: Number
+		//		Number of registered widgets
+		length: 0,
+
+		add: function(widget){
+			// summary:
+			//		Add a widget to the registry. If a duplicate ID is detected, a error is thrown.
+			// widget: dijit/_WidgetBase
+			//		Any dijit/_WidgetBase subclass.
+			if(hash[widget.id]){
+				throw new Error("Tried to register widget with id==" + widget.id + " but that id is already registered");
+			}
+			hash[widget.id] = widget;
+			this.length++;
+		},
+
+		remove: function(/*String*/ id){
+			// summary:
+			//		Remove a widget from the registry. Does not destroy the widget; simply
+			//		removes the reference.
+			if(hash[id]){
+				delete hash[id];
+				this.length--;
+			}
+		},
+
+		byId: function(/*String|Widget*/ id){
+			// summary:
+			//		Find a widget by it's id.
+			//		If passed a widget then just returns the widget.
+			return typeof id == "string" ? hash[id] : id;	// dijit/_WidgetBase
+		},
+
+		byNode: function(/*DOMNode*/ node){
+			// summary:
+			//		Returns the widget corresponding to the given DOMNode
+			return hash[node.getAttribute("widgetId")]; // dijit/_WidgetBase
+		},
+
+		toArray: function(){
+			// summary:
+			//		Convert registry into a true Array
+			//
+			// example:
+			//		Work with the widget .domNodes in a real Array
+			//		|	array.map(registry.toArray(), function(w){ return w.domNode; });
+
+			var ar = [];
+			for(var id in hash){
+				ar.push(hash[id]);
+			}
+			return ar;	// dijit/_WidgetBase[]
+		},
+
+		getUniqueId: function(/*String*/widgetType){
+			// summary:
+			//		Generates a unique id for a given widgetType
+
+			var id;
+			do{
+				id = widgetType + "_" +
+					(widgetType in _widgetTypeCtr ?
+						++_widgetTypeCtr[widgetType] : _widgetTypeCtr[widgetType] = 0);
+			}while(hash[id]);
+			return dijit._scopeName == "dijit" ? id : dijit._scopeName + "_" + id; // String
+		},
+
+		findWidgets: function(root, skipNode){
+			// summary:
+			//		Search subtree under root returning widgets found.
+			//		Doesn't search for nested widgets (ie, widgets inside other widgets).
+			// root: DOMNode
+			//		Node to search under.
+			// skipNode: DOMNode
+			//		If specified, don't search beneath this node (usually containerNode).
+
+			var outAry = [];
+
+			function getChildrenHelper(root){
+				for(var node = root.firstChild; node; node = node.nextSibling){
+					if(node.nodeType == 1){
+						var widgetId = node.getAttribute("widgetId");
+						if(widgetId){
+							var widget = hash[widgetId];
+							if(widget){	// may be null on page w/multiple dojo's loaded
+								outAry.push(widget);
+							}
+						}else if(node !== skipNode){
+							getChildrenHelper(node);
+						}
+					}
+				}
+			}
+
+			getChildrenHelper(root);
+			return outAry;
+		},
+
+		_destroyAll: function(){
+			// summary:
+			//		Code to destroy all widgets and do other cleanup on page unload
+
+			// Clean up focus manager lingering references to widgets and nodes
+			dijit._curFocus = null;
+			dijit._prevFocus = null;
+			dijit._activeStack = [];
+
+			// Destroy all the widgets, top down
+			array.forEach(registry.findWidgets(win.body()), function(widget){
+				// Avoid double destroy of widgets like Menu that are attached to <body>
+				// even though they are logically children of other widgets.
+				if(!widget._destroyed){
+					if(widget.destroyRecursive){
+						widget.destroyRecursive();
+					}else if(widget.destroy){
+						widget.destroy();
+					}
+				}
+			});
+		},
+
+		getEnclosingWidget: function(/*DOMNode*/ node){
+			// summary:
+			//		Returns the widget whose DOM tree contains the specified DOMNode, or null if
+			//		the node is not contained within the DOM tree of any widget
+			while(node){
+				var id = node.nodeType == 1 && node.getAttribute("widgetId");
+				if(id){
+					return hash[id];
+				}
+				node = node.parentNode;
+			}
+			return null;
+		},
+
+		// In case someone needs to access hash.
+		// Actually, this is accessed from WidgetSet back-compatibility code
+		_hash: hash
+	};
+
+	dijit.registry = registry;
+
+	return registry;
+});
+},
+'dojox/charting/widget/Legend':function(){
+define(["dojo/_base/declare", "dijit/_WidgetBase", "dojox/gfx","dojo/_base/array", "dojo/has", "dojo/has!dojo-bidi?../bidi/widget/Legend",
+		"dojox/lang/functional", "dojo/dom", "dojo/dom-construct", "dojo/dom-class","dijit/registry"],
+		function(declare, _WidgetBase, gfx, arr, has, BidiLegend, df,
+				dom, domConstruct, domClass, registry){
+
+	var Legend = declare(has("dojo-bidi")? "dojox.charting.widget.NonBidiLegend" : "dojox.charting.widget.Legend", _WidgetBase, {
+		// summary:
+		//		A legend for a chart. A legend contains summary labels for
+		//		each series of data contained in the chart.
+		//		
+		//		Set the horizontal attribute to boolean false to layout legend labels vertically.
+		//		Set the horizontal attribute to a number to layout legend labels in horizontal
+		//		rows each containing that number of labels (except possibly the last row).
+		//		
+		//		(Line or Scatter charts (colored lines with shape symbols) )
+		//		-o- Series1		-X- Series2		-v- Series3
+		//		
+		//		(Area/Bar/Pie charts (letters represent colors))
+		//		[a] Series1		[b] Series2		[c] Series3
+
+		chartRef:   "",
+		horizontal: true,
+		swatchSize: 18,
+
+		legendBody: null,
+
+		postCreate: function(){
+			if(!this.chart && this.chartRef){
+				this.chart = registry.byId(this.chartRef) || registry.byNode(dom.byId(this.chartRef));
+				if(!this.chart){
+					console.log("Could not find chart instance with id: " + this.chartRef);
+				}
+			}
+			// we want original chart
+			this.chart = this.chart.chart || this.chart;
+			this.refresh();
+		},
+		buildRendering: function(){
+			this.domNode = domConstruct.create("table",
+					{role: "group", "aria-label": "chart legend", "class": "dojoxLegendNode"});
+			this.legendBody = domConstruct.create("tbody", null, this.domNode);
+			this.inherited(arguments);
+		},
+		destroy: function(){
+			if(this._surfaces){
+				arr.forEach(this._surfaces, function(surface){
+					surface.destroy();
+				});
+			}
+			this.inherited(arguments);
+		},
+		refresh: function(){
+			// summary:
+			//		regenerates the legend to reflect changes to the chart
+
+			// cleanup
+			if(this._surfaces){
+				arr.forEach(this._surfaces, function(surface){
+					surface.destroy();
+				});
+			}
+			this._surfaces = [];
+			while(this.legendBody.lastChild){
+				domConstruct.destroy(this.legendBody.lastChild);
+			}
+
+			if(this.horizontal){
+				domClass.add(this.domNode, "dojoxLegendHorizontal");
+				// make a container <tr>
+				this._tr = domConstruct.create("tr", null, this.legendBody);
+				this._inrow = 0;
+			}
+
+			// keep trying to reach this.series for compatibility reasons in case the user set them, but could be removed
+			var s = this.series || this.chart.series;
+			if(s.length == 0){
+				return;
+			}
+			if(s[0].chart.stack[0].declaredClass == "dojox.charting.plot2d.Pie"){
+				var t = s[0].chart.stack[0];
+				if(typeof t.run.data[0] == "number"){
+					var filteredRun = df.map(t.run.data, "Math.max(x, 0)");
+					var slices = df.map(filteredRun, "/this", df.foldl(filteredRun, "+", 0));
+					arr.forEach(slices, function(x, i){
+						this._addLabel(t.dyn[i], t._getLabel(x * 100) + "%");
+					}, this);
+				}else{
+					arr.forEach(t.run.data, function(x, i){
+						this._addLabel(t.dyn[i], x.legend || x.text || x.y);
+					}, this);
+				}
+			}else{
+				arr.forEach(s, function(x){
+					this._addLabel(x.dyn, x.legend || x.name);
+				}, this);
+			}
+		},
+		_addLabel: function(dyn, label){
+			// create necessary elements
+			var wrapper = domConstruct.create("td"),
+				icon = domConstruct.create("div", null, wrapper),
+				text = domConstruct.create("label", null, wrapper),
+				div  = domConstruct.create("div", {
+					style: {
+						"width": this.swatchSize + "px",
+						"height":this.swatchSize + "px",
+						"float": "left"
+					}
+				}, icon);
+			domClass.add(icon, "dojoxLegendIcon dijitInline");
+			domClass.add(text, "dojoxLegendText");
+			// create a skeleton
+			if(this._tr){
+				// horizontal
+				this._tr.appendChild(wrapper);
+				if(++this._inrow === this.horizontal){
+					// make a fresh container <tr>
+					this._tr = domConstruct.create("tr", null, this.legendBody);
+					this._inrow = 0;
+				}
+			}else{
+				// vertical
+				var tr = domConstruct.create("tr", null, this.legendBody);
+				tr.appendChild(wrapper);
+			}
+
+			// populate the skeleton
+			this._makeIcon(div, dyn);
+			text.innerHTML = String(label);
+			if(has("dojo-bidi")){
+				text.dir = this.getTextDir(label, text.dir);
+			}
+		},
+		_makeIcon: function(div, dyn){
+			var mb = { h: this.swatchSize, w: this.swatchSize };
+			var surface = gfx.createSurface(div, mb.w, mb.h);
+			this._surfaces.push(surface);
+			if(dyn.fill){
+				// regions
+				surface.createRect({x: 2, y: 2, width: mb.w - 4, height: mb.h - 4}).
+					setFill(dyn.fill).setStroke(dyn.stroke);
+			}else if(dyn.stroke || dyn.marker){
+				// draw line
+				var line = {x1: 0, y1: mb.h / 2, x2: mb.w, y2: mb.h / 2};
+				if(dyn.stroke){
+					surface.createLine(line).setStroke(dyn.stroke);
+				}
+				if(dyn.marker){
+					// draw marker on top
+					var c = {x: mb.w / 2, y: mb.h / 2};
+					surface.createPath({path: "M" + c.x + " " + c.y + " " + dyn.marker}).
+						setFill(dyn.markerFill).setStroke(dyn.markerStroke);
+				}
+			}else{
+				// nothing
+				surface.createRect({x: 2, y: 2, width: mb.w - 4, height: mb.h - 4}).
+					setStroke("black");
+				surface.createLine({x1: 2, y1: 2, x2: mb.w - 2, y2: mb.h - 2}).setStroke("black");
+				surface.createLine({x1: 2, y1: mb.h - 2, x2: mb.w - 2, y2: 2}).setStroke("black");
+			}
+		}
+	});
+	return has("dojo-bidi")? declare("dojox.charting.widget.Legend", [Legend, BidiLegend]) : Legend;
+	
+});
+},
+'dijit/_base/manager':function(){
+define([
+	"dojo/_base/array",
+	"dojo/_base/config", // defaultDuration
+	"dojo/_base/lang",
+	"../registry",
+	"../main"	// for setting exports to dijit namespace
+], function(array, config, lang, registry, dijit){
+
+	// module:
+	//		dijit/_base/manager
+
+	var exports = {
+		// summary:
+		//		Deprecated.  Shim to methods on registry, plus a few other declarations.
+		//		New code should access dijit/registry directly when possible.
+	};
+
+	array.forEach(["byId", "getUniqueId", "findWidgets", "_destroyAll", "byNode", "getEnclosingWidget"], function(name){
+		exports[name] = registry[name];
+	});
+
+	 lang.mixin(exports, {
+		 // defaultDuration: Integer
+		 //		The default fx.animation speed (in ms) to use for all Dijit
+		 //		transitional fx.animations, unless otherwise specified
+		 //		on a per-instance basis. Defaults to 200, overrided by
+		 //		`djConfig.defaultDuration`
+		 defaultDuration: config["defaultDuration"] || 200
+	 });
+
+	lang.mixin(dijit, exports);
+
+	/*===== return exports; =====*/
+	return dijit;	// for back compat :-(
+});
+},
+'dijit/Viewport':function(){
+define([
+	"dojo/Evented",
+	"dojo/on",
+	"dojo/domReady",
+	"dojo/sniff",	// has("ie"), has("ios")
+	"dojo/window" // getBox()
+], function(Evented, on, domReady, has, winUtils){
+
+	// module:
+	//		dijit/Viewport
+
+	/*=====
+	return {
+		// summary:
+		//		Utility singleton to watch for viewport resizes, avoiding duplicate notifications
+		//		which can lead to infinite loops.
+		// description:
+		//		Usage: Viewport.on("resize", myCallback).
+		//
+		//		myCallback() is called without arguments in case it's _WidgetBase.resize(),
+		//		which would interpret the argument as the size to make the widget.
+	};
+	=====*/
+
+	var Viewport = new Evented();
+
+	var focusedNode;
+
+	domReady(function(){
+		var oldBox = winUtils.getBox();
+		Viewport._rlh = on(window, "resize", function(){
+			var newBox = winUtils.getBox();
+			if(oldBox.h == newBox.h && oldBox.w == newBox.w){ return; }
+			oldBox = newBox;
+			Viewport.emit("resize");
+		});
+
+		// Also catch zoom changes on IE8, since they don't naturally generate resize events
+		if(has("ie") == 8){
+			var deviceXDPI = screen.deviceXDPI;
+			setInterval(function(){
+				if(screen.deviceXDPI != deviceXDPI){
+					deviceXDPI = screen.deviceXDPI;
+					Viewport.emit("resize");
+				}
+			}, 500);
+		}
+
+		// On iOS, keep track of the focused node so we can guess when the keyboard is/isn't being displayed.
+		if(has("ios")){
+			on(document, "focusin", function(evt){
+				focusedNode = evt.target;
+			});
+			on(document, "focusout", function(evt){
+				focusedNode = null;
+			});
+		}
+	});
+
+	Viewport.getEffectiveBox = function(/*Document*/ doc){
+		// summary:
+		//		Get the size of the viewport, or on mobile devices, the part of the viewport not obscured by the
+		//		virtual keyboard.
+
+		var box = winUtils.getBox(doc);
+
+		// Account for iOS virtual keyboard, if it's being shown.  Unfortunately no direct way to check or measure.
+		var tag = focusedNode && focusedNode.tagName && focusedNode.tagName.toLowerCase();
+		if(has("ios") && focusedNode && !focusedNode.readOnly && (tag == "textarea" || (tag == "input" &&
+			/^(color|email|number|password|search|tel|text|url)$/.test(focusedNode.type)))){
+
+			// Box represents the size of the viewport.  Some of the viewport is likely covered by the keyboard.
+			// Estimate height of visible viewport assuming viewport goes to bottom of screen, but is covered by keyboard.
+			box.h *= (orientation == 0 || orientation == 180 ? 0.66 : 0.40);
+
+			// Above measurement will be inaccurate if viewport was scrolled up so far that it ends before the bottom
+			// of the screen.   In this case, keyboard isn't covering as much of the viewport as we thought.
+			// We know the visible size is at least the distance from the top of the viewport to the focused node.
+			var rect = focusedNode.getBoundingClientRect();
+			box.h = Math.max(box.h, rect.top + rect.height);
+		}
+
+		return box;
+	};
+
+	return Viewport;
+});
+},
+'dijit/place':function(){
+define([
+	"dojo/_base/array", // array.forEach array.map array.some
+	"dojo/dom-geometry", // domGeometry.position
+	"dojo/dom-style", // domStyle.getComputedStyle
+	"dojo/_base/kernel", // kernel.deprecated
+	"dojo/_base/window", // win.body
+	"./Viewport", // getEffectiveBox
+	"./main"	// dijit (defining dijit.place to match API doc)
+], function(array, domGeometry, domStyle, kernel, win, Viewport, dijit){
+
+	// module:
+	//		dijit/place
+
+
+	function _place(/*DomNode*/ node, choices, layoutNode, aroundNodeCoords){
+		// summary:
+		//		Given a list of spots to put node, put it at the first spot where it fits,
+		//		of if it doesn't fit anywhere then the place with the least overflow
+		// choices: Array
+		//		Array of elements like: {corner: 'TL', pos: {x: 10, y: 20} }
+		//		Above example says to put the top-left corner of the node at (10,20)
+		// layoutNode: Function(node, aroundNodeCorner, nodeCorner, size)
+		//		for things like tooltip, they are displayed differently (and have different dimensions)
+		//		based on their orientation relative to the parent.	 This adjusts the popup based on orientation.
+		//		It also passes in the available size for the popup, which is useful for tooltips to
+		//		tell them that their width is limited to a certain amount.	 layoutNode() may return a value expressing
+		//		how much the popup had to be modified to fit into the available space.	 This is used to determine
+		//		what the best placement is.
+		// aroundNodeCoords: Object
+		//		Size of aroundNode, ex: {w: 200, h: 50}
+
+		// get {x: 10, y: 10, w: 100, h:100} type obj representing position of
+		// viewport over document
+		var view = Viewport.getEffectiveBox(node.ownerDocument);
+
+		// This won't work if the node is inside a <div style="position: relative">,
+		// so reattach it to <body>.	 (Otherwise, the positioning will be wrong
+		// and also it might get cutoff.)
+		if(!node.parentNode || String(node.parentNode.tagName).toLowerCase() != "body"){
+			win.body(node.ownerDocument).appendChild(node);
+		}
+
+		var best = null;
+		array.some(choices, function(choice){
+			var corner = choice.corner;
+			var pos = choice.pos;
+			var overflow = 0;
+
+			// calculate amount of space available given specified position of node
+			var spaceAvailable = {
+				w: {
+					'L': view.l + view.w - pos.x,
+					'R': pos.x - view.l,
+					'M': view.w
+				}[corner.charAt(1)],
+				h: {
+					'T': view.t + view.h - pos.y,
+					'B': pos.y - view.t,
+					'M': view.h
+				}[corner.charAt(0)]
+			};
+
+			// Clear left/right position settings set earlier so they don't interfere with calculations,
+			// specifically when layoutNode() (a.k.a. Tooltip.orient()) measures natural width of Tooltip
+			var s = node.style;
+			s.left = s.right = "auto";
+
+			// configure node to be displayed in given position relative to button
+			// (need to do this in order to get an accurate size for the node, because
+			// a tooltip's size changes based on position, due to triangle)
+			if(layoutNode){
+				var res = layoutNode(node, choice.aroundCorner, corner, spaceAvailable, aroundNodeCoords);
+				overflow = typeof res == "undefined" ? 0 : res;
+			}
+
+			// get node's size
+			var style = node.style;
+			var oldDisplay = style.display;
+			var oldVis = style.visibility;
+			if(style.display == "none"){
+				style.visibility = "hidden";
+				style.display = "";
+			}
+			var bb = domGeometry.position(node);
+			style.display = oldDisplay;
+			style.visibility = oldVis;
+
+			// coordinates and size of node with specified corner placed at pos,
+			// and clipped by viewport
+			var
+				startXpos = {
+					'L': pos.x,
+					'R': pos.x - bb.w,
+					'M': Math.max(view.l, Math.min(view.l + view.w, pos.x + (bb.w >> 1)) - bb.w) // M orientation is more flexible
+				}[corner.charAt(1)],
+				startYpos = {
+					'T': pos.y,
+					'B': pos.y - bb.h,
+					'M': Math.max(view.t, Math.min(view.t + view.h, pos.y + (bb.h >> 1)) - bb.h)
+				}[corner.charAt(0)],
+				startX = Math.max(view.l, startXpos),
+				startY = Math.max(view.t, startYpos),
+				endX = Math.min(view.l + view.w, startXpos + bb.w),
+				endY = Math.min(view.t + view.h, startYpos + bb.h),
+				width = endX - startX,
+				height = endY - startY;
+
+			overflow += (bb.w - width) + (bb.h - height);
+
+			if(best == null || overflow < best.overflow){
+				best = {
+					corner: corner,
+					aroundCorner: choice.aroundCorner,
+					x: startX,
+					y: startY,
+					w: width,
+					h: height,
+					overflow: overflow,
+					spaceAvailable: spaceAvailable
+				};
+			}
+
+			return !overflow;
+		});
+
+		// In case the best position is not the last one we checked, need to call
+		// layoutNode() again.
+		if(best.overflow && layoutNode){
+			layoutNode(node, best.aroundCorner, best.corner, best.spaceAvailable, aroundNodeCoords);
+		}
+
+		// And then position the node.  Do this last, after the layoutNode() above
+		// has sized the node, due to browser quirks when the viewport is scrolled
+		// (specifically that a Tooltip will shrink to fit as though the window was
+		// scrolled to the left).
+
+		var top = best.y,
+			side = best.x,
+			body = win.body(node.ownerDocument);
+
+		if(/relative|absolute/.test(domStyle.get(body, "position"))){
+			// compensate for margin on <body>, see #16148
+			top -= domStyle.get(body, "marginTop");
+			side -= domStyle.get(body, "marginLeft");
+		}
+
+		var s = node.style;
+		s.top = top + "px";
+		s.left = side + "px";
+		s.right = "auto";	// needed for FF or else tooltip goes to far left
+
+		return best;
+	}
+
+	var reverse = {
+		// Map from corner to kitty-corner
+		"TL": "BR",
+		"TR": "BL",
+		"BL": "TR",
+		"BR": "TL"
+	};
+
+	var place = {
+		// summary:
+		//		Code to place a DOMNode relative to another DOMNode.
+		//		Load using require(["dijit/place"], function(place){ ... }).
+
+		at: function(node, pos, corners, padding, layoutNode){
+			// summary:
+			//		Positions node kitty-corner to the rectangle centered at (pos.x, pos.y) with width and height of
+			//		padding.x * 2 and padding.y * 2, or zero if padding not specified.  Picks first corner in corners[]
+			//		where node is fully visible, or the corner where it's most visible.
+			//
+			//		Node is assumed to be absolutely or relatively positioned.
+			// node: DOMNode
+			//		The node to position
+			// pos: dijit/place.__Position
+			//		Object like {x: 10, y: 20}
+			// corners: String[]
+			//		Array of Strings representing order to try corners of the node in, like ["TR", "BL"].
+			//		Possible values are:
+			//
+			//		- "BL" - bottom left
+			//		- "BR" - bottom right
+			//		- "TL" - top left
+			//		- "TR" - top right
+			// padding: dijit/place.__Position?
+			//		Optional param to set padding, to put some buffer around the element you want to position.
+			//		Defaults to zero.
+			// layoutNode: Function(node, aroundNodeCorner, nodeCorner)
+			//		For things like tooltip, they are displayed differently (and have different dimensions)
+			//		based on their orientation relative to the parent.  This adjusts the popup based on orientation.
+			// example:
+			//		Try to place node's top right corner at (10,20).
+			//		If that makes node go (partially) off screen, then try placing
+			//		bottom left corner at (10,20).
+			//	|	place(node, {x: 10, y: 20}, ["TR", "BL"])
+			var choices = array.map(corners, function(corner){
+				var c = {
+					corner: corner,
+					aroundCorner: reverse[corner],	// so TooltipDialog.orient() gets aroundCorner argument set
+					pos: {x: pos.x,y: pos.y}
+				};
+				if(padding){
+					c.pos.x += corner.charAt(1) == 'L' ? padding.x : -padding.x;
+					c.pos.y += corner.charAt(0) == 'T' ? padding.y : -padding.y;
+				}
+				return c;
+			});
+
+			return _place(node, choices, layoutNode);
+		},
+
+		around: function(
+			/*DomNode*/		node,
+			/*DomNode|dijit/place.__Rectangle*/ anchor,
+			/*String[]*/	positions,
+			/*Boolean*/		leftToRight,
+			/*Function?*/	layoutNode){
+
+			// summary:
+			//		Position node adjacent or kitty-corner to anchor
+			//		such that it's fully visible in viewport.
+			// description:
+			//		Place node such that corner of node touches a corner of
+			//		aroundNode, and that node is fully visible.
+			// anchor:
+			//		Either a DOMNode or a rectangle (object with x, y, width, height).
+			// positions:
+			//		Ordered list of positions to try matching up.
+			//
+			//		- before: places drop down to the left of the anchor node/widget, or to the right in the case
+			//			of RTL scripts like Hebrew and Arabic; aligns either the top of the drop down
+			//			with the top of the anchor, or the bottom of the drop down with bottom of the anchor.
+			//		- after: places drop down to the right of the anchor node/widget, or to the left in the case
+			//			of RTL scripts like Hebrew and Arabic; aligns either the top of the drop down
+			//			with the top of the anchor, or the bottom of the drop down with bottom of the anchor.
+			//		- before-centered: centers drop down to the left of the anchor node/widget, or to the right
+			//			in the case of RTL scripts like Hebrew and Arabic
+			//		- after-centered: centers drop down to the right of the anchor node/widget, or to the left
+			//			in the case of RTL scripts like Hebrew and Arabic
+			//		- above-centered: drop down is centered above anchor node
+			//		- above: drop down goes above anchor node, left sides aligned
+			//		- above-alt: drop down goes above anchor node, right sides aligned
+			//		- below-centered: drop down is centered above anchor node
+			//		- below: drop down goes below anchor node
+			//		- below-alt: drop down goes below anchor node, right sides aligned
+			// layoutNode: Function(node, aroundNodeCorner, nodeCorner)
+			//		For things like tooltip, they are displayed differently (and have different dimensions)
+			//		based on their orientation relative to the parent.	 This adjusts the popup based on orientation.
+			// leftToRight:
+			//		True if widget is LTR, false if widget is RTL.   Affects the behavior of "above" and "below"
+			//		positions slightly.
+			// example:
+			//	|	placeAroundNode(node, aroundNode, {'BL':'TL', 'TR':'BR'});
+			//		This will try to position node such that node's top-left corner is at the same position
+			//		as the bottom left corner of the aroundNode (ie, put node below
+			//		aroundNode, with left edges aligned).	If that fails it will try to put
+			//		the bottom-right corner of node where the top right corner of aroundNode is
+			//		(ie, put node above aroundNode, with right edges aligned)
+			//
+
+			// If around is a DOMNode (or DOMNode id), convert to coordinates.
+			var aroundNodePos;
+			if(typeof anchor == "string" || "offsetWidth" in anchor || "ownerSVGElement" in anchor){
+				aroundNodePos = domGeometry.position(anchor, true);
+
+				// For above and below dropdowns, subtract width of border so that popup and aroundNode borders
+				// overlap, preventing a double-border effect.  Unfortunately, difficult to measure the border
+				// width of either anchor or popup because in both cases the border may be on an inner node.
+				if(/^(above|below)/.test(positions[0])){
+					var anchorBorder = domGeometry.getBorderExtents(anchor),
+						anchorChildBorder = anchor.firstChild ? domGeometry.getBorderExtents(anchor.firstChild) : {t:0,l:0,b:0,r:0},
+						nodeBorder =  domGeometry.getBorderExtents(node),
+						nodeChildBorder = node.firstChild ? domGeometry.getBorderExtents(node.firstChild) : {t:0,l:0,b:0,r:0};
+					aroundNodePos.y += Math.min(anchorBorder.t + anchorChildBorder.t, nodeBorder.t + nodeChildBorder.t);
+					aroundNodePos.h -=  Math.min(anchorBorder.t + anchorChildBorder.t, nodeBorder.t+ nodeChildBorder.t) +
+						Math.min(anchorBorder.b + anchorChildBorder.b, nodeBorder.b + nodeChildBorder.b);
+				}
+			}else{
+				aroundNodePos = anchor;
+			}
+
+			// Compute position and size of visible part of anchor (it may be partially hidden by ancestor nodes w/scrollbars)
+			if(anchor.parentNode){
+				// ignore nodes between position:relative and position:absolute
+				var sawPosAbsolute = domStyle.getComputedStyle(anchor).position == "absolute";
+				var parent = anchor.parentNode;
+				while(parent && parent.nodeType == 1 && parent.nodeName != "BODY"){  //ignoring the body will help performance
+					var parentPos = domGeometry.position(parent, true),
+						pcs = domStyle.getComputedStyle(parent);
+					if(/relative|absolute/.test(pcs.position)){
+						sawPosAbsolute = false;
+					}
+					if(!sawPosAbsolute && /hidden|auto|scroll/.test(pcs.overflow)){
+						var bottomYCoord = Math.min(aroundNodePos.y + aroundNodePos.h, parentPos.y + parentPos.h);
+						var rightXCoord = Math.min(aroundNodePos.x + aroundNodePos.w, parentPos.x + parentPos.w);
+						aroundNodePos.x = Math.max(aroundNodePos.x, parentPos.x);
+						aroundNodePos.y = Math.max(aroundNodePos.y, parentPos.y);
+						aroundNodePos.h = bottomYCoord - aroundNodePos.y;
+						aroundNodePos.w = rightXCoord - aroundNodePos.x;
+					}
+					if(pcs.position == "absolute"){
+						sawPosAbsolute = true;
+					}
+					parent = parent.parentNode;
+				}
+			}			
+
+			var x = aroundNodePos.x,
+				y = aroundNodePos.y,
+				width = "w" in aroundNodePos ? aroundNodePos.w : (aroundNodePos.w = aroundNodePos.width),
+				height = "h" in aroundNodePos ? aroundNodePos.h : (kernel.deprecated("place.around: dijit/place.__Rectangle: { x:"+x+", y:"+y+", height:"+aroundNodePos.height+", width:"+width+" } has been deprecated.  Please use { x:"+x+", y:"+y+", h:"+aroundNodePos.height+", w:"+width+" }", "", "2.0"), aroundNodePos.h = aroundNodePos.height);
+
+			// Convert positions arguments into choices argument for _place()
+			var choices = [];
+			function push(aroundCorner, corner){
+				choices.push({
+					aroundCorner: aroundCorner,
+					corner: corner,
+					pos: {
+						x: {
+							'L': x,
+							'R': x + width,
+							'M': x + (width >> 1)
+						}[aroundCorner.charAt(1)],
+						y: {
+							'T': y,
+							'B': y + height,
+							'M': y + (height >> 1)
+						}[aroundCorner.charAt(0)]
+					}
+				})
+			}
+			array.forEach(positions, function(pos){
+				var ltr =  leftToRight;
+				switch(pos){
+					case "above-centered":
+						push("TM", "BM");
+						break;
+					case "below-centered":
+						push("BM", "TM");
+						break;
+					case "after-centered":
+						ltr = !ltr;
+						// fall through
+					case "before-centered":
+						push(ltr ? "ML" : "MR", ltr ? "MR" : "ML");
+						break;
+					case "after":
+						ltr = !ltr;
+						// fall through
+					case "before":
+						push(ltr ? "TL" : "TR", ltr ? "TR" : "TL");
+						push(ltr ? "BL" : "BR", ltr ? "BR" : "BL");
+						break;
+					case "below-alt":
+						ltr = !ltr;
+						// fall through
+					case "below":
+						// first try to align left borders, next try to align right borders (or reverse for RTL mode)
+						push(ltr ? "BL" : "BR", ltr ? "TL" : "TR");
+						push(ltr ? "BR" : "BL", ltr ? "TR" : "TL");
+						break;
+					case "above-alt":
+						ltr = !ltr;
+						// fall through
+					case "above":
+						// first try to align left borders, next try to align right borders (or reverse for RTL mode)
+						push(ltr ? "TL" : "TR", ltr ? "BL" : "BR");
+						push(ltr ? "TR" : "TL", ltr ? "BR" : "BL");
+						break;
+					default:
+						// To assist dijit/_base/place, accept arguments of type {aroundCorner: "BL", corner: "TL"}.
+						// Not meant to be used directly.  Remove for 2.0.
+						push(pos.aroundCorner, pos.corner);
+				}
+			});
+
+			var position = _place(node, choices, layoutNode, {w: width, h: height});
+			position.aroundNodePos = aroundNodePos;
+
+			return position;
+		}
+	};
+
+	/*=====
+	place.__Position = {
+		// x: Integer
+		//		horizontal coordinate in pixels, relative to document body
+		// y: Integer
+		//		vertical coordinate in pixels, relative to document body
+	};
+	place.__Rectangle = {
+		// x: Integer
+		//		horizontal offset in pixels, relative to document body
+		// y: Integer
+		//		vertical offset in pixels, relative to document body
+		// w: Integer
+		//		width in pixels.   Can also be specified as "width" for backwards-compatibility.
+		// h: Integer
+		//		height in pixels.   Can also be specified as "height" for backwards-compatibility.
+	};
+	=====*/
+
+	return dijit.place = place;	// setting dijit.place for back-compat, remove for 2.0
+});
+},
+'dijit/a11yclick':function(){
+define([
+	"dojo/keys", // keys.ENTER keys.SPACE
+	"dojo/mouse",
+	"dojo/on",
+	"dojo/touch" // touch support for click is now there
+], function(keys, mouse, on, touch){
+
+	// module:
+	//		dijit/a11yclick
+
+	/*=====
+	return {
+		// summary:
+		//		Custom press, release, and click synthetic events
+		//		which trigger on a left mouse click, touch, or space/enter keyup.
+
+		click: function(node, listener){
+			// summary:
+			//		Logical click operation for mouse, touch, or keyboard (space/enter key)
+		},
+		press: function(node, listener){
+			// summary:
+			//		Mousedown (left button), touchstart, or keydown (space or enter) corresponding to logical click operation.
+		},
+		release: function(node, listener){
+			// summary:
+			//		Mouseup (left button), touchend, or keyup (space or enter) corresponding to logical click operation.
+		},
+		move: function(node, listener){
+			// summary:
+			//		Mouse cursor or a finger is dragged over the given node.
+		}
+	};
+	=====*/
+
+	function clickKey(/*Event*/ e){
+		// Test if this keyboard event should be tracked as the start (if keydown) or end (if keyup) of a click event.
+		// Only track for nodes marked to be tracked, and not for buttons or inputs,
+		// since buttons handle keyboard click natively, and text inputs should not
+		// prevent typing spaces or newlines.
+		if((e.keyCode === keys.ENTER || e.keyCode === keys.SPACE) && !/input|button|textarea/i.test(e.target.nodeName)){
+
+			// Test if a node or its ancestor has been marked with the dojoClick property to indicate special processing
+			for(var node = e.target; node; node = node.parentNode){
+				if(node.dojoClick){ return true; }
+			}
+		}
+	}
+
+	var lastKeyDownNode;
+
+	on(document, "keydown", function(e){
+		//console.log("a11yclick: onkeydown, e.target = ", e.target, ", lastKeyDownNode was ", lastKeyDownNode, ", equality is ", (e.target === lastKeyDownNode));
+		if(clickKey(e)){
+			// needed on IE for when focus changes between keydown and keyup - otherwise dropdown menus do not work
+			lastKeyDownNode = e.target;
+
+			// Prevent viewport scrolling on space key in IE<9.
+			// (Reproducible on test_Button.html on any of the first dijit/form/Button examples)
+			e.preventDefault();
+		}else{
+			lastKeyDownNode = null;
+		}
+	});
+
+	on(document, "keyup", function(e){
+		//console.log("a11yclick: onkeyup, e.target = ", e.target, ", lastKeyDownNode was ", lastKeyDownNode, ", equality is ", (e.target === lastKeyDownNode));
+		if(clickKey(e) && e.target == lastKeyDownNode){	// === breaks greasemonkey
+			//need reset here or have problems in FF when focus returns to trigger element after closing popup/alert
+			lastKeyDownNode = null;
+
+			on.emit(e.target, "click", {
+				cancelable: true,
+				bubbles: true,
+				ctrlKey: e.ctrlKey,
+				shiftKey: e.shiftKey,
+				metaKey: e.metaKey,
+				altKey: e.altKey,
+				_origType: e.type
+			});
+		}
+	});
+
+	// I want to return a hash of the synthetic events, but for backwards compatibility the main return value
+	// needs to be the click event.   Change for 2.0.
+
+	var click = function(node, listener){
+		// Set flag on node so that keydown/keyup above emits click event.
+		// Also enables fast click processing from dojo/touch.
+		node.dojoClick = true;
+
+		return on(node, "click", listener);
+	};
+	click.click = click;	// forward compatibility with 2.0
+
+	click.press =  function(node, listener){
+		var touchListener = on(node, touch.press, function(evt){
+			if(evt.type == "mousedown" && !mouse.isLeft(evt)){
+				// Ignore right click
+				return;
+			}
+			listener(evt);
+		}), keyListener = on(node, "keydown", function(evt){
+			if(evt.keyCode === keys.ENTER || evt.keyCode === keys.SPACE){
+				listener(evt);
+			}
+		});
+		return {
+			remove: function(){
+				touchListener.remove();
+				keyListener.remove();
+			}
+		};
+	};
+
+	click.release =  function(node, listener){
+		var touchListener = on(node, touch.release, function(evt){
+			if(evt.type == "mouseup" && !mouse.isLeft(evt)){
+				// Ignore right click
+				return;
+			}
+			listener(evt);
+		}), keyListener = on(node, "keyup", function(evt){
+			if(evt.keyCode === keys.ENTER || evt.keyCode === keys.SPACE){
+				listener(evt);
+			}
+		});
+		return {
+			remove: function(){
+				touchListener.remove();
+				keyListener.remove();
+			}
+		};
+	};
+
+	click.move = touch.move;	// just for convenience
+
+	return click;
+});
+},
+'dijit/_OnDijitClickMixin':function(){
+define([
+	"dojo/on",
+	"dojo/_base/array", // array.forEach
+	"dojo/keys", // keys.ENTER keys.SPACE
+	"dojo/_base/declare", // declare
+	"dojo/has", // has("dom-addeventlistener")
+	"./a11yclick"
+], function(on, array, keys, declare, has, a11yclick){
+
+	// module:
+	//		dijit/_OnDijitClickMixin
+
+	var ret = declare("dijit._OnDijitClickMixin", null, {
+		// summary:
+		//		Deprecated.   New code should access the dijit/a11yclick event directly, ex:
+		//		|	this.own(on(node, a11yclick, function(){ ... }));
+		//
+		//		Mixing in this class will make _WidgetBase.connect(node, "ondijitclick", ...) work.
+		//		It also used to be necessary to make templates with ondijitclick work, but now you can just require
+		//		dijit/a11yclick.
+
+		connect: function(obj, event, method){
+			// override _WidgetBase.connect() to make this.connect(node, "ondijitclick", ...) work
+			return this.inherited(arguments, [obj, event == "ondijitclick" ? a11yclick : event, method]);
+		}
+	});
+
+	ret.a11yclick = a11yclick;	// back compat
+
+	return ret;
+});
+},
+'dijit/a11y':function(){
+define([
+	"dojo/_base/array", // array.forEach array.map
+	"dojo/dom",			// dom.byId
+	"dojo/dom-attr", // domAttr.attr domAttr.has
+	"dojo/dom-style", // domStyle.style
+	"dojo/_base/lang", // lang.mixin()
+	"dojo/sniff", // has("ie") has("extend-dojo")
+	"./main"	// for exporting methods to dijit namespace
+], function(array, dom, domAttr, domStyle, lang, has, dijit){
+
+	// module:
+	//		dijit/a11y
+
+	var undefined;
+
+	var a11y = {
+		// summary:
+		//		Accessibility utility functions (keyboard, tab stops, etc.)
+
+		_isElementShown: function(/*Element*/ elem){
+			var s = domStyle.get(elem);
+			return (s.visibility != "hidden")
+				&& (s.visibility != "collapsed")
+				&& (s.display != "none")
+				&& (domAttr.get(elem, "type") != "hidden");
+		},
+
+		hasDefaultTabStop: function(/*Element*/ elem){
+			// summary:
+			//		Tests if element is tab-navigable even without an explicit tabIndex setting
+
+			// No explicit tabIndex setting, need to investigate node type
+			switch(elem.nodeName.toLowerCase()){
+				case "a":
+					// An <a> w/out a tabindex is only navigable if it has an href
+					return domAttr.has(elem, "href");
+				case "area":
+				case "button":
+				case "input":
+				case "object":
+				case "select":
+				case "textarea":
+					// These are navigable by default
+					return true;
+				case "iframe":
+					// If it's an editor <iframe> then it's tab navigable.
+					var body;
+					try{
+						// non-IE
+						var contentDocument = elem.contentDocument;
+						if("designMode" in contentDocument && contentDocument.designMode == "on"){
+							return true;
+						}
+						body = contentDocument.body;
+					}catch(e1){
+						// contentWindow.document isn't accessible within IE7/8
+						// if the iframe.src points to a foreign url and this
+						// page contains an element, that could get focus
+						try{
+							body = elem.contentWindow.document.body;
+						}catch(e2){
+							return false;
+						}
+					}
+					return body && (body.contentEditable == 'true' ||
+						(body.firstChild && body.firstChild.contentEditable == 'true'));
+				default:
+					return elem.contentEditable == 'true';
+			}
+		},
+
+		effectiveTabIndex: function(/*Element*/ elem){
+			// summary:
+			//		Returns effective tabIndex of an element, either a number, or undefined if element isn't focusable.
+
+			if(domAttr.get(elem, "disabled")){
+				return undefined;
+			}else if(domAttr.has(elem, "tabIndex")){
+				// Explicit tab index setting
+				return +domAttr.get(elem, "tabIndex");// + to convert string --> number
+			}else{
+				// No explicit tabIndex setting, so depends on node type
+				return a11y.hasDefaultTabStop(elem) ? 0 : undefined;
+			}
+		},
+
+		isTabNavigable: function(/*Element*/ elem){
+			// summary:
+			//		Tests if an element is tab-navigable
+
+			return a11y.effectiveTabIndex(elem) >= 0;
+		},
+
+		isFocusable: function(/*Element*/ elem){
+			// summary:
+			//		Tests if an element is focusable by tabbing to it, or clicking it with the mouse.
+
+			return a11y.effectiveTabIndex(elem) >= -1;
+		},
+
+		_getTabNavigable: function(/*DOMNode*/ root){
+			// summary:
+			//		Finds descendants of the specified root node.
+			// description:
+			//		Finds the following descendants of the specified root node:
+			//
+			//		- the first tab-navigable element in document order
+			//		  without a tabIndex or with tabIndex="0"
+			//		- the last tab-navigable element in document order
+			//		  without a tabIndex or with tabIndex="0"
+			//		- the first element in document order with the lowest
+			//		  positive tabIndex value
+			//		- the last element in document order with the highest
+			//		  positive tabIndex value
+			var first, last, lowest, lowestTabindex, highest, highestTabindex, radioSelected = {};
+
+			function radioName(node){
+				// If this element is part of a radio button group, return the name for that group.
+				return node && node.tagName.toLowerCase() == "input" &&
+					node.type && node.type.toLowerCase() == "radio" &&
+					node.name && node.name.toLowerCase();
+			}
+
+			var shown = a11y._isElementShown, effectiveTabIndex = a11y.effectiveTabIndex;
+			var walkTree = function(/*DOMNode*/ parent){
+				for(var child = parent.firstChild; child; child = child.nextSibling){
+					// Skip text elements, hidden elements, and also non-HTML elements (those in custom namespaces) in IE,
+					// since show() invokes getAttribute("type"), which crash on VML nodes in IE.
+					if(child.nodeType != 1 || (has("ie") <= 9 && child.scopeName !== "HTML") || !shown(child)){
+						continue;
+					}
+
+					var tabindex = effectiveTabIndex(child);
+					if(tabindex >= 0){
+						if(tabindex == 0){
+							if(!first){
+								first = child;
+							}
+							last = child;
+						}else if(tabindex > 0){
+							if(!lowest || tabindex < lowestTabindex){
+								lowestTabindex = tabindex;
+								lowest = child;
+							}
+							if(!highest || tabindex >= highestTabindex){
+								highestTabindex = tabindex;
+								highest = child;
+							}
+						}
+						var rn = radioName(child);
+						if(domAttr.get(child, "checked") && rn){
+							radioSelected[rn] = child;
+						}
+					}
+					if(child.nodeName.toUpperCase() != 'SELECT'){
+						walkTree(child);
+					}
+				}
+			};
+			if(shown(root)){
+				walkTree(root);
+			}
+			function rs(node){
+				// substitute checked radio button for unchecked one, if there is a checked one with the same name.
+				return radioSelected[radioName(node)] || node;
+			}
+
+			return { first: rs(first), last: rs(last), lowest: rs(lowest), highest: rs(highest) };
+		},
+
+		getFirstInTabbingOrder: function(/*String|DOMNode*/ root, /*Document?*/ doc){
+			// summary:
+			//		Finds the descendant of the specified root node
+			//		that is first in the tabbing order
+			var elems = a11y._getTabNavigable(dom.byId(root, doc));
+			return elems.lowest ? elems.lowest : elems.first; // DomNode
+		},
+
+		getLastInTabbingOrder: function(/*String|DOMNode*/ root, /*Document?*/ doc){
+			// summary:
+			//		Finds the descendant of the specified root node
+			//		that is last in the tabbing order
+			var elems = a11y._getTabNavigable(dom.byId(root, doc));
+			return elems.last ? elems.last : elems.highest; // DomNode
+		}
+	};
+
+	has("extend-dojo") && lang.mixin(dijit, a11y);
+
+	return a11y;
+});
+},
+'dijit/focus':function(){
+define([
+	"dojo/aspect",
+	"dojo/_base/declare", // declare
+	"dojo/dom", // domAttr.get dom.isDescendant
+	"dojo/dom-attr", // domAttr.get dom.isDescendant
+	"dojo/dom-class",
+	"dojo/dom-construct", // connect to domConstruct.empty, domConstruct.destroy
+	"dojo/Evented",
+	"dojo/_base/lang", // lang.hitch
+	"dojo/on",
+	"dojo/domReady",
+	"dojo/sniff", // has("ie")
+	"dojo/Stateful",
+	"dojo/_base/window", // win.body
+	"dojo/window", // winUtils.get
+	"./a11y",	// a11y.isTabNavigable
+	"./registry",	// registry.byId
+	"./main"		// to set dijit.focus
+], function(aspect, declare, dom, domAttr, domClass, domConstruct, Evented, lang, on, domReady, has, Stateful, win, winUtils,
+			a11y, registry, dijit){
+
+	// module:
+	//		dijit/focus
+
+	// Time of the last focusin event
+	var lastFocusin;
+
+	// Time of the last touch/mousedown or focusin event
+	var lastTouchOrFocusin;
+
+	var FocusManager = declare([Stateful, Evented], {
+		// summary:
+		//		Tracks the currently focused node, and which widgets are currently "active".
+		//		Access via require(["dijit/focus"], function(focus){ ... }).
+		//
+		//		A widget is considered active if it or a descendant widget has focus,
+		//		or if a non-focusable node of this widget or a descendant was recently clicked.
+		//
+		//		Call focus.watch("curNode", callback) to track the current focused DOMNode,
+		//		or focus.watch("activeStack", callback) to track the currently focused stack of widgets.
+		//
+		//		Call focus.on("widget-blur", func) or focus.on("widget-focus", ...) to monitor when
+		//		when widgets become active/inactive
+		//
+		//		Finally, focus(node) will focus a node, suppressing errors if the node doesn't exist.
+
+		// curNode: DomNode
+		//		Currently focused item on screen
+		curNode: null,
+
+		// activeStack: dijit/_WidgetBase[]
+		//		List of currently active widgets (focused widget and it's ancestors)
+		activeStack: [],
+
+		constructor: function(){
+			// Don't leave curNode/prevNode pointing to bogus elements
+			var check = lang.hitch(this, function(node){
+				if(dom.isDescendant(this.curNode, node)){
+					this.set("curNode", null);
+				}
+				if(dom.isDescendant(this.prevNode, node)){
+					this.set("prevNode", null);
+				}
+			});
+			aspect.before(domConstruct, "empty", check);
+			aspect.before(domConstruct, "destroy", check);
+		},
+
+		registerIframe: function(/*DomNode*/ iframe){
+			// summary:
+			//		Registers listeners on the specified iframe so that any click
+			//		or focus event on that iframe (or anything in it) is reported
+			//		as a focus/click event on the `<iframe>` itself.
+			// description:
+			//		Currently only used by editor.
+			// returns:
+			//		Handle with remove() method to deregister.
+			return this.registerWin(iframe.contentWindow, iframe);
+		},
+
+		registerWin: function(/*Window?*/targetWindow, /*DomNode?*/ effectiveNode){
+			// summary:
+			//		Registers listeners on the specified window (either the main
+			//		window or an iframe's window) to detect when the user has clicked somewhere
+			//		or focused somewhere.
+			// description:
+			//		Users should call registerIframe() instead of this method.
+			// targetWindow:
+			//		If specified this is the window associated with the iframe,
+			//		i.e. iframe.contentWindow.
+			// effectiveNode:
+			//		If specified, report any focus events inside targetWindow as
+			//		an event on effectiveNode, rather than on evt.target.
+			// returns:
+			//		Handle with remove() method to deregister.
+
+			// TODO: make this function private in 2.0; Editor/users should call registerIframe(),
+
+			// Listen for blur and focus events on targetWindow's document.
+			var _this = this,
+				body = targetWindow.document && targetWindow.document.body;
+
+			if(body){
+				// Listen for touches or mousedowns... could also use dojo/touch.press here.
+				var event = has("pointer-events") ? "pointerdown" : has("MSPointer") ? "MSPointerDown" :
+					has("touch-events") ? "mousedown, touchstart" : "mousedown";
+				var mdh = on(targetWindow.document, event, function(evt){
+					// workaround weird IE bug where the click is on an orphaned node
+					// (first time clicking a Select/DropDownButton inside a TooltipDialog).
+					// actually, strangely this is happening on latest chrome too.
+					if(evt && evt.target && evt.target.parentNode == null){
+						return;
+					}
+
+					_this._onTouchNode(effectiveNode || evt.target, "mouse");
+				});
+
+				var fih = on(body, 'focusin', function(evt){
+					// When you refocus the browser window, IE gives an event with an empty srcElement
+					if(!evt.target.tagName) { return; }
+
+					// IE reports that nodes like <body> have gotten focus, even though they have tabIndex=-1,
+					// ignore those events
+					var tag = evt.target.tagName.toLowerCase();
+					if(tag == "#document" || tag == "body"){ return; }
+
+					if(a11y.isFocusable(evt.target)){
+						_this._onFocusNode(effectiveNode || evt.target);
+					}else{
+						// Previous code called _onTouchNode() for any activate event on a non-focusable node.   Can
+						// probably just ignore such an event as it will be handled by onmousedown handler above, but
+						// leaving the code for now.
+						_this._onTouchNode(effectiveNode || evt.target);
+					}
+				});
+
+				var foh = on(body, 'focusout', function(evt){
+					_this._onBlurNode(effectiveNode || evt.target);
+				});
+
+				return {
+					remove: function(){
+						mdh.remove();
+						fih.remove();
+						foh.remove();
+						mdh = fih = foh = null;
+						body = null;	// prevent memory leak (apparent circular reference via closure)
+					}
+				};
+			}
+		},
+
+		_onBlurNode: function(/*DomNode*/ node){
+			// summary:
+			//		Called when focus leaves a node.
+			//		Usually ignored, _unless_ it *isn't* followed by touching another node,
+			//		which indicates that we tabbed off the last field on the page,
+			//		in which case every widget is marked inactive
+
+			var now = (new Date()).getTime();
+
+			// IE9+ and chrome have a problem where focusout events come after the corresponding focusin event.
+			// For chrome problem see https://bugs.dojotoolkit.org/ticket/17668.
+			// IE problem happens when moving focus from the Editor's <iframe> to a normal DOMNode.
+			if(now < lastFocusin + 100){
+				return;
+			}
+
+			// If the blur event isn't followed by a focus event, it means the user clicked on something unfocusable,
+			// so clear focus.
+			if(this._clearFocusTimer){
+				clearTimeout(this._clearFocusTimer);
+			}
+			this._clearFocusTimer = setTimeout(lang.hitch(this, function(){
+				this.set("prevNode", this.curNode);
+				this.set("curNode", null);
+			}), 0);
+
+			// Unset timer to zero-out widget stack; we'll reset it below if appropriate.
+			if(this._clearActiveWidgetsTimer){
+				clearTimeout(this._clearActiveWidgetsTimer);
+			}
+
+			if(now < lastTouchOrFocusin + 100){
+				// This blur event is coming late (after the call to _onTouchNode() rather than before.
+				// So let _onTouchNode() handle setting the widget stack.
+				// See https://bugs.dojotoolkit.org/ticket/17668
+				return;
+			}
+
+			// If the blur event isn't followed (or preceded) by a focus or touch event then mark all widgets as inactive.
+			this._clearActiveWidgetsTimer = setTimeout(lang.hitch(this, function(){
+				delete this._clearActiveWidgetsTimer;
+				this._setStack([]);
+			}), 0);
+		},
+
+		_onTouchNode: function(/*DomNode*/ node, /*String*/ by){
+			// summary:
+			//		Callback when node is focused or touched.
+			//		Note that _onFocusNode() calls _onTouchNode().
+			// node:
+			//		The node that was touched.
+			// by:
+			//		"mouse" if the focus/touch was caused by a mouse down event
+
+			// Keep track of time of last focusin or touch event.
+			lastTouchOrFocusin = (new Date()).getTime();
+
+			if(this._clearActiveWidgetsTimer){
+				// forget the recent blur event
+				clearTimeout(this._clearActiveWidgetsTimer);
+				delete this._clearActiveWidgetsTimer;
+			}
+
+			// if the click occurred on the scrollbar of a dropdown, treat it as a click on the dropdown,
+			// even though the scrollbar is technically on the popup wrapper (see #10631)
+			if(domClass.contains(node, "dijitPopup")){
+				node = node.firstChild;
+			}
+
+			// compute stack of active widgets (ex: ComboButton --> Menu --> MenuItem)
+			var newStack=[];
+			try{
+				while(node){
+					var popupParent = domAttr.get(node, "dijitPopupParent");
+					if(popupParent){
+						node=registry.byId(popupParent).domNode;
+					}else if(node.tagName && node.tagName.toLowerCase() == "body"){
+						// is this the root of the document or just the root of an iframe?
+						if(node === win.body()){
+							// node is the root of the main document
+							break;
+						}
+						// otherwise, find the iframe this node refers to (can't access it via parentNode,
+						// need to do this trick instead). window.frameElement is supported in IE/FF/Webkit
+						node=winUtils.get(node.ownerDocument).frameElement;
+					}else{
+						// if this node is the root node of a widget, then add widget id to stack,
+						// except ignore clicks on disabled widgets (actually focusing a disabled widget still works,
+						// to support MenuItem)
+						var id = node.getAttribute && node.getAttribute("widgetId"),
+							widget = id && registry.byId(id);
+						if(widget && !(by == "mouse" && widget.get("disabled"))){
+							newStack.unshift(id);
+						}
+						node=node.parentNode;
+					}
+				}
+			}catch(e){ /* squelch */ }
+
+			this._setStack(newStack, by);
+		},
+
+		_onFocusNode: function(/*DomNode*/ node){
+			// summary:
+			//		Callback when node is focused
+
+			if(!node){
+				return;
+			}
+
+			if(node.nodeType == 9){
+				// Ignore focus events on the document itself.  This is here so that
+				// (for example) clicking the up/down arrows of a spinner
+				// (which don't get focus) won't cause that widget to blur. (FF issue)
+				return;
+			}
+
+			// Keep track of time of last focusin event.
+			lastFocusin = (new Date()).getTime();
+
+			// There was probably a blur event right before this event, but since we have a new focus,
+			// forget about the blur
+			if(this._clearFocusTimer){
+				clearTimeout(this._clearFocusTimer);
+				delete this._clearFocusTimer;
+			}
+
+			this._onTouchNode(node);
+
+			if(node == this.curNode){ return; }
+			this.set("prevNode", this.curNode);
+			this.set("curNode", node);
+		},
+
+		_setStack: function(/*String[]*/ newStack, /*String*/ by){
+			// summary:
+			//		The stack of active widgets has changed.  Send out appropriate events and records new stack.
+			// newStack:
+			//		array of widget id's, starting from the top (outermost) widget
+			// by:
+			//		"mouse" if the focus/touch was caused by a mouse down event
+
+			var oldStack = this.activeStack, lastOldIdx = oldStack.length - 1, lastNewIdx = newStack.length - 1;
+
+			if(newStack[lastNewIdx] == oldStack[lastOldIdx]){
+				// no changes, return now to avoid spurious notifications about changes to activeStack
+				return;
+			}
+
+			this.set("activeStack", newStack);
+
+			var widget, i;
+
+			// for all elements that have gone out of focus, set focused=false
+			for(i = lastOldIdx; i >= 0 && oldStack[i] != newStack[i]; i--){
+				widget = registry.byId(oldStack[i]);
+				if(widget){
+					widget._hasBeenBlurred = true;		// TODO: used by form widgets, should be moved there
+					widget.set("focused", false);
+					if(widget._focusManager == this){
+						widget._onBlur(by);
+					}
+					this.emit("widget-blur", widget, by);
+				}
+			}
+
+			// for all element that have come into focus, set focused=true
+			for(i++; i <= lastNewIdx; i++){
+				widget = registry.byId(newStack[i]);
+				if(widget){
+					widget.set("focused", true);
+					if(widget._focusManager == this){
+						widget._onFocus(by);
+					}
+					this.emit("widget-focus", widget, by);
+				}
+			}
+		},
+
+		focus: function(node){
+			// summary:
+			//		Focus the specified node, suppressing errors if they occur
+			if(node){
+				try{ node.focus(); }catch(e){/*quiet*/}
+			}
+		}
+	});
+
+	var singleton = new FocusManager();
+
+	// register top window and all the iframes it contains
+	domReady(function(){
+		var handle = singleton.registerWin(winUtils.get(document));
+		if(has("ie")){
+			on(window, "unload", function(){
+				if(handle){	// because this gets called twice when doh.robot is running
+					handle.remove();
+					handle = null;
+				}
+			});
+		}
+	});
+
+	// Setup dijit.focus as a pointer to the singleton but also (for backwards compatibility)
+	// as a function to set focus.   Remove for 2.0.
+	dijit.focus = function(node){
+		singleton.focus(node);	// indirection here allows dijit/_base/focus.js to override behavior
+	};
+	for(var attr in singleton){
+		if(!/^_/.test(attr)){
+			dijit.focus[attr] = typeof singleton[attr] == "function" ? lang.hitch(singleton, attr) : singleton[attr];
+		}
+	}
+	singleton.watch(function(attr, oldVal, newVal){
+		dijit.focus[attr] = newVal;
+	});
+
+	return singleton;
+});
+},
+'dijit/_FocusMixin':function(){
+define([
+	"./focus",
+	"./_WidgetBase",
+	"dojo/_base/declare", // declare
+	"dojo/_base/lang" // lang.extend
+], function(focus, _WidgetBase, declare, lang){
+
+	// module:
+	//		dijit/_FocusMixin
+
+	// We don't know where _FocusMixin will occur in the inheritance chain, but we need the _onFocus()/_onBlur() below
+	// to be last in the inheritance chain, so mixin to _WidgetBase.
+	lang.extend(_WidgetBase, {
+		// focused: [readonly] Boolean
+		//		This widget or a widget it contains has focus, or is "active" because
+		//		it was recently clicked.
+		focused: false,
+
+		onFocus: function(){
+			// summary:
+			//		Called when the widget becomes "active" because
+			//		it or a widget inside of it either has focus, or has recently
+			//		been clicked.
+			// tags:
+			//		callback
+		},
+
+		onBlur: function(){
+			// summary:
+			//		Called when the widget stops being "active" because
+			//		focus moved to something outside of it, or the user
+			//		clicked somewhere outside of it, or the widget was
+			//		hidden.
+			// tags:
+			//		callback
+		},
+
+		_onFocus: function(){
+			// summary:
+			//		This is where widgets do processing for when they are active,
+			//		such as changing CSS classes.  See onFocus() for more details.
+			// tags:
+			//		protected
+			this.onFocus();
+		},
+
+		_onBlur: function(){
+			// summary:
+			//		This is where widgets do processing for when they stop being active,
+			//		such as changing CSS classes.  See onBlur() for more details.
+			// tags:
+			//		protected
+			this.onBlur();
+		}
+	});
+
+	return declare("dijit._FocusMixin", null, {
+		// summary:
+		//		Mixin to widget to provide _onFocus() and _onBlur() methods that
+		//		fire when a widget or its descendants get/lose focus
+
+		// flag that I want _onFocus()/_onBlur() notifications from focus manager
+		_focusManager: focus
+	});
+
+});
+},
+'dijit/hccss':function(){
+define(["dojo/dom-class", "dojo/hccss", "dojo/domReady", "dojo/_base/window"], function(domClass, has, domReady, win){
+
+	// module:
+	//		dijit/hccss
+
+	/*=====
+	return function(){
+		// summary:
+		//		Test if computer is in high contrast mode, and sets `dijit_a11y` flag on `<body>` if it is.
+		//		Deprecated, use ``dojo/hccss`` instead.
+	};
+	=====*/
+
+	domReady(function(){
+		if(has("highcontrast")){
+			domClass.add(win.body(), "dijit_a11y");
+		}
+	});
+
+	return has;
+});
+},
+'dijit/_Widget':function(){
+define([
+	"dojo/aspect",	// aspect.around
+	"dojo/_base/config",	// config.isDebug
+	"dojo/_base/connect",	// connect.connect
+	"dojo/_base/declare", // declare
+	"dojo/has",
+	"dojo/_base/kernel", // kernel.deprecated
+	"dojo/_base/lang", // lang.hitch
+	"dojo/query",
+	"dojo/ready",
+	"./registry",	// registry.byNode
+	"./_WidgetBase",
+	"./_OnDijitClickMixin",
+	"./_FocusMixin",
+	"dojo/uacss",		// browser sniffing (included for back-compat; subclasses may be using)
+	"./hccss"		// high contrast mode sniffing (included to set CSS classes on <body>, module ret value unused)
+], function(aspect, config, connect, declare, has, kernel, lang, query, ready,
+			registry, _WidgetBase, _OnDijitClickMixin, _FocusMixin){
+
+
+// module:
+//		dijit/_Widget
+
+
+function connectToDomNode(){
+	// summary:
+	//		If user connects to a widget method === this function, then they will
+	//		instead actually be connecting the equivalent event on this.domNode
+}
+
+// Trap dojo.connect() calls to connectToDomNode methods, and redirect to _Widget.on()
+function aroundAdvice(originalConnect){
+	return function(obj, event, scope, method){
+		if(obj && typeof event == "string" && obj[event] == connectToDomNode){
+			return obj.on(event.substring(2).toLowerCase(), lang.hitch(scope, method));
+		}
+		return originalConnect.apply(connect, arguments);
+	};
+}
+aspect.around(connect, "connect", aroundAdvice);
+if(kernel.connect){
+	aspect.around(kernel, "connect", aroundAdvice);
+}
+
+var _Widget = declare("dijit._Widget", [_WidgetBase, _OnDijitClickMixin, _FocusMixin], {
+	// summary:
+	//		Old base class for widgets.   New widgets should extend `dijit/_WidgetBase` instead
+	// description:
+	//		Old Base class for Dijit widgets.
+	//
+	//		Extends _WidgetBase, adding support for:
+	//
+	//		- declaratively/programatically specifying widget initialization parameters like
+	//			onMouseMove="foo" that call foo when this.domNode gets a mousemove event
+	//		- ondijitclick:
+	//			Support new data-dojo-attach-event="ondijitclick: ..." that is triggered by a mouse click or a SPACE/ENTER keypress
+	//		- focus related functions:
+	//			In particular, the onFocus()/onBlur() callbacks.   Driven internally by
+	//			dijit/_base/focus.js.
+	//		- deprecated methods
+	//		- onShow(), onHide(), onClose()
+	//
+	//		Also, by loading code in dijit/_base, turns on:
+	//
+	//		- browser sniffing (putting browser class like `dj_ie` on `<html>` node)
+	//		- high contrast mode sniffing (add `dijit_a11y` class to `<body>` if machine is in high contrast mode)
+
+
+	////////////////// DEFERRED CONNECTS ///////////////////
+
+	onClick: connectToDomNode,
+	/*=====
+	onClick: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of mouse click events.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onDblClick: connectToDomNode,
+	/*=====
+	onDblClick: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of mouse double click events.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onKeyDown: connectToDomNode,
+	/*=====
+	onKeyDown: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of keys being pressed down.
+		// event:
+		//		key Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onKeyPress: connectToDomNode,
+	/*=====
+	onKeyPress: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of printable keys being typed.
+		// event:
+		//		key Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onKeyUp: connectToDomNode,
+	/*=====
+	onKeyUp: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of keys being released.
+		// event:
+		//		key Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseDown: connectToDomNode,
+	/*=====
+	onMouseDown: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse button is pressed down.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseMove: connectToDomNode,
+	/*=====
+	onMouseMove: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse moves over nodes contained within this widget.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseOut: connectToDomNode,
+	/*=====
+	onMouseOut: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse moves off of nodes contained within this widget.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseOver: connectToDomNode,
+	/*=====
+	onMouseOver: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse moves onto nodes contained within this widget.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseLeave: connectToDomNode,
+	/*=====
+	onMouseLeave: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse moves off of this widget.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseEnter: connectToDomNode,
+	/*=====
+	onMouseEnter: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse moves onto this widget.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+	onMouseUp: connectToDomNode,
+	/*=====
+	onMouseUp: function(event){
+		// summary:
+		//		Connect to this function to receive notifications of when the mouse button is released.
+		// event:
+		//		mouse Event
+		// tags:
+		//		callback
+	},
+	=====*/
+
+	constructor: function(params /*===== ,srcNodeRef =====*/){
+		// summary:
+		//		Create the widget.
+		// params: Object|null
+		//		Hash of initialization parameters for widget, including scalar values (like title, duration etc.)
+		//		and functions, typically callbacks like onClick.
+		//		The hash can contain any of the widget's properties, excluding read-only properties.
+		// srcNodeRef: DOMNode|String?
+		//		If a srcNodeRef (DOM node) is specified:
+		//
+		//		- use srcNodeRef.innerHTML as my contents
+		//		- if this is a behavioral widget then apply behavior to that srcNodeRef
+		//		- otherwise, replace srcNodeRef with my generated DOM tree
+
+		// extract parameters like onMouseMove that should connect directly to this.domNode
+		this._toConnect = {};
+		for(var name in params){
+			if(this[name] === connectToDomNode){
+				this._toConnect[name.replace(/^on/, "").toLowerCase()] = params[name];
+				delete params[name];
+			}
+		}
+	},
+
+	postCreate: function(){
+		this.inherited(arguments);
+
+		// perform connection from this.domNode to user specified handlers (ex: onMouseMove)
+		for(var name in this._toConnect){
+			this.on(name, this._toConnect[name]);
+		}
+		delete this._toConnect;
+	},
+
+	on: function(/*String|Function*/ type, /*Function*/ func){
+		if(this[this._onMap(type)] === connectToDomNode){
+			// Use connect.connect() rather than on() to get handling for "onmouseenter" on non-IE,
+			// normalization of onkeypress/onkeydown to behave like firefox, etc.
+			// Also, need to specify context as "this" rather than the default context of the DOMNode
+			// Remove in 2.0.
+			return connect.connect(this.domNode, type.toLowerCase(), this, func);
+		}
+		return this.inherited(arguments);
+	},
+
+	_setFocusedAttr: function(val){
+		// Remove this method in 2.0 (or sooner), just here to set _focused == focused, for back compat
+		// (but since it's a private variable we aren't required to keep supporting it).
+		this._focused = val;
+		this._set("focused", val);
+	},
+
+	////////////////// DEPRECATED METHODS ///////////////////
+
+	setAttribute: function(/*String*/ attr, /*anything*/ value){
+		// summary:
+		//		Deprecated.  Use set() instead.
+		// tags:
+		//		deprecated
+		kernel.deprecated(this.declaredClass+"::setAttribute(attr, value) is deprecated. Use set() instead.", "", "2.0");
+		this.set(attr, value);
+	},
+
+	attr: function(/*String|Object*/name, /*Object?*/value){
+		// summary:
+		//		This method is deprecated, use get() or set() directly.
+		// name:
+		//		The property to get or set. If an object is passed here and not
+		//		a string, its keys are used as names of attributes to be set
+		//		and the value of the object as values to set in the widget.
+		// value:
+		//		Optional. If provided, attr() operates as a setter. If omitted,
+		//		the current value of the named property is returned.
+		// tags:
+		//		deprecated
+
+		var args = arguments.length;
+		if(args >= 2 || typeof name === "object"){ // setter
+			return this.set.apply(this, arguments);
+		}else{ // getter
+			return this.get(name);
+		}
+	},
+
+	getDescendants: function(){
+		// summary:
+		//		Returns all the widgets contained by this, i.e., all widgets underneath this.containerNode.
+		//		This method should generally be avoided as it returns widgets declared in templates, which are
+		//		supposed to be internal/hidden, but it's left here for back-compat reasons.
+
+		kernel.deprecated(this.declaredClass+"::getDescendants() is deprecated. Use getChildren() instead.", "", "2.0");
+		return this.containerNode ? query('[widgetId]', this.containerNode).map(registry.byNode) : []; // dijit/_WidgetBase[]
+	},
+
+	////////////////// MISCELLANEOUS METHODS ///////////////////
+
+	_onShow: function(){
+		// summary:
+		//		Internal method called when this widget is made visible.
+		//		See `onShow` for details.
+		this.onShow();
+	},
+
+	onShow: function(){
+		// summary:
+		//		Called when this widget becomes the selected pane in a
+		//		`dijit/layout/TabContainer`, `dijit/layout/StackContainer`,
+		//		`dijit/layout/AccordionContainer`, etc.
+		//
+		//		Also called to indicate display of a `dijit.Dialog`, `dijit.TooltipDialog`, or `dijit.TitlePane`.
+		// tags:
+		//		callback
+	},
+
+	onHide: function(){
+		// summary:
+		//		Called when another widget becomes the selected pane in a
+		//		`dijit/layout/TabContainer`, `dijit/layout/StackContainer`,
+		//		`dijit/layout/AccordionContainer`, etc.
+		//
+		//		Also called to indicate hide of a `dijit.Dialog`, `dijit.TooltipDialog`, or `dijit.TitlePane`.
+		// tags:
+		//		callback
+	},
+
+	onClose: function(){
+		// summary:
+		//		Called when this widget is being displayed as a popup (ex: a Calendar popped
+		//		up from a DateTextBox), and it is hidden.
+		//		This is called from the dijit.popup code, and should not be called directly.
+		//
+		//		Also used as a parameter for children of `dijit/layout/StackContainer` or subclasses.
+		//		Callback if a user tries to close the child.   Child will be closed if this function returns true.
+		// tags:
+		//		extension
+
+		return true;		// Boolean
+	}
+});
+
+// For back-compat, remove in 2.0.
+if(has("dijit-legacy-requires")){
+	ready(0, function(){
+		var requires = ["dijit/_base"];
+		require(requires);	// use indirection so modules not rolled into a build
+	});
+}
+return _Widget;
+});
+},
+'dijit/_AttachMixin':function(){
+define([
+	"require",
+	"dojo/_base/array", // array.forEach
+	"dojo/_base/connect",	// remove for 2.0
+	"dojo/_base/declare", // declare
+	"dojo/_base/lang", // lang.getObject
+	"dojo/mouse",
+	"dojo/on",
+	"dojo/touch",
+	"./_WidgetBase"
+], function(require, array, connect, declare, lang, mouse, on, touch, _WidgetBase){
+
+	// module:
+	//		dijit/_AttachMixin
+
+	// Map from string name like "mouseenter" to synthetic event like mouse.enter
+	var synthEvents = lang.delegate(touch, {
+		"mouseenter": mouse.enter,
+		"mouseleave": mouse.leave,
+		"keypress": connect._keypress	// remove for 2.0
+	});
+
+	// To be lightweight, _AttachMixin doesn't require() dijit/a11yclick.
+	// If the subclass has a template using "ondijitclick", it must load dijit/a11yclick itself.
+	// In that case, the a11yclick variable below will get set to point to that synthetic event.
+	var a11yclick;
+
+	var _AttachMixin = declare("dijit._AttachMixin", null, {
+		// summary:
+		//		Mixin for widgets to attach to dom nodes and setup events via
+		//		convenient data-dojo-attach-point and data-dojo-attach-event DOM attributes.
+		//
+		//		Superclass of _TemplatedMixin, and can also be used standalone when templates are pre-rendered on the
+		//		server.
+		//
+		//		Does not [yet] handle widgets like ContentPane with this.containerNode set.   It should skip
+		//		scanning for data-dojo-attach-point and data-dojo-attach-event inside this.containerNode, but it
+		//		doesn't.
+
+/*=====
+		// _attachPoints: [private] String[]
+		//		List of widget attribute names associated with data-dojo-attach-point=... in the
+		//		template, ex: ["containerNode", "labelNode"]
+		_attachPoints: [],
+
+		// _attachEvents: [private] Handle[]
+		//		List of connections associated with data-dojo-attach-event=... in the
+		//		template
+		_attachEvents: [],
+
+		// attachScope: [public] Object
+		//		Object to which attach points and events will be scoped.  Defaults
+		//		to 'this'.
+		attachScope: undefined,
+
+		// searchContainerNode: [protected] Boolean
+		//		Search descendants of this.containerNode for data-dojo-attach-point and data-dojo-attach-event.
+		//		Should generally be left false (the default value) both for performance and to avoid failures when
+		//		this.containerNode holds other _AttachMixin instances with their own attach points and events.
+ 		searchContainerNode: false,
+ =====*/
+
+		constructor: function(/*===== params, srcNodeRef =====*/){
+			// summary:
+			//		Create the widget.
+			// params: Object|null
+			//		Hash of initialization parameters for widget, including scalar values (like title, duration etc.)
+			//		and functions, typically callbacks like onClick.
+			//		The hash can contain any of the widget's properties, excluding read-only properties.
+			// srcNodeRef: DOMNode|String?
+			//		If a srcNodeRef (DOM node) is specified, replace srcNodeRef with my generated DOM tree.
+
+			this._attachPoints = [];
+			this._attachEvents = [];
+		},
+
+
+		buildRendering: function(){
+			// summary:
+			//		Attach to DOM nodes marked with special attributes.
+			// tags:
+			//		protected
+
+			this.inherited(arguments);
+
+			// recurse through the node, looking for, and attaching to, our
+			// attachment points and events, which should be defined on the template node.
+			this._attachTemplateNodes(this.domNode);
+
+			this._beforeFillContent();		// hook for _WidgetsInTemplateMixin
+		},
+
+		_beforeFillContent: function(){
+		},
+
+		_attachTemplateNodes: function(rootNode){
+			// summary:
+			//		Iterate through the dom nodes and attach functions and nodes accordingly.
+			// description:
+			//		Map widget properties and functions to the handlers specified in
+			//		the dom node and it's descendants. This function iterates over all
+			//		nodes and looks for these properties:
+			//
+			//		- dojoAttachPoint/data-dojo-attach-point
+			//		- dojoAttachEvent/data-dojo-attach-event
+			// rootNode: DomNode
+			//		The node to search for properties. All descendants will be searched.
+			// tags:
+			//		private
+
+			// DFS to process all nodes except those inside of this.containerNode
+			var node = rootNode;
+			while(true){
+				if(node.nodeType == 1 && (this._processTemplateNode(node, function(n,p){ return n.getAttribute(p); },
+						this._attach) || this.searchContainerNode) && node.firstChild){
+					node = node.firstChild;
+				}else{
+					if(node == rootNode){ return; }
+					while(!node.nextSibling){
+						node = node.parentNode;
+						if(node == rootNode){ return; }
+					}
+					node = node.nextSibling;
+				}
+			}
+		},
+
+		_processTemplateNode: function(/*DOMNode|Widget*/ baseNode, getAttrFunc, attachFunc){
+			// summary:
+			//		Process data-dojo-attach-point and data-dojo-attach-event for given node or widget.
+			//		Returns true if caller should process baseNode's children too.
+
+			var ret = true;
+
+			// Process data-dojo-attach-point
+			var _attachScope = this.attachScope || this,
+				attachPoint = getAttrFunc(baseNode, "dojoAttachPoint") || getAttrFunc(baseNode, "data-dojo-attach-point");
+			if(attachPoint){
+				var point, points = attachPoint.split(/\s*,\s*/);
+				while((point = points.shift())){
+					if(lang.isArray(_attachScope[point])){
+						_attachScope[point].push(baseNode);
+					}else{
+						_attachScope[point] = baseNode;
+					}
+					ret = (point != "containerNode");
+					this._attachPoints.push(point);
+				}
+			}
+
+			// Process data-dojo-attach-event
+			var attachEvent = getAttrFunc(baseNode, "dojoAttachEvent") || getAttrFunc(baseNode, "data-dojo-attach-event");
+			if(attachEvent){
+				// NOTE: we want to support attributes that have the form
+				// "domEvent: nativeEvent; ..."
+				var event, events = attachEvent.split(/\s*,\s*/);
+				var trim = lang.trim;
+				while((event = events.shift())){
+					if(event){
+						var thisFunc = null;
+						if(event.indexOf(":") != -1){
+							// oh, if only JS had tuple assignment
+							var funcNameArr = event.split(":");
+							event = trim(funcNameArr[0]);
+							thisFunc = trim(funcNameArr[1]);
+						}else{
+							event = trim(event);
+						}
+						if(!thisFunc){
+							thisFunc = event;
+						}
+
+						this._attachEvents.push(attachFunc(baseNode, event, lang.hitch(_attachScope, thisFunc)));
+					}
+				}
+			}
+
+			return ret;
+		},
+
+		_attach: function(node, type, func){
+			// summary:
+			//		Roughly corresponding to dojo/on, this is the default function for processing a
+			//		data-dojo-attach-event.  Meant to attach to DOMNodes, not to widgets.
+			// node: DOMNode
+			//		The node to setup a listener on.
+			// type: String
+			//		Event name like "click".
+			// getAttrFunc: Function
+			//		Function to get the specified property for a given DomNode/Widget.
+			// attachFunc: Function?
+			//		Attaches an event handler from the specified node/widget to specified function.
+
+			// Map special type names like "mouseenter" to synthetic events.
+			// Subclasses are responsible to require() dijit/a11yclick if they want to use it.
+			type = type.replace(/^on/, "").toLowerCase();
+			if(type == "dijitclick"){
+				type = a11yclick || (a11yclick = require("./a11yclick"));
+			}else{
+				type = synthEvents[type] || type;
+			}
+
+			return on(node, type, func);
+		},
+
+		_detachTemplateNodes: function() {
+			// summary:
+			//		Detach and clean up the attachments made in _attachtempalteNodes.
+
+			// Delete all attach points to prevent IE6 memory leaks.
+			var _attachScope = this.attachScope || this;
+			array.forEach(this._attachPoints, function(point){
+				delete _attachScope[point];
+			});
+			this._attachPoints = [];
+
+			// And same for event handlers
+			array.forEach(this._attachEvents, function(handle){ handle.remove(); });
+			this._attachEvents = [];
+		},
+
+		destroyRendering: function(){
+			this._detachTemplateNodes();
+			this.inherited(arguments);
+		}
+	});
+
+	// These arguments can be specified for widgets which are used in templates.
+	// Since any widget can be specified as sub widgets in template, mix it
+	// into the base widget class.  (This is a hack, but it's effective.).
+	// Remove for 2.0.   Also, hide from API doc parser.
+	lang.extend(_WidgetBase, /*===== {} || =====*/ {
+		dojoAttachEvent: "",
+		dojoAttachPoint: ""
+	});
+	
+	return _AttachMixin;
+});
+},
+'dijit/_TemplatedMixin':function(){
+define([
+	"dojo/cache",	// dojo.cache
+	"dojo/_base/declare", // declare
+	"dojo/dom-construct", // domConstruct.destroy, domConstruct.toDom
+	"dojo/_base/lang", // lang.getObject
+	"dojo/on",
+	"dojo/sniff", // has("ie")
+	"dojo/string", // string.substitute string.trim
+	"./_AttachMixin"
+], function(cache, declare, domConstruct, lang, on, has, string, _AttachMixin){
+
+	// module:
+	//		dijit/_TemplatedMixin
+
+	var _TemplatedMixin = declare("dijit._TemplatedMixin", _AttachMixin, {
+		// summary:
+		//		Mixin for widgets that are instantiated from a template
+
+		// templateString: [protected] String
+		//		A string that represents the widget template.
+		//		Use in conjunction with dojo.cache() to load from a file.
+		templateString: null,
+
+		// templatePath: [protected deprecated] String
+		//		Path to template (HTML file) for this widget relative to dojo.baseUrl.
+		//		Deprecated: use templateString with require([... "dojo/text!..."], ...) instead
+		templatePath: null,
+
+		// skipNodeCache: [protected] Boolean
+		//		If using a cached widget template nodes poses issues for a
+		//		particular widget class, it can set this property to ensure
+		//		that its template is always re-built from a string
+		_skipNodeCache: false,
+
+/*=====
+		// _rendered: Boolean
+		//		Not normally use, but this flag can be set by the app if the server has already rendered the template,
+		//		i.e. already inlining the template for the widget into the main page.   Reduces _TemplatedMixin to
+		//		just function like _AttachMixin.
+		_rendered: false,
+=====*/
+
+		// Set _AttachMixin.searchContainerNode to true for back-compat for widgets that have data-dojo-attach-point's
+		// and events inside this.containerNode.   Remove for 2.0.
+		searchContainerNode: true,
+
+		_stringRepl: function(tmpl){
+			// summary:
+			//		Does substitution of ${foo} type properties in template string
+			// tags:
+			//		private
+			var className = this.declaredClass, _this = this;
+			// Cache contains a string because we need to do property replacement
+			// do the property replacement
+			return string.substitute(tmpl, this, function(value, key){
+				if(key.charAt(0) == '!'){ value = lang.getObject(key.substr(1), false, _this); }
+				if(typeof value == "undefined"){ throw new Error(className+" template:"+key); } // a debugging aide
+				if(value == null){ return ""; }
+
+				// Substitution keys beginning with ! will skip the transform step,
+				// in case a user wishes to insert unescaped markup, e.g. ${!foo}
+				return key.charAt(0) == "!" ? value : this._escapeValue("" + value);
+			}, this);
+		},
+
+		_escapeValue: function(/*String*/ val){
+			// summary:
+			//		Escape a value to be inserted into the template, either into an attribute value
+			//		(ex: foo="${bar}") or as inner text of an element (ex: <span>${foo}</span>)
+
+			// Safer substitution, see heading "Attribute values" in
+			// http://www.w3.org/TR/REC-html40/appendix/notes.html#h-B.3.2
+			// and also https://www.owasp.org/index.php/XSS_%28Cross_Site_Scripting%29_Prevention_Cheat_Sheet#RULE_.231_-_HTML_Escape_Before_Inserting_Untrusted_Data_into_HTML_Element_Content
+			return val.replace(/["'<>&]/g, function(val){
+				return {
+					"&": "&amp;",
+					"<": "&lt;",
+					">": "&gt;",
+					"\"": "&quot;",
+					"'": "&#x27;"
+				}[val];
+			});
+		},
+
+		buildRendering: function(){
+			// summary:
+			//		Construct the UI for this widget from a template, setting this.domNode.
+			// tags:
+			//		protected
+
+			if(!this._rendered){
+				if(!this.templateString){
+					this.templateString = cache(this.templatePath, {sanitize: true});
+				}
+
+				// Lookup cached version of template, and download to cache if it
+				// isn't there already.  Returns either a DomNode or a string, depending on
+				// whether or not the template contains ${foo} replacement parameters.
+				var cached = _TemplatedMixin.getCachedTemplate(this.templateString, this._skipNodeCache, this.ownerDocument);
+
+				var node;
+				if(lang.isString(cached)){
+					node = domConstruct.toDom(this._stringRepl(cached), this.ownerDocument);
+					if(node.nodeType != 1){
+						// Flag common problems such as templates with multiple top level nodes (nodeType == 11)
+						throw new Error("Invalid template: " + cached);
+					}
+				}else{
+					// if it's a node, all we have to do is clone it
+					node = cached.cloneNode(true);
+				}
+
+				this.domNode = node;
+			}
+
+			// Call down to _WidgetBase.buildRendering() to get base classes assigned
+			// TODO: change the baseClass assignment to _setBaseClassAttr
+			this.inherited(arguments);
+
+			if(!this._rendered){
+				this._fillContent(this.srcNodeRef);
+			}
+
+			this._rendered = true;
+		},
+
+		_fillContent: function(/*DomNode*/ source){
+			// summary:
+			//		Relocate source contents to templated container node.
+			//		this.containerNode must be able to receive children, or exceptions will be thrown.
+			// tags:
+			//		protected
+			var dest = this.containerNode;
+			if(source && dest){
+				while(source.hasChildNodes()){
+					dest.appendChild(source.firstChild);
+				}
+			}
+		}
+
+	});
+
+	// key is templateString; object is either string or DOM tree
+	_TemplatedMixin._templateCache = {};
+
+	_TemplatedMixin.getCachedTemplate = function(templateString, alwaysUseString, doc){
+		// summary:
+		//		Static method to get a template based on the templatePath or
+		//		templateString key
+		// templateString: String
+		//		The template
+		// alwaysUseString: Boolean
+		//		Don't cache the DOM tree for this template, even if it doesn't have any variables
+		// doc: Document?
+		//		The target document.   Defaults to document global if unspecified.
+		// returns: Mixed
+		//		Either string (if there are ${} variables that need to be replaced) or just
+		//		a DOM tree (if the node can be cloned directly)
+
+		// is it already cached?
+		var tmplts = _TemplatedMixin._templateCache;
+		var key = templateString;
+		var cached = tmplts[key];
+		if(cached){
+			try{
+				// if the cached value is an innerHTML string (no ownerDocument) or a DOM tree created within the
+				// current document, then use the current cached value
+				if(!cached.ownerDocument || cached.ownerDocument == (doc || document)){
+					// string or node of the same document
+					return cached;
+				}
+			}catch(e){ /* squelch */ } // IE can throw an exception if cached.ownerDocument was reloaded
+			domConstruct.destroy(cached);
+		}
+
+		templateString = string.trim(templateString);
+
+		if(alwaysUseString || templateString.match(/\$\{([^\}]+)\}/g)){
+			// there are variables in the template so all we can do is cache the string
+			return (tmplts[key] = templateString); //String
+		}else{
+			// there are no variables in the template so we can cache the DOM tree
+			var node = domConstruct.toDom(templateString, doc);
+			if(node.nodeType != 1){
+				throw new Error("Invalid template: " + templateString);
+			}
+			return (tmplts[key] = node); //Node
+		}
+	};
+
+	if(has("ie")){
+		on(window, "unload", function(){
+			var cache = _TemplatedMixin._templateCache;
+			for(var key in cache){
+				var value = cache[key];
+				if(typeof value == "object"){ // value is either a string or a DOM node template
+					domConstruct.destroy(value);
+				}
+				delete cache[key];
+			}
+		});
+	}
+
+	return _TemplatedMixin;
+});
+},
+'dijit/BackgroundIframe':function(){
+define([
+	"require",			// require.toUrl
+	"./main",	// to export dijit.BackgroundIframe
+	"dojo/_base/config",
+	"dojo/dom-construct", // domConstruct.create
+	"dojo/dom-style", // domStyle.set
+	"dojo/_base/lang", // lang.extend lang.hitch
+	"dojo/on",
+	"dojo/sniff" // has("ie"), has("trident"), has("quirks")
+], function(require, dijit, config, domConstruct, domStyle, lang, on, has){
+
+	// module:
+	//		dijit/BackgroundIFrame
+
+	// Flag for whether to create background iframe behind popups like Menus and Dialog.
+	// A background iframe is useful to prevent problems with popups appearing behind applets/pdf files,
+	// and is also useful on older versions of IE (IE6 and IE7) to prevent the "bleed through select" problem.
+	// By default, it's enabled for IE6-10, excluding Windows Phone 8,
+	// and it's also enabled for IE11 on Windows 7 and Windows 2008 Server.
+	// TODO: For 2.0, make this false by default.  Also, possibly move definition to has.js so that this module can be
+	// conditionally required via  dojo/has!bgIfame?dijit/BackgroundIframe
+	has.add("config-bgIframe",
+		(has("ie") && !/IEMobile\/10\.0/.test(navigator.userAgent)) || // No iframe on WP8, to match 1.9 behavior
+		(has("trident") && /Windows NT 6.[01]/.test(navigator.userAgent)));
+
+	var _frames = new function(){
+		// summary:
+		//		cache of iframes
+
+		var queue = [];
+
+		this.pop = function(){
+			var iframe;
+			if(queue.length){
+				iframe = queue.pop();
+				iframe.style.display="";
+			}else{
+				// transparency needed for DialogUnderlay and for tooltips on IE (to see screen near connector)
+				if(has("ie") < 9){
+					var burl = config["dojoBlankHtmlUrl"] || require.toUrl("dojo/resources/blank.html") || "javascript:\"\"";
+					var html="<iframe src='" + burl + "' role='presentation'"
+						+ " style='position: absolute; left: 0px; top: 0px;"
+						+ "z-index: -1; filter:Alpha(Opacity=\"0\");'>";
+					iframe = document.createElement(html);
+				}else{
+					iframe = domConstruct.create("iframe");
+					iframe.src = 'javascript:""';
+					iframe.className = "dijitBackgroundIframe";
+					iframe.setAttribute("role", "presentation");
+					domStyle.set(iframe, "opacity", 0.1);
+				}
+				iframe.tabIndex = -1; // Magic to prevent iframe from getting focus on tab keypress - as style didn't work.
+			}
+			return iframe;
+		};
+
+		this.push = function(iframe){
+			iframe.style.display="none";
+			queue.push(iframe);
+		}
+	}();
+
+
+	dijit.BackgroundIframe = function(/*DomNode*/ node){
+		// summary:
+		//		For IE/FF z-index shenanigans. id attribute is required.
+		//
+		// description:
+		//		new dijit.BackgroundIframe(node).
+		//
+		//		Makes a background iframe as a child of node, that fills
+		//		area (and position) of node
+
+		if(!node.id){ throw new Error("no id"); }
+		if(has("config-bgIframe")){
+			var iframe = (this.iframe = _frames.pop());
+			node.appendChild(iframe);
+			if(has("ie")<7 || has("quirks")){
+				this.resize(node);
+				this._conn = on(node, 'resize', lang.hitch(this, "resize", node));
+			}else{
+				domStyle.set(iframe, {
+					width: '100%',
+					height: '100%'
+				});
+			}
+		}
+	};
+
+	lang.extend(dijit.BackgroundIframe, {
+		resize: function(node){
+			// summary:
+			//		Resize the iframe so it's the same size as node.
+			//		Needed on IE6 and IE/quirks because height:100% doesn't work right.
+			if(this.iframe){
+				domStyle.set(this.iframe, {
+					width: node.offsetWidth + 'px',
+					height: node.offsetHeight + 'px'
+				});
+			}
+		},
+		destroy: function(){
+			// summary:
+			//		destroy the iframe
+			if(this._conn){
+				this._conn.remove();
+				this._conn = null;
+			}
+			if(this.iframe){
+				this.iframe.parentNode.removeChild(this.iframe);
+				_frames.push(this.iframe);
+				delete this.iframe;
+			}
+		}
+	});
+
+	return dijit.BackgroundIframe;
+});
+},
+'dijit/Tooltip':function(){
+define([
+	"dojo/_base/array", // array.forEach array.indexOf array.map
+	"dojo/_base/declare", // declare
+	"dojo/_base/fx", // fx.fadeIn fx.fadeOut
+	"dojo/dom", // dom.byId
+	"dojo/dom-class", // domClass.add
+	"dojo/dom-geometry", // domGeometry.position
+	"dojo/dom-style", // domStyle.set, domStyle.get
+	"dojo/_base/lang", // lang.hitch lang.isArrayLike
+	"dojo/mouse",
+	"dojo/on",
+	"dojo/sniff", // has("ie"), has("trident")
+	"./_base/manager",	// manager.defaultDuration
+	"./place",
+	"./_Widget",
+	"./_TemplatedMixin",
+	"./BackgroundIframe",
+	"dojo/text!./templates/Tooltip.html",
+	"./main"		// sets dijit.showTooltip etc. for back-compat
+], function(array, declare, fx, dom, domClass, domGeometry, domStyle, lang, mouse, on, has,
+			manager, place, _Widget, _TemplatedMixin, BackgroundIframe, template, dijit){
+
+	// module:
+	//		dijit/Tooltip
+
+
+	// TODO: Tooltip should really share more positioning code with TooltipDialog, like:
+	//		- the orient() method
+	//		- the connector positioning code in show()
+	//		- the dijitTooltip[Dialog] class
+	//
+	// The problem is that Tooltip's implementation supplies it's own <iframe> and interacts directly
+	// with dijit/place, rather than going through dijit/popup like TooltipDialog and other popups (ex: Menu).
+
+	var MasterTooltip = declare("dijit._MasterTooltip", [_Widget, _TemplatedMixin], {
+		// summary:
+		//		Internal widget that holds the actual tooltip markup,
+		//		which occurs once per page.
+		//		Called by Tooltip widgets which are just containers to hold
+		//		the markup
+		// tags:
+		//		protected
+
+		// duration: Integer
+		//		Milliseconds to fade in/fade out
+		duration: manager.defaultDuration,
+
+		templateString: template,
+
+		postCreate: function(){
+			this.ownerDocumentBody.appendChild(this.domNode);
+
+			this.bgIframe = new BackgroundIframe(this.domNode);
+
+			// Setup fade-in and fade-out functions.
+			this.fadeIn = fx.fadeIn({ node: this.domNode, duration: this.duration, onEnd: lang.hitch(this, "_onShow") });
+			this.fadeOut = fx.fadeOut({ node: this.domNode, duration: this.duration, onEnd: lang.hitch(this, "_onHide") });
+		},
+
+		show: function(innerHTML, aroundNode, position, rtl, textDir, onMouseEnter, onMouseLeave){
+			// summary:
+			//		Display tooltip w/specified contents to right of specified node
+			//		(To left if there's no space on the right, or if rtl == true)
+			// innerHTML: String
+			//		Contents of the tooltip
+			// aroundNode: DomNode|dijit/place.__Rectangle
+			//		Specifies that tooltip should be next to this node / area
+			// position: String[]?
+			//		List of positions to try to position tooltip (ex: ["right", "above"])
+			// rtl: Boolean?
+			//		Corresponds to `WidgetBase.dir` attribute, where false means "ltr" and true
+			//		means "rtl"; specifies GUI direction, not text direction.
+			// textDir: String?
+			//		Corresponds to `WidgetBase.textdir` attribute; specifies direction of text.
+			// onMouseEnter: Function?
+			//		Callback function for mouse enter on tooltip
+			// onMouseLeave: Function?
+			//		Callback function for mouse leave on tooltip
+
+			if(this.aroundNode && this.aroundNode === aroundNode && this.containerNode.innerHTML == innerHTML){
+				return;
+			}
+
+			if(this.fadeOut.status() == "playing"){
+				// previous tooltip is being hidden; wait until the hide completes then show new one
+				this._onDeck=arguments;
+				return;
+			}
+			this.containerNode.innerHTML=innerHTML;
+
+			if(textDir){
+				this.set("textDir", textDir);
+			}
+
+			this.containerNode.align = rtl? "right" : "left"; //fix the text alignment
+
+			var pos = place.around(this.domNode, aroundNode,
+				position && position.length ? position : Tooltip.defaultPosition, !rtl, lang.hitch(this, "orient"));
+
+			// Position the tooltip connector for middle alignment.
+			// This could not have been done in orient() since the tooltip wasn't positioned at that time.
+			var aroundNodeCoords = pos.aroundNodePos;
+			if(pos.corner.charAt(0) == 'M' && pos.aroundCorner.charAt(0) == 'M'){
+				this.connectorNode.style.top = aroundNodeCoords.y + ((aroundNodeCoords.h - this.connectorNode.offsetHeight) >> 1) - pos.y + "px";
+				this.connectorNode.style.left = "";
+			}else if(pos.corner.charAt(1) == 'M' && pos.aroundCorner.charAt(1) == 'M'){
+				this.connectorNode.style.left = aroundNodeCoords.x + ((aroundNodeCoords.w - this.connectorNode.offsetWidth) >> 1) - pos.x + "px";
+			}else{
+				// Not *-centered, but just above/below/after/before
+				this.connectorNode.style.left = "";
+				this.connectorNode.style.top = "";
+			}
+
+			// show it
+			domStyle.set(this.domNode, "opacity", 0);
+			this.fadeIn.play();
+			this.isShowingNow = true;
+			this.aroundNode = aroundNode;
+
+			this.onMouseEnter = onMouseEnter || noop;
+			this.onMouseLeave = onMouseLeave || noop;
+		},
+
+		orient: function(/*DomNode*/ node, /*String*/ aroundCorner, /*String*/ tooltipCorner, /*Object*/ spaceAvailable, /*Object*/ aroundNodeCoords){
+			// summary:
+			//		Private function to set CSS for tooltip node based on which position it's in.
+			//		This is called by the dijit popup code.   It will also reduce the tooltip's
+			//		width to whatever width is available
+			// tags:
+			//		protected
+
+			this.connectorNode.style.top = ""; //reset to default
+
+			var heightAvailable = spaceAvailable.h,
+				widthAvailable = spaceAvailable.w;
+
+			node.className = "dijitTooltip " +
+				{
+					"MR-ML": "dijitTooltipRight",
+					"ML-MR": "dijitTooltipLeft",
+					"TM-BM": "dijitTooltipAbove",
+					"BM-TM": "dijitTooltipBelow",
+					"BL-TL": "dijitTooltipBelow dijitTooltipABLeft",
+					"TL-BL": "dijitTooltipAbove dijitTooltipABLeft",
+					"BR-TR": "dijitTooltipBelow dijitTooltipABRight",
+					"TR-BR": "dijitTooltipAbove dijitTooltipABRight",
+					"BR-BL": "dijitTooltipRight",
+					"BL-BR": "dijitTooltipLeft"
+				}[aroundCorner + "-" + tooltipCorner];
+
+			// reset width; it may have been set by orient() on a previous tooltip show()
+			this.domNode.style.width = "auto";
+
+			// Reduce tooltip's width to the amount of width available, so that it doesn't overflow screen.
+			// Note that sometimes widthAvailable is negative, but we guard against setting style.width to a
+			// negative number since that causes an exception on IE.
+			var size = domGeometry.position(this.domNode);
+			if(has("ie") || has("trident")){
+				// workaround strange IE bug where setting width to offsetWidth causes words to wrap
+				size.w += 2;
+			}
+
+			var width = Math.min((Math.max(widthAvailable,1)), size.w);
+
+			domGeometry.setMarginBox(this.domNode, {w: width});
+
+			// Reposition the tooltip connector.
+			if(tooltipCorner.charAt(0) == 'B' && aroundCorner.charAt(0) == 'B'){
+				var bb = domGeometry.position(node);
+				var tooltipConnectorHeight = this.connectorNode.offsetHeight;
+				if(bb.h > heightAvailable){
+					// The tooltip starts at the top of the page and will extend past the aroundNode
+					var aroundNodePlacement = heightAvailable - ((aroundNodeCoords.h + tooltipConnectorHeight) >> 1);
+					this.connectorNode.style.top = aroundNodePlacement + "px";
+					this.connectorNode.style.bottom = "";
+				}else{
+					// Align center of connector with center of aroundNode, except don't let bottom
+					// of connector extend below bottom of tooltip content, or top of connector
+					// extend past top of tooltip content
+					this.connectorNode.style.bottom = Math.min(
+						Math.max(aroundNodeCoords.h/2 - tooltipConnectorHeight/2, 0),
+						bb.h - tooltipConnectorHeight) + "px";
+					this.connectorNode.style.top = "";
+				}
+			}else{
+				// reset the tooltip back to the defaults
+				this.connectorNode.style.top = "";
+				this.connectorNode.style.bottom = "";
+			}
+
+			return Math.max(0, size.w - widthAvailable);
+		},
+
+		_onShow: function(){
+			// summary:
+			//		Called at end of fade-in operation
+			// tags:
+			//		protected
+			if(has("ie")){
+				// the arrow won't show up on a node w/an opacity filter
+				this.domNode.style.filter="";
+			}
+		},
+
+		hide: function(aroundNode){
+			// summary:
+			//		Hide the tooltip
+
+			if(this._onDeck && this._onDeck[1] == aroundNode){
+				// this hide request is for a show() that hasn't even started yet;
+				// just cancel the pending show()
+				this._onDeck=null;
+			}else if(this.aroundNode === aroundNode){
+				// this hide request is for the currently displayed tooltip
+				this.fadeIn.stop();
+				this.isShowingNow = false;
+				this.aroundNode = null;
+				this.fadeOut.play();
+			}else{
+				// just ignore the call, it's for a tooltip that has already been erased
+			}
+
+			this.onMouseEnter = this.onMouseLeave = noop;
+		},
+
+		_onHide: function(){
+			// summary:
+			//		Called at end of fade-out operation
+			// tags:
+			//		protected
+
+			this.domNode.style.cssText="";	// to position offscreen again
+			this.containerNode.innerHTML="";
+			if(this._onDeck){
+				// a show request has been queued up; do it now
+				this.show.apply(this, this._onDeck);
+				this._onDeck=null;
+			}
+		}
+	});
+
+	if(has("dojo-bidi")){
+		MasterTooltip.extend({
+			_setAutoTextDir: function(/*Object*/node){
+				// summary:
+				//		Resolve "auto" text direction for children nodes
+				// tags:
+				//		private
+
+				this.applyTextDir(node);
+				array.forEach(node.children, function(child){ this._setAutoTextDir(child); }, this);
+			},
+
+			_setTextDirAttr: function(/*String*/ textDir){
+				// summary:
+				//		Setter for textDir.
+				// description:
+				//		Users shouldn't call this function; they should be calling
+				//		set('textDir', value)
+				// tags:
+				//		private
+
+				this._set("textDir", textDir);
+
+				if (textDir == "auto"){
+					this._setAutoTextDir(this.containerNode);
+				}else{
+					this.containerNode.dir = this.textDir;
+				}
+			}
+		});
+	}
+
+	dijit.showTooltip = function(innerHTML, aroundNode, position, rtl, textDir, onMouseEnter, onMouseLeave){
+		// summary:
+		//		Static method to display tooltip w/specified contents in specified position.
+		//		See description of dijit/Tooltip.defaultPosition for details on position parameter.
+		//		If position is not specified then dijit/Tooltip.defaultPosition is used.
+		// innerHTML: String
+		//		Contents of the tooltip
+		// aroundNode: place.__Rectangle
+		//		Specifies that tooltip should be next to this node / area
+		// position: String[]?
+		//		List of positions to try to position tooltip (ex: ["right", "above"])
+		// rtl: Boolean?
+		//		Corresponds to `WidgetBase.dir` attribute, where false means "ltr" and true
+		//		means "rtl"; specifies GUI direction, not text direction.
+		// textDir: String?
+		//		Corresponds to `WidgetBase.textdir` attribute; specifies direction of text.
+		// onMouseEnter: Function?
+		//		Callback function for mouse over on tooltip
+		// onMouseLeave: Function?
+		//		Callback function for mouse leave on tooltip
+
+		// After/before don't work, but for back-compat convert them to the working after-centered, before-centered.
+		// Possibly remove this in 2.0.   Alternately, get before/after to work.
+		if(position){
+			position = array.map(position, function(val){
+				return {after: "after-centered", before: "before-centered"}[val] || val;
+			});
+		}
+
+		if(!Tooltip._masterTT){ dijit._masterTT = Tooltip._masterTT = new MasterTooltip(); }
+		return Tooltip._masterTT.show(innerHTML, aroundNode, position, rtl, textDir, onMouseEnter, onMouseLeave);
+	};
+
+	dijit.hideTooltip = function(aroundNode){
+		// summary:
+		//		Static method to hide the tooltip displayed via showTooltip()
+		return Tooltip._masterTT && Tooltip._masterTT.hide(aroundNode);
+	};
+
+	// Possible states for a tooltip, see Tooltip.state property for definitions
+	var DORMANT = "DORMANT",
+		SHOW_TIMER = "SHOW TIMER",
+		SHOWING = "SHOWING",
+		HIDE_TIMER = "HIDE TIMER";
+
+	function noop(){}
+
+	var Tooltip = declare("dijit.Tooltip", _Widget, {
+		// summary:
+		//		Pops up a tooltip (a help message) when you hover over a node.
+		//		Also provides static show() and hide() methods that can be used without instantiating a dijit/Tooltip.
+
+		// label: String
+		//		HTML to display in the tooltip.
+		//		Specified as innerHTML when creating the widget from markup.
+		label: "",
+
+		// showDelay: Integer
+		//		Number of milliseconds to wait after hovering over/focusing on the object, before
+		//		the tooltip is displayed.
+		showDelay: 400,
+
+		// hideDelay: Integer
+		//		Number of milliseconds to wait after unhovering the object, before
+		//		the tooltip is hidden.  Note that blurring an object hides the tooltip immediately.
+		hideDelay: 400,
+
+		// connectId: String|String[]|DomNode|DomNode[]
+		//		Id of domNode(s) to attach the tooltip to.
+		//		When user hovers over specified dom node(s), the tooltip will appear.
+		connectId: [],
+
+		// position: String[]
+		//		See description of `dijit/Tooltip.defaultPosition` for details on position parameter.
+		position: [],
+
+		// selector: String?
+		//		CSS expression to apply this Tooltip to descendants of connectIds, rather than to
+		//		the nodes specified by connectIds themselves.    Useful for applying a Tooltip to
+		//		a range of rows in a table, tree, etc.   Use in conjunction with getContent() parameter.
+		//		Ex: connectId: myTable, selector: "tr", getContent: function(node){ return ...; }
+		//
+		//		The application must require() an appropriate level of dojo/query to handle the selector.
+		selector: "",
+
+		// TODO: in 2.0 remove support for multiple connectIds.   selector gives the same effect.
+		// So, change connectId to a "", remove addTarget()/removeTarget(), etc.
+
+		_setConnectIdAttr: function(/*String|String[]|DomNode|DomNode[]*/ newId){
+			// summary:
+			//		Connect to specified node(s)
+
+			// Remove connections to old nodes (if there are any)
+			array.forEach(this._connections || [], function(nested){
+				array.forEach(nested, function(handle){ handle.remove(); });
+			}, this);
+
+			// Make array of id's to connect to, excluding entries for nodes that don't exist yet, see startup()
+			this._connectIds = array.filter(lang.isArrayLike(newId) ? newId : (newId ? [newId] : []),
+					function(id){ return dom.byId(id, this.ownerDocument); }, this);
+
+			// Make connections
+			this._connections = array.map(this._connectIds, function(id){
+				var node = dom.byId(id, this.ownerDocument),
+					selector = this.selector,
+					delegatedEvent = selector ?
+						function(eventType){ return on.selector(selector, eventType); } :
+						function(eventType){ return eventType; },
+					self = this;
+				return [
+					on(node, delegatedEvent(mouse.enter), function(){
+						self._onHover(this);
+					}),
+					on(node, delegatedEvent("focusin"), function(){
+						self._onHover(this);
+					}),
+					on(node, delegatedEvent(mouse.leave), lang.hitch(self, "_onUnHover")),
+					on(node, delegatedEvent("focusout"), lang.hitch(self, "set", "state", DORMANT))
+				];
+			}, this);
+
+			this._set("connectId", newId);
+		},
+
+		addTarget: function(/*OomNode|String*/ node){
+			// summary:
+			//		Attach tooltip to specified node if it's not already connected
+
+			// TODO: remove in 2.0 and just use set("connectId", ...) interface
+
+			var id = node.id || node;
+			if(array.indexOf(this._connectIds, id) == -1){
+				this.set("connectId", this._connectIds.concat(id));
+			}
+		},
+
+		removeTarget: function(/*DomNode|String*/ node){
+			// summary:
+			//		Detach tooltip from specified node
+
+			// TODO: remove in 2.0 and just use set("connectId", ...) interface
+
+			var id = node.id || node,	// map from DOMNode back to plain id string
+				idx = array.indexOf(this._connectIds, id);
+			if(idx >= 0){
+				// remove id (modifies original this._connectIds but that's OK in this case)
+				this._connectIds.splice(idx, 1);
+				this.set("connectId", this._connectIds);
+			}
+		},
+
+		buildRendering: function(){
+			this.inherited(arguments);
+			domClass.add(this.domNode,"dijitTooltipData");
+		},
+
+		startup: function(){
+			this.inherited(arguments);
+
+			// If this tooltip was created in a template, or for some other reason the specified connectId[s]
+			// didn't exist during the widget's initialization, then connect now.
+			var ids = this.connectId;
+			array.forEach(lang.isArrayLike(ids) ? ids : [ids], this.addTarget, this);
+		},
+
+		getContent: function(/*DomNode*/ node){
+			// summary:
+			//		User overridable function that return the text to display in the tooltip.
+			// tags:
+			//		extension
+			return this.label || this.domNode.innerHTML;
+		},
+
+		// state: [private readonly] String
+		//		One of:
+		//
+		//		- DORMANT: tooltip not SHOWING
+		//		- SHOW TIMER: tooltip not SHOWING but timer set to show it
+		//		- SHOWING: tooltip displayed
+		//		- HIDE TIMER: tooltip displayed, but timer set to hide it
+		state: DORMANT,
+		_setStateAttr: function(val){
+			if(this.state == val ||
+				(val == SHOW_TIMER && this.state == SHOWING) ||
+				(val == HIDE_TIMER && this.state == DORMANT)){
+				return;
+			}
+
+			if(this._hideTimer){
+				this._hideTimer.remove();
+				delete this._hideTimer;
+			}
+			if(this._showTimer){
+				this._showTimer.remove();
+				delete this._showTimer;
+			}
+
+			switch(val){
+				case DORMANT:
+					if(this._connectNode){
+						Tooltip.hide(this._connectNode);
+						delete this._connectNode;
+						this.onHide();
+					}
+					break;
+				case SHOW_TIMER:	 // set timer to show tooltip
+					// should only get here from a DORMANT state, i.e. tooltip can't be already SHOWING
+					if(this.state != SHOWING){
+						this._showTimer = this.defer(function(){ this.set("state", SHOWING); }, this.showDelay);
+					}
+					break;
+				case SHOWING:		// show tooltip and clear timers
+					var content = this.getContent(this._connectNode);
+					if(!content){
+						this.set("state", DORMANT);
+						return;
+					}
+
+					// Show tooltip and setup callbacks for mouseenter/mouseleave of tooltip itself
+					Tooltip.show(content, this._connectNode, this.position, !this.isLeftToRight(), this.textDir,
+						lang.hitch(this, "set", "state", SHOWING), lang.hitch(this, "set", "state", HIDE_TIMER));
+
+					this.onShow(this._connectNode, this.position);
+					break;
+				case HIDE_TIMER:	// set timer set to hide tooltip
+					this._hideTimer = this.defer(function(){ this.set("state", DORMANT); }, this.hideDelay);
+					break;
+			}
+
+			this._set("state", val);
+		},
+
+		_onHover: function(/*DomNode*/ target){
+			// summary:
+			//		Despite the name of this method, it actually handles both hover and focus
+			//		events on the target node, setting a timer to show the tooltip.
+			// tags:
+			//		private
+
+			if(this._connectNode && target != this._connectNode){
+				// Tooltip is displaying for another node
+				this.set("state", DORMANT);
+			}
+			this._connectNode = target;		// _connectNode means "tooltip currently displayed for this node"
+
+			this.set("state", SHOW_TIMER);	// no-op if show-timer already set, or if already showing
+		},
+
+		_onUnHover: function(/*DomNode*/ target){
+			// summary:
+			//		Handles mouseleave event on the target node, hiding the tooltip.
+			// tags:
+			//		private
+
+			this.set("state", HIDE_TIMER);		// no-op if already dormant, or if hide-timer already set
+		},
+
+		// open() and close() aren't used anymore, except from the _BidiSupport/misc/Tooltip test.
+		// Should probably remove for 2.0, but leaving for now.
+		open: function(/*DomNode*/ target){
+			// summary:
+			//		Display the tooltip; usually not called directly.
+			// tags:
+			//		private
+
+			this.set("state", DORMANT);
+			this._connectNode = target;		// _connectNode means "tooltip currently displayed for this node"
+			this.set("state", SHOWING);
+		},
+
+		close: function(){
+			// summary:
+			//		Hide the tooltip or cancel timer for show of tooltip
+			// tags:
+			//		private
+
+			this.set("state", DORMANT);
+		},
+
+		onShow: function(/*===== target, position =====*/){
+			// summary:
+			//		Called when the tooltip is shown
+			// tags:
+			//		callback
+		},
+
+		onHide: function(){
+			// summary:
+			//		Called when the tooltip is hidden
+			// tags:
+			//		callback
+		},
+
+		destroy: function(){
+			this.set("state", DORMANT);
+
+			// Remove connections manually since they aren't registered to be removed by _WidgetBase
+			array.forEach(this._connections || [], function(nested){
+				array.forEach(nested, function(handle){ handle.remove(); });
+			}, this);
+
+			this.inherited(arguments);
+		}
+	});
+
+	Tooltip._MasterTooltip = MasterTooltip;		// for monkey patching
+	Tooltip.show = dijit.showTooltip;		// export function through module return value
+	Tooltip.hide = dijit.hideTooltip;		// export function through module return value
+
+	Tooltip.defaultPosition = ["after-centered", "before-centered"];
+
+	/*=====
+	lang.mixin(Tooltip, {
+		 // defaultPosition: String[]
+		 //		This variable controls the position of tooltips, if the position is not specified to
+		 //		the Tooltip widget or *TextBox widget itself.  It's an array of strings with the values
+		 //		possible for `dijit/place.around()`.   The recommended values are:
+		 //
+		 //		- before-centered: centers tooltip to the left of the anchor node/widget, or to the right
+		 //		  in the case of RTL scripts like Hebrew and Arabic
+		 //		- after-centered: centers tooltip to the right of the anchor node/widget, or to the left
+		 //		  in the case of RTL scripts like Hebrew and Arabic
+		 //		- above-centered: tooltip is centered above anchor node
+		 //		- below-centered: tooltip is centered above anchor node
+		 //
+		 //		The list is positions is tried, in order, until a position is found where the tooltip fits
+		 //		within the viewport.
+		 //
+		 //		Be careful setting this parameter.  A value of "above-centered" may work fine until the user scrolls
+		 //		the screen so that there's no room above the target node.   Nodes with drop downs, like
+		 //		DropDownButton or FilteringSelect, are especially problematic, in that you need to be sure
+		 //		that the drop down and tooltip don't overlap, even when the viewport is scrolled so that there
+		 //		is only room below (or above) the target node, but not both.
+	 });
+	=====*/
+	return Tooltip;
+});
+},
+'dojox/charting/action2d/Tooltip':function(){
+define(["dijit/Tooltip", "dojo/_base/lang", "dojo/_base/declare", "dojo/_base/window", "dojo/_base/connect", "dojo/dom-style",
+	"./PlotAction", "dojox/gfx/matrix", "dojo/has", "dojo/has!dojo-bidi?../bidi/action2d/Tooltip", 
+	"dojox/lang/functional", "dojox/lang/functional/scan", "dojox/lang/functional/fold"],
+	function(DijitTooltip, lang, declare, win, hub, domStyle, PlotAction, m, has, BidiTooltip, df){
+	
+	/*=====
+	var __TooltipCtorArgs = {
+			// summary:
+			//		Additional arguments for tooltip actions.
+			// duration: Number?
+			//		The amount of time in milliseconds for an animation to last.  Default is 400.
+			// easing: dojo/fx/easing/*?
+			//		An easing object (see dojo.fx.easing) for use in an animation.  The
+			//		default is dojo.fx.easing.backOut.
+			// text: Function?
+			//		The function that produces the text to be shown within a tooltip.  By default this will be
+			//		set by the plot in question, by returning the value of the element.
+			// mouseOver: Boolean?
+            //		Whether the tooltip is enabled on mouse over or on mouse click / touch down. Default is true.
+	};
+	=====*/
+
+	var DEFAULT_TEXT = function(o, plot){
+		var t = o.run && o.run.data && o.run.data[o.index];
+		if(t && typeof t != "number" && (t.tooltip || t.text)){
+			return t.tooltip || t.text;
+		}
+		if(plot.tooltipFunc){
+			return plot.tooltipFunc(o);
+		}else{
+			return o.y;
+		}
+	};
+
+	var pi4 = Math.PI / 4, pi2 = Math.PI / 2;
+	
+	var Tooltip = declare(has("dojo-bidi")? "dojox.charting.action2d.NonBidiTooltip" : "dojox.charting.action2d.Tooltip", PlotAction, {
+		// summary:
+		//		Create an action on a plot where a tooltip is shown when hovering over an element.
+
+		// the data description block for the widget parser
+		defaultParams: {
+			text: DEFAULT_TEXT,	// the function to produce a tooltip from the object
+            mouseOver: true
+		},
+		optionalParams: {},	// no optional parameters
+
+		constructor: function(chart, plot, kwArgs){
+			// summary:
+			//		Create the tooltip action and connect it to the plot.
+			// chart: dojox/charting/Chart
+			//		The chart this action belongs to.
+			// plot: String?
+			//		The plot this action is attached to.  If not passed, "default" is assumed.
+			// kwArgs: __TooltipCtorArgs?
+			//		Optional keyword arguments object for setting parameters.
+			this.text = kwArgs && kwArgs.text ? kwArgs.text : DEFAULT_TEXT;
+			this.mouseOver = kwArgs && kwArgs.mouseOver != undefined ? kwArgs.mouseOver : true;
+			this.connect();
+		},
+		
+		process: function(o){
+			// summary:
+			//		Process the action on the given object.
+			// o: dojox/gfx/shape.Shape
+			//		The object on which to process the highlighting action.
+			if(o.type === "onplotreset" || o.type === "onmouseout"){
+                DijitTooltip.hide(this.aroundRect);
+				this.aroundRect = null;
+				if(o.type === "onplotreset"){
+					delete this.angles;
+				}
+				return;
+			}
+			
+			if(!o.shape || (this.mouseOver && o.type !== "onmouseover") || (!this.mouseOver && o.type !== "onclick")){ return; }
+			
+			// calculate relative coordinates and the position
+			var aroundRect = {type: "rect"}, position = ["after-centered", "before-centered"];
+			switch(o.element){
+				case "marker":
+					aroundRect.x = o.cx;
+					aroundRect.y = o.cy;
+					aroundRect.w = aroundRect.h = 1;
+					break;
+				case "circle":
+					aroundRect.x = o.cx - o.cr;
+					aroundRect.y = o.cy - o.cr;
+					aroundRect.w = aroundRect.h = 2 * o.cr;
+					break;
+				case "spider_circle":
+					aroundRect.x = o.cx;
+					aroundRect.y = o.cy ;
+					aroundRect.w = aroundRect.h = 1;
+					break;
+				case "spider_plot":
+					return;
+				case "column":
+					position = ["above-centered", "below-centered"];
+					// intentional fall down
+				case "bar":
+					aroundRect = lang.clone(o.shape.getShape());
+					aroundRect.w = aroundRect.width;
+					aroundRect.h = aroundRect.height;
+					break;
+				case "candlestick":
+					aroundRect.x = o.x;
+					aroundRect.y = o.y;
+					aroundRect.w = o.width;
+					aroundRect.h = o.height;
+					break;
+				default:
+				//case "slice":
+					if(!this.angles){
+						// calculate the running total of slice angles
+						var filteredRun = typeof o.run.data[0] == "number" ?
+								df.map(o.run.data, "x ? Math.max(x, 0) : 0") : df.map(o.run.data, "x ? Math.max(x.y, 0) : 0");
+						this.angles = df.map(df.scanl(filteredRun, "+", 0),
+							"* 2 * Math.PI / this", df.foldl(filteredRun, "+", 0));
+					}
+					var startAngle = m._degToRad(o.plot.opt.startAngle),
+						angle = (this.angles[o.index] + this.angles[o.index + 1]) / 2 + startAngle;
+					aroundRect.x = o.cx + o.cr * Math.cos(angle);
+					aroundRect.y = o.cy + o.cr * Math.sin(angle);
+					aroundRect.w = aroundRect.h = 1;
+                    // depending on startAngle we might go out of the 0-2*PI range, normalize that
+                    if(startAngle && (angle < 0 || angle > 2 * Math.PI)){
+						angle = Math.abs(2 * Math.PI  - Math.abs(angle));
+					}
+					// calculate the position
+					if(angle < pi4){
+						// do nothing: the position is right
+					}else if(angle < pi2 + pi4){
+						position = ["below-centered", "above-centered"];
+					}else if(angle < Math.PI + pi4){
+						position = ["before-centered", "after-centered"];
+					}else if(angle < 2 * Math.PI - pi4){
+						position = ["above-centered", "below-centered"];
+					}
+					/*
+					else{
+						// do nothing: the position is right
+					}
+					*/
+					break;
+			}
+			if(has("dojo-bidi")){
+				this._recheckPosition(o,aroundRect,position);
+			}
+			// adjust relative coordinates to absolute, and remove fractions
+			var lt = this.chart.getCoords();
+			aroundRect.x += lt.x;
+			aroundRect.y += lt.y;
+			aroundRect.x = Math.round(aroundRect.x);
+			aroundRect.y = Math.round(aroundRect.y);
+			aroundRect.w = Math.ceil(aroundRect.w);
+			aroundRect.h = Math.ceil(aroundRect.h);
+			this.aroundRect = aroundRect;
+
+			var tooltipText = this.text(o, this.plot);
+			if(tooltipText){
+				DijitTooltip.show(this._format(tooltipText), this.aroundRect, position);
+			}
+			if(!this.mouseOver){
+				this._handle = hub.connect(win.doc, "onclick", this, "onClick");
+			}
+		},
+		onClick: function(){
+			this.process({ type: "onmouseout"});
+		},
+		_recheckPosition: function(obj,rect,position){			
+		},
+		_format: function(tooltipText){
+			return tooltipText;
+		}
+	});
+	return has("dojo-bidi")? declare("dojox.charting.action2d.Tooltip", [Tooltip, BidiTooltip]) : Tooltip;
+});
+},
+'dojox/charting/action2d/Magnify':function(){
+define(["dojo/_base/connect", "dojo/_base/declare", 
+	"./PlotAction", "dojox/gfx/matrix", 
+	"dojox/gfx/fx", "dojo/fx", "dojo/fx/easing"], 
+	function(Hub, declare, PlotAction, m, gf, df, dfe){
+
+	/*=====
+	var __MagnifyCtorArgs = {
+		// summary:
+		//		Additional arguments for magnifying actions.
+		// duration: Number?
+		//		The amount of time in milliseconds for an animation to last.  Default is 400.
+		// easing: dojo/fx/easing/*?
+		//		An easing object (see dojo.fx.easing) for use in an animation.  The
+		//		default is dojo.fx.easing.backOut.
+		// scale: Number?
+		//		The amount to magnify the given object to.  Default is 2.
+	};
+	=====*/
+	
+	var DEFAULT_SCALE = 2;
+
+	return declare("dojox.charting.action2d.Magnify", PlotAction, {
+		// summary:
+		//		Create an action that magnifies the object the action is applied to.
+
+		// the data description block for the widget parser
+		defaultParams: {
+			duration: 400,	// duration of the action in ms
+			easing:   dfe.backOut,	// easing for the action
+			scale:    DEFAULT_SCALE	// scale of magnification
+		},
+		optionalParams: {},	// no optional parameters
+
+		constructor: function(chart, plot, kwArgs){
+			// summary:
+			//		Create the magnifying action.
+			// chart: dojox/charting/Chart
+			//		The chart this action belongs to.
+			// plot: String?
+			//		The plot to apply the action to. If not passed, "default" is assumed.
+			// kwArgs: __MagnifyCtorArgs?
+			//		Optional keyword arguments for this action.
+
+			// process optional named parameters
+			this.scale = kwArgs && typeof kwArgs.scale == "number" ? kwArgs.scale : DEFAULT_SCALE;
+
+			this.connect();
+		},
+
+		process: function(o){
+			// summary:
+			//		Process the action on the given object.
+			// o: dojox/gfx/shape.Shape
+			//		The object on which to process the magnifying action.
+			if(!o.shape || !(o.type in this.overOutEvents) ||
+				!("cx" in o) || !("cy" in o)){ return; }
+
+			// if spider deal only with circle
+			if(o.element == "spider_plot" || o.element == "spider_poly"){
+				return;
+			}
+
+			var runName = o.run.name, index = o.index, vector = [], anim, init, scale;
+
+			if(runName in this.anim){
+				anim = this.anim[runName][index];
+			}else{
+				this.anim[runName] = {};
+			}
+
+			if(anim){
+				anim.action.stop(true);
+			}else{
+				this.anim[runName][index] = anim = {};
+			}
+
+			if(o.type == "onmouseover"){
+				init  = m.identity;
+				scale = this.scale;
+			}else{
+				init  = m.scaleAt(this.scale, o.cx, o.cy);
+				scale = 1 / this.scale;
+			}
+
+			var kwArgs = {
+				shape:    o.shape,
+				duration: this.duration,
+				easing:   this.easing,
+				transform: [
+					{name: "scaleAt", start: [1, o.cx, o.cy], end: [scale, o.cx, o.cy]},
+					init
+				]
+			};
+			if(o.shape){
+				vector.push(gf.animateTransform(kwArgs));
+			}
+			if(o.outline){
+				kwArgs.shape = o.outline;
+				vector.push(gf.animateTransform(kwArgs));
+			}
+			if(o.shadow){
+				kwArgs.shape = o.shadow;
+				vector.push(gf.animateTransform(kwArgs));
+			}
+
+			if(!vector.length){
+				delete this.anim[runName][index];
+				return;
+			}
+
+			anim.action = df.combine(vector);
+			if(o.type == "onmouseout"){
+				Hub.connect(anim.action, "onEnd", this, function(){
+					if(this.anim[runName]){
+						delete this.anim[runName][index];
+					}
+				});
+			}
+			anim.action.play();
+		}
+	});
+	
+});
+},
 'dojo/errors/CancelError':function(){
 define(["./create"], function(create){
 	// module:
