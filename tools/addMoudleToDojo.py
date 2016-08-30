@@ -91,10 +91,10 @@ class moudleFileHandler(fileHandler):
         endPos = self.content.find(endString)
         dependcyMoudles = self.content[startPos + len(startString):endPos]
         dependcyMoudles = re.sub('//.*', '', dependcyMoudles)
-        dependcyMoudles = re.sub('/\*.*\*/', '', dependcyMoudles)
+        dependcyMoudles = re.sub('/\*.*\*/', '', dependcyMoudles, 0, re.S)
         tmpMoudles = dependcyMoudles.split(',')
         for tmpMoudle in tmpMoudles:
-            moudle = tmpMoudle.strip().strip('"')
+            moudle = tmpMoudle.strip().strip('"').strip('\'\'')
             moudle = re.sub('!.*', '', moudle)
             if re.match(IGNORE_REG, moudle):
                 continue
