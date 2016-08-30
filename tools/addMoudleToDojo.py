@@ -2,7 +2,7 @@ import sys
 import os
 import re
 
-IGNORE_REG = '(^//|^require$|^module$|^exports$|^$)'
+IGNORE_REG = '(^require$|^module$|^exports$|^$)'
 SPLIT_KEYWORD = "'dojo/errors/CancelError'"
 LINESEP = '\n'
 LOADED = []
@@ -74,7 +74,7 @@ class moudleFileHandler(fileHandler):
         self.loadedMoudles = []
 
     def getRightMoudleName(self, moudleName):
-        moudles = re.sub('!.*', '', moudleName).split('/')
+        moudles = moudleName.split('/')
         if moudles[-1] == '':
             rightMoudleName = 'main'
         elif moudles[-1] == '..':
@@ -91,17 +91,19 @@ class moudleFileHandler(fileHandler):
         endPos = self.content.find(endString)
         dependcyMoudles = self.content[startPos + len(startString):endPos]
         dependcyMoudles = re.sub('//.*', '', dependcyMoudles)
+        dependcyMoudles = re.sub('/\*.*\*/', '', dependcyMoudles)
         tmpMoudles = dependcyMoudles.split(',')
         for tmpMoudle in tmpMoudles:
             moudle = tmpMoudle.strip().strip('"')
+            moudle = re.sub('!.*', '', moudle)
             if re.match(IGNORE_REG, moudle):
                 continue
             if moudle == '..':
-                moudle = os.path.join(''.join(self.dojoMoudle.split('/')[0:1]), self.getRightMoudleName(''))
+                moudle = ''.join(self.dojoMoudle.split('/')[0:1]) + '/' + self.getRightMoudleName('')
             elif moudle.startswith('./'):
-                moudle = os.path.join('/'.join(self.dojoMoudle.split('/')[:-1]), self.getRightMoudleName(moudle))
+                moudle = '/'.join(self.dojoMoudle.split('/')[:-1]) + '/' + self.getRightMoudleName(moudle)
             elif moudle.startswith('../'):
-                moudle = os.path.join('/'.join(self.dojoMoudle.split('/')[:(-moudle.count('../'))-1]), self.getRightMoudleName(moudle))
+                moudle = '/'.join(self.dojoMoudle.split('/')[:(-moudle.count('../'))-1]) + '/' + self.getRightMoudleName(moudle)
             if moudle in LOADED:
                 continue
             moudles.append(moudle)
