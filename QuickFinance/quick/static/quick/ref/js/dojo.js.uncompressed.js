@@ -37330,6 +37330,7 @@ define([
 	return coreFx;
 });
 },
+'url:dijit/templates/Tooltip.html':'<div class="dijitTooltip dijitTooltipLeft" id="dojoTooltip" data-dojo-attach-event="mouseenter:onMouseEnter,mouseleave:onMouseLeave"	><div class="dijitTooltipConnector" data-dojo-attach-point="connectorNode"></div	><div class="dijitTooltipContainer dijitTooltipContents" data-dojo-attach-point="containerNode" role=\'alert\'></div></div>',
 'dojo/errors/CancelError':function(){
 define(["./create"], function(create){
 	// module:

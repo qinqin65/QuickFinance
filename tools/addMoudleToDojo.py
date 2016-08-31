@@ -45,14 +45,32 @@ class destFileHandler(fileHandler):
     def isMoudleExist(self, moudleName):
         return self.content.find("'{0}':function()".format(moudleName)) != -1
 
-    def addMoudle(self, moudleName, moudleContent):
+    def splitDocContent(self):
+        splitPos = self.content.find(SPLIT_KEYWORD)
+        partHead = self.content[:splitPos]
+        partEnd = self.content[splitPos:]
+        return (partHead, partEnd)
+
+    def addcommonMoudle(self, moudleName, moudleContent):
         if self.content.find("'{0}':function()".format(moudleName)) == -1:
-            splitPos = self.content.find(SPLIT_KEYWORD)
-            partHead = self.content[:splitPos]
-            partEnd = self.content[splitPos:]
+            partHead, partEnd = self.splitDocContent()
             partAdd = "'{moudleName}':function(){{{linesep}{moudleContent}}},{linesep}".format(moudleName = moudleName, moudleContent = moudleContent, linesep = LINESEP)
             self.content = partHead + partAdd + partEnd
-            print('moudles added:', moudleName)
+
+    def addTemplateMoudle(self, moudleName, moudleContent):
+        if self.content.find("'url:{0}':".format(moudleName)) == -1:
+            partHead, partEnd = self.splitDocContent()
+            content = re.sub('\n','', moudleContent)
+            content = re.sub("'","\\'", content)
+            partAdd = "'url:{moudleName}':'{moudleContent}',{linesep}".format(moudleName = moudleName, moudleContent = content, linesep = LINESEP)
+            self.content = partHead + partAdd + partEnd
+
+    def addMoudle(self, moudleName, moudleContent):
+        if moudleName.endswith('html'):
+            self.addTemplateMoudle(moudleName, moudleContent)
+        else:
+            self.addcommonMoudle(moudleName, moudleContent)
+        print('moudles added:', moudleName)
 
     def writeToFile(self):
         self.file.seek(0, 0)
@@ -60,7 +78,7 @@ class destFileHandler(fileHandler):
 
 class moudleFileHandler(fileHandler):
     def __init__(self, dojoSrcPath, dojoMoudle):
-        moudlePath = os.path.join(dojoSrcPath, dojoMoudle + '.js')
+        moudlePath = os.path.join(dojoSrcPath, dojoMoudle if dojoMoudle.endswith('html') else dojoMoudle + '.js')
         if not os.path.exists(moudlePath):
             raise Exception('the moudle({0}) you want to import does not exist!'.format(dojoMoudle))
         elif os.path.isdir(moudlePath):
@@ -84,6 +102,8 @@ class moudleFileHandler(fileHandler):
         return rightMoudleName
 
     def getDependencyMoudles(self):
+        if self.dojoMoudle.endswith('html'):
+            return
         moudles = []
         startString = 'define(['
         endString = '],'
