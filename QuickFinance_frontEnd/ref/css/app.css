@@ -1,4 +1,4 @@
-﻿body {
+body {
     font-family: 'Segoe UI', sans-serif;
     margin: 0rem;
 }
@@ -161,7 +161,6 @@ label {
     text-align: center;
     background-color: #444444;
     border-top: 1px solid #e5e5e5;
-    position: absolute;
     bottom: 0rem;
     left: 0rem;
     width: 100%;
@@ -534,7 +533,7 @@ label {
 /*记账首页*/
 .financeapp-panel-container {
     width: 13.666667%;
-    position: fixed;
+    position: absolute;
     top: 3.4rem;
     bottom: 0;
     left: 0;
