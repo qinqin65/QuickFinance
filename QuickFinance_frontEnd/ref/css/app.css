@@ -156,6 +156,7 @@ label {
 
 /*页脚*/
 .page-footer {
+    position: absolute;
     padding: 2rem 0;
     color: #FFFFFF;
     text-align: center;
