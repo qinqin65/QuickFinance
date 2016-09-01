@@ -8,6 +8,7 @@ import * as Tooltip from 'dojox/charting/action2d/Tooltip';
 import * as Magnify from 'dojox/charting/action2d/Magnify';
 import 'dojox/charting/plot2d/Markers';
 import 'dojox/charting/axis2d/Default';
+import 'xstyle/css!ref/css/dijit.css';
 
 export class FinancePreview extends React.Component<any, any> {
   constructor(props, context) {
@@ -16,7 +17,7 @@ export class FinancePreview extends React.Component<any, any> {
 
   componentDidMount() {
     var chartData = [10000,9200,11811,12000,7662,13887,14200,12222,12000,10009,11288,12099];
-    var chartData2 = [3000,12000,17733,9876,12783,12899,13888,13277,14299,12345,12345,15763];
+    //var chartData2 = [3000,12000,17733,9876,12783,12899,13888,13277,14299,12345,12345,15763];
 
     // Create the chart within it&#x27;s "holding" node
     var chart = new Chart("financeChartNode");
@@ -37,13 +38,13 @@ export class FinancePreview extends React.Component<any, any> {
 
     // Add the series of data
     chart.addSeries("Monthly Sales - 2008",chartData);
-    chart.addSeries("Monthly Sales - 2009",chartData2);
+    // chart.addSeries("Monthly Sales - 2009",chartData2);
 
     // Create the tooltip
-    var tip = new Tooltip(chart,"default");
+    new Tooltip(chart,"default");
 
     // Create the magnifier
-    var mag = new Magnify(chart,"default");
+    //var mag = new Magnify(chart,"default");
 
     // Highlight!
     new Highlight(chart,"default");
@@ -52,7 +53,7 @@ export class FinancePreview extends React.Component<any, any> {
     chart.render();
 
     // Create the legend
-    var legend = new Legend({ chart: chart }, "legend");
+    //var legend = new Legend({ chart: chart }, "legend");
   }
 
   render() {
