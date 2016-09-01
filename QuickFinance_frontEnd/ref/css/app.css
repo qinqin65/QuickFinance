@@ -154,9 +154,14 @@ label {
     border-left: 5px solid transparent;
 }
 
+/*content*/
+#content {
+    padding-bottom: 9rem;
+}
+
 /*页脚*/
 .page-footer {
-    position: absolute;
+    position: fixed;
     padding: 2rem 0;
     color: #FFFFFF;
     text-align: center;
