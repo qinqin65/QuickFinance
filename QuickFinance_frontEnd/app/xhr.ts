@@ -8,4 +8,4 @@ export let post = function(url: string, option: any) {
     return xhr.post(url, option);
 }
 
-export let get = xhr.get;
+export let get = dojo.xhrGet;
