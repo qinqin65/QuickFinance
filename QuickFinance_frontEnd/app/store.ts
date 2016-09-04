@@ -36,9 +36,10 @@ class SelectStore extends BaseStore {
     
     requestStore() {
         let option: any = {
+            url: `${Config.requestHost}/${this.requestPath}`,
             handleAs: 'json'
         };
-        xhr.get(`${Config.requestHost}/${this.requestPath}`, option)
+        xhr.get(option)
         .then((data)=>{
             if(data.state === stateCode.SUCCESS && dojo.isArray(data.selectStore)) {
                 this.store = data.selectStore;
@@ -76,12 +77,13 @@ class AccountInfoStore extends BaseStore {
     
     requestStore() {
         let option: any = {
+            url: `${Config.requestHost}/accountBookData`,
             handleAs: 'json',
-            data: {
+            content: {
                 accountBook: this.accountBook
             }
         };
-        xhr.post(`${Config.requestHost}/requestAccountBookData`, option)
+        xhr.get(option)
         .then((data)=>{
             if(data.state === stateCode.SUCCESS  && dojo.isArray(data.accountBooks) && dojo.isArray(data.accounts)) {
                 this.store = data.accountBooks;
@@ -120,6 +122,68 @@ class AccountInfoStore extends BaseStore {
     }
 }
 
+export enum AccountingType{income = stateCode.INCOME, outcome = stateCode.OUTCOME}
+
+class FinancePreviewStore extends BaseStore {
+    private year: string;
+    private month: string;
+    private day: string;
+    private hour: string;
+    private type: AccountingType;
+
+    constructor() {
+        super();
+    }
+
+    setParam(year: string, month: string, day: string, hour: string, type: AccountingType) {
+        this.year = year;
+        this.month = month;
+        this.day = day;
+        this.hour = hour;
+        this.type = type;
+    }
+
+    requestStore() {
+        if(!this.year || !this.month || !this.day || this.hour || this.type) {
+            return;
+        }
+        let option: any = {
+            url: `${Config.requestHost}/financePreviewData`,
+            handleAs: 'json',
+            content: {
+                year: this.year,
+                month: this.month,
+                day: this.day,
+                hour:this.hour,
+                type: this.type
+            }
+        };
+        xhr.get(option)
+        .then((data)=>{
+            if(data.state === stateCode.SUCCESS  && dojo.isArray(data.financePreviewData)) {
+                this.store = data.financePreviewData;
+            } else if(data.state === stateCode.Error) {
+                topic.publish('tipService/warning', data.info);
+            } else if(data.state === stateCode.NOTLOGGIN) {
+                topic.publish('tipService/warning', data.info);
+                user.logout();
+            } else {
+                topic.publish('tipService/warning', lang.xhrDataError);
+            }
+        }, (error)=>{
+            topic.publish('tipService/error', lang.xhrErr);
+        })
+        .then(()=>this.isRequesting = false);
+        
+        this.isRequesting = true;
+    }
+
+    clearStore() {
+        this.store = [];
+    }
+}
+
 export let currencySelectStore = new SelectStore('currencySelectStore', 'currencySelectStore');
 export let accountTypeSelectStore = new SelectStore('accountTypeSelectStore', 'accountTypeSelectStore');
 export let accountInfoStore = new AccountInfoStore();
+export let financePreviewStore = new FinancePreviewStore();

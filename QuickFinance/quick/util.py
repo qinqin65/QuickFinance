@@ -8,6 +8,7 @@ from . import stateCode
 from django.db.models import F, Q
 from django.db.models import Count, Min, Sum, Avg
 from . import stateCode
+import datetime
 
 def debug(func):
     if settings.DEBUG:
@@ -167,5 +168,12 @@ class CurrencyHandler():
 
         return Currency.objects.annotate(name=F(self.currencyNameMap[lanCode])).values('name', 'code')
 
+# def getFinanceData(year, month, day, hour, type):
+#     if year == 0:
+#         return []
+#     accountingDate = datetime.datetime(year, month, day, hour)
+#     if type == stateCode.INCOME:
+#         return Income.objects.filter(Q(date__gte=))
+#     elif type == stateCode.OUTCOME:
 
 currency = CurrencyHandler()

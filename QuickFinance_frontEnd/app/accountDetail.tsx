@@ -75,6 +75,7 @@ export class Accounting extends React.Component<any, any> {
           accountInfoStore.setStore(data);
           topic.publish('tipService/info', lang.saveSuccess);
           topic.publish('accountTool/itemClicked', accountToolSelect.handleButton);
+          topic.publish('finance/financeDataChanged', null);
         } else if(data.state === stateCode.Error) {
           topic.publish('tipService/warning', data.info);
         } else if(data.state === stateCode.NOTLOGGIN) {

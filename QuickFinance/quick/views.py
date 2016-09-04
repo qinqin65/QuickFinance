@@ -69,10 +69,9 @@ def register(request):
         return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
 
 @login_required
-@require_POST
-def requestAccountBookData(request):
+def accountBookData(request):
     try:
-        requestAccountBook = request.POST['accountBook']
+        requestAccountBook = request.GET['accountBook']
         accountBook = getAccountBook(request.user, requestAccountBook)
         jsonResult = {'state': stateCode.SUCCESS}
         jsonResult.update(accountBook)
@@ -123,5 +122,23 @@ def accounting(request):
         jsonResult.update(accountBookData)
     except Exception as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('accounting failed')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+def financePreviewData(request):
+    try:
+        year = request.GET['year']
+        month = request.GET['month']
+        day = request.GET['day']
+        hour = request.GET['hour']
+        type = request.GET['type']
+
+
+
+        jsonResult = {'state': stateCode.SUCCESS}
+        jsonResult.update(accountBookData)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
     else:
         return JsonResponse(jsonResult)
