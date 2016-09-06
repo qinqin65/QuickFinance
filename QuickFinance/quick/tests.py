@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.test import TestCase
 from django.contrib.auth.models import User
 from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
-from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook
+from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData
 from . import stateCode
 
 # TODO: Configure your database in settings.py and sync before running tests.
@@ -87,3 +87,6 @@ class QuickTest(TestCase):
         self.assertEqual(income.value, 20, 'it should be 20 after accounting income for 20')
         self.assertEqual(user.usersetting.totalProperty, 20, 'user total property should be 20 after accounting income for 20')
         self.assertEqual(account.total, 20, 'account total should be 20 after accounting income for 20')
+
+    def test_getFinanceData(self):
+        pass

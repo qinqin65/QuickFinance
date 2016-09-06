@@ -168,12 +168,22 @@ class CurrencyHandler():
 
         return Currency.objects.annotate(name=F(self.currencyNameMap[lanCode])).values('name', 'code')
 
-# def getFinanceData(year, month, day, hour, type):
-#     if year == 0:
-#         return []
-#     accountingDate = datetime.datetime(year, month, day, hour)
-#     if type == stateCode.INCOME:
-#         return Income.objects.filter(Q(date__gte=))
-#     elif type == stateCode.OUTCOME:
+def getFinanceData(year, month, day, hour, type):
+    if year == 0:
+        return []
+    if type == stateCode.INCOME:
+        accountingModel = Income
+    elif type == stateCode.OUTCOME:
+        accountingModel = Outcome
+    if month == 0:
+        return accountingModel.objects.filter(date__year = year)
+    elif day == 0:
+        return accountingModel.objects.filter(date__year = year, date__month = month)
+    elif hour == 0:
+        day = datetime.datetime(year, month, day)
+        dayDelta = datetime.timedelta(days=1)
+        return accountingModel.objects.filter(date__range = [day, day + dayDelta])
+    else:
+        return []
 
 currency = CurrencyHandler()
