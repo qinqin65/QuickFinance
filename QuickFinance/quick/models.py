@@ -31,7 +31,7 @@ class Income(models.Model):
     date = models.DateTimeField()
     value = models.FloatField()
     currency = models.ForeignKey(Currency, null=True, on_delete=models.SET_NULL)
-    remark = models.TextField()
+    remark = models.TextField(null=True)
 
 class Outcome(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE, db_index=True)
@@ -39,7 +39,7 @@ class Outcome(models.Model):
     date = models.DateTimeField()
     value = models.FloatField()
     currency = models.ForeignKey(Currency, null=True, on_delete=models.SET_NULL)
-    remark = models.TextField()
+    remark = models.TextField(null=True)
 
 class UserSetting(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, db_index=True)
