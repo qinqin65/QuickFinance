@@ -176,13 +176,13 @@ def getFinanceData(year, month, day, hour, type):
     elif type == stateCode.OUTCOME:
         accountingModel = Outcome
     if month == 0:
-        return accountingModel.objects.filter(date__year = year)
+        return accountingModel.objects.filter(date__year = year).values('date', 'value')
     elif day == 0:
-        return accountingModel.objects.filter(date__year = year, date__month = month)
+        return accountingModel.objects.filter(date__year = year, date__month = month).values('date', 'value')
     elif hour == 0:
         day = datetime.datetime(year, month, day)
         dayDelta = datetime.timedelta(days=1)
-        return accountingModel.objects.filter(date__range = [day, day + dayDelta])
+        return accountingModel.objects.filter(date__range = [day, day + dayDelta]).values('date', 'value')
     else:
         return []
 

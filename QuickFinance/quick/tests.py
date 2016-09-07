@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
 from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData
 from . import stateCode
+import random
 
 # TODO: Configure your database in settings.py and sync before running tests.
 
@@ -89,4 +90,19 @@ class QuickTest(TestCase):
         self.assertEqual(account.total, 20, 'account total should be 20 after accounting income for 20')
 
     def test_getFinanceData(self):
-        pass
+        @classmethod
+        def setUpTestData(cls):
+            userName, password, email = self.genUserInfo()
+            user = createUserAndInit(userName, email, password)
+
+            for i in range(100):
+                value = random.randint(20,200)
+                currency = 'CNY'
+                type = stateCode.OUTCOME if 1 == random.randint(1,10) else stateCode.INCOME
+                date = '%d-%d-%d-%d-%d-%d' % (random.randint(2014,2016), random.randint(1,12), random.randint(1,27), random.randint(0,23), random.randint(0,59), random.randint(0,59))
+                accountType = getAccountType(user)[0]
+                accountBook = user.usersetting.defaultAccountBook.accountBookName
+                accountName = user.usersetting.defaultAccount.accountName
+
+                accounting = Accounting(user)
+                accounting.accounting(value, currency, type, date, remark, accountType, accountBook, accountName)
