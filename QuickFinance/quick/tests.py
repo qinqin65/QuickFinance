@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
 from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData
 from . import stateCode
-import random
+import random,datetime
 
 # TODO: Configure your database in settings.py and sync before running tests.
 
@@ -23,9 +23,9 @@ class QuickTest(TestCase):
         pass
 
     @staticmethod
-    def genUserInfo():
+    def genUserInfo(suffix=''):
         timeStamp = int(time.time())
-        userName = 'test' + str(timeStamp)
+        userName = 'test' + suffix + str(timeStamp)
         password = '123456'
         email = None
 
@@ -90,19 +90,36 @@ class QuickTest(TestCase):
         self.assertEqual(account.total, 20, 'account total should be 20 after accounting income for 20')
 
     def test_getFinanceData(self):
-        @classmethod
-        def setUpTestData(cls):
-            userName, password, email = self.genUserInfo()
-            user = createUserAndInit(userName, email, password)
+        userName, password, email = self.genUserInfo()
+        userName2 , password2, email2 = self.genUserInfo('2')
+        user = createUserAndInit(userName, email, password)
+        user2 = createUserAndInit(userName2 , password2, email2)
+        accounting = Accounting(user)
+        accounting2 = Accounting(user2)
+        currency = 'CNY'
+        accountType = getAccountType(user)[0]
+        accountBook = user.usersetting.defaultAccountBook.accountBookName
+        accountName = user.usersetting.defaultAccount.accountName
+        accountType2 = getAccountType(user2)[0]
+        accountBook2 = user2.usersetting.defaultAccountBook.accountBookName
+        accountName2 = user2.usersetting.defaultAccount.accountName
+        accounting.accounting(20, currency, stateCode.OUTCOME, datetime.datetime(2014, 8, 1), None, accountType, accountBook, accountName)
+        accounting.accounting(30, currency, stateCode.OUTCOME, datetime.datetime(2015, 9, 1), None, accountType, accountBook, accountName)
+        accounting.accounting(40, currency, stateCode.OUTCOME, datetime.datetime(2016, 9, 5), None, accountType, accountBook, accountName)
+        accounting.accounting(40, currency, stateCode.OUTCOME, datetime.datetime(2016, 8, 8, 1), None, accountType, accountBook, accountName)
+        accounting.accounting(40, currency, stateCode.OUTCOME, datetime.datetime(2016, 8, 8, 2, 30), None, accountType, accountBook, accountName)
+        accounting.accounting(40, currency, stateCode.OUTCOME, datetime.datetime(2016, 8, 8, 2, 45), None, accountType, accountBook, accountName)
+        accounting.accounting(40, currency, stateCode.OUTCOME, datetime.datetime(2016, 8, 10), None, accountType, accountBook, accountName)
+        accounting.accounting(50, currency, stateCode.INCOME, datetime.datetime(2016, 5, 10), None, accountType, accountBook, accountName)
+        accounting2.accounting(60, currency, stateCode.OUTCOME, datetime.datetime(2016, 8, 10), None, accountType2, accountBook2, accountName2)
 
-            for i in range(100):
-                value = random.randint(20,200)
-                currency = 'CNY'
-                type = stateCode.OUTCOME if 1 == random.randint(1,10) else stateCode.INCOME
-                date = '%d-%d-%d-%d-%d-%d' % (random.randint(2014,2016), random.randint(1,12), random.randint(1,27), random.randint(0,23), random.randint(0,59), random.randint(0,59))
-                accountType = getAccountType(user)[0]
-                accountBook = user.usersetting.defaultAccountBook.accountBookName
-                accountName = user.usersetting.defaultAccount.accountName
-
-                accounting = Accounting(user)
-                accounting.accounting(value, currency, type, date, remark, accountType, accountBook, accountName)
+        testOutcomeDataYear = getFinanceData(user, 2016, 0, 0, 0, stateCode.OUTCOME)
+        self.assertEqual(len(testOutcomeDataYear), 5, 'the count of outcome type of record of year must be 5')
+        testOutcomeDataMonth = getFinanceData(user, 2016, 8, 0, 0, stateCode.OUTCOME)
+        self.assertEqual(len(testOutcomeDataMonth), 4, 'the count of outcome type of record of month must be 4')
+        testOutcomeDataDay = getFinanceData(user, 2016, 8, 8, 0, stateCode.OUTCOME)
+        self.assertEqual(len(testOutcomeDataDay), 3, 'the count of outcome type of record of day must be 3')
+        testIncomeDataYear = getFinanceData(user, 2016, 5, 0, 0, stateCode.INCOME)
+        self.assertEqual(len(testIncomeDataYear), 1, 'the count of income type of record of year must be 1')
+        testOutcomeDataYear2 = getFinanceData(user2, 2016, 0, 0, 0, stateCode.OUTCOME)
+        self.assertEqual(len(testOutcomeDataYear2), 1, 'the count of outcome type of record of year of user2 must be 1')
