@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting
+from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData
 
 @ensure_csrf_cookie
 def home(request):
@@ -131,13 +131,12 @@ def financePreviewData(request):
         year = request.GET['year']
         month = request.GET['month']
         day = request.GET['day']
-        hour = request.GET['hour']
         type = request.GET['type']
 
-
+        financeData = getFinanceData(request.user, year, month, day, type)
 
         jsonResult = {'state': stateCode.SUCCESS}
-        jsonResult.update(accountBookData)
+        jsonResult['data'] = list(financeData)
     except Exception as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
     else:
