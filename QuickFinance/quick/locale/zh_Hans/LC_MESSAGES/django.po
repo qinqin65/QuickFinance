@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-08-07 15:34+0800\n"
+"POT-Creation-Date: 2016-09-08 04:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,66 +17,70 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: templates/quick/index.html:8
+#: quick/templates/quick/index.html:8
 msgid "quick finance"
 msgstr "快账-在线记账"
 
-#: util.py:22
+#: quick/util.py:23
 msgid "user does not login"
 msgstr "用户未登录"
 
-#: util.py:27
-msgid "defaultAccountBook"
+#: quick/util.py:28
+msgid "default Account Book"
 msgstr "默认账本"
 
-#: util.py:30
+#: quick/util.py:31
 msgid "wallet"
 msgstr "钱包"
 
-#: util.py:54 util.py:93
+#: quick/util.py:55 quick/util.py:94
 msgid "total property"
 msgstr "全部账户"
 
-#: views.py:36
+#: quick/views.py:28
 msgid "login failed"
 msgstr "登录失败"
 
-#: views.py:40
+#: quick/views.py:32
 msgid "user or password is invalid"
 msgstr "用户名或密码错误"
 
-#: views.py:52
+#: quick/views.py:44
 msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
 
-#: views.py:59
+#: quick/views.py:51
 msgid "logout failed"
 msgstr "退出失败"
 
-#: views.py:61
+#: quick/views.py:53
 msgid "logout success"
 msgstr "退出成功"
 
-#: views.py:73
+#: quick/views.py:65
 msgid "user already exist"
 msgstr "用户已注册"
 
-#: views.py:75
+#: quick/views.py:67
 msgid "register failed"
 msgstr "注册失败"
 
-#: views.py:88
+#: quick/views.py:79
 msgid "error occured when processing account book"
 msgstr "处理帐本时出错"
 
-#: views.py:99
+#: quick/views.py:90
 msgid "error occured when get currency select store"
 msgstr "获取币种时出错"
 
-#: views.py:110
+#: quick/views.py:101
 msgid "error occured when get account type store"
 msgstr "获取收支类别时出错"
 
-#: views.py:137
+#: quick/views.py:124
 msgid "accounting failed"
 msgstr "记账失败"
+
+#: quick/views.py:141
+msgid "request finance data failed"
+msgstr "请求账务数据失败"

@@ -25,7 +25,7 @@ def login_required(func):
     return _wrapped_func
 
 def initAccount(user):
-    accountBook = AccountBook(user=user, accountBookName=_('defaultAccountBook'))
+    accountBook = AccountBook(user=user, accountBookName=_('default Account Book'))
     accountBook.save()
 
     account = Account(accountBook=accountBook, accountName=_('wallet'), currency=currency.defaultCurrency)
