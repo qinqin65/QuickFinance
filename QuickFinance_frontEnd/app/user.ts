@@ -8,19 +8,19 @@ class User {
     public isLogin: boolean
     public userName: string
     private isLoginRequst: boolean
-    
+
     constructor() {
         this.isLogin = false;
         this.isLoginRequst = false;
     }
-    
+
     login(userName: string, password: string, isRemenmber: boolean) {
         if(this.isLoginRequst) {
             return;
         }
-        
+
         let option: any = {
-            handleAs: 'json', 
+            handleAs: 'json',
             data: {
                 userName,
                 password,
@@ -40,37 +40,38 @@ class User {
             topic.publish('login/error', lang.xhrErr);
         })
         .then(()=>this.isLoginRequst = false);
-        
+
         this.isLoginRequst = true;
     }
-    
+
     remembermeLogin(userName: string) {
         this.isLogin = true;
         this.userName = userName;
     }
-    
+
     logout() {
         let option: any = {
+            url: `${Config.requestHost}/logout`,
             handleAs: 'json'
         };
-        xhr.get(`${Config.requestHost}/logout`, option)
+        xhr.get(option)
         .then((data)=>{
             if(!data.state || data.state != stateCode.SUCCESS) {
                 topic.publish('tipService/warning', data.info);
             } else {
                 this.isLogin = false;
                 this.userName = '';
-                
+
                 topic.publish('user/logout', this);
             }
         }, (error)=>{
-        
+
         });
     }
-    
+
     register(userName: string, email: string, password: string) {
         let option: any = {
-            handleAs: 'json', 
+            handleAs: 'json',
             data: {
                 userName,
                 email,
