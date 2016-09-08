@@ -136,7 +136,7 @@ def financePreviewData(request):
         financeData = getFinanceData(request.user, year, month, day, type)
 
         jsonResult = {'state': stateCode.SUCCESS}
-        jsonResult['data'] = list(financeData)
+        jsonResult['financePreviewData'] = list(financeData)
     except Exception as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
     else:
