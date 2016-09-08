@@ -4,6 +4,7 @@ import * as xhr from 'xhr';
 import Config from 'config';
 import * as stateCode from 'stateCode';
 import {user} from 'user';
+import {getCountDays} from 'util';
 
 abstract class BaseStore {
     protected store: Array<any>
@@ -135,12 +136,27 @@ class FinancePreviewStore extends BaseStore {
         super();
     }
 
-    setParam(year: string, month: string, day: string, hour: string, type: AccountingType) {
+    setParam(year: string, month: string, day: string, type: AccountingType) {
         this.year = year;
         this.month = month;
         this.day = day;
-        this.hour = hour;
         this.type = type;
+    }
+
+    private dataHandler(data) {
+        if(this.month == '0') {
+            
+        } else if(this.day == '0') {
+            let days: number = getCountDays(data.date);
+            for(let i = 1; i < days + 1; i++) {
+                let curDate = new Date(data.date);
+                if(curDate.getDate() == i) {
+                    this.store[i] = data.value;
+                } else {
+                    this.store[i] = 0;
+                }
+            }
+        }
     }
 
     requestStore() {
@@ -154,14 +170,13 @@ class FinancePreviewStore extends BaseStore {
                 year: this.year,
                 month: this.month,
                 day: this.day,
-                hour:this.hour,
                 type: this.type
             }
         };
         xhr.get(option)
         .then((data)=>{
             if(data.state === stateCode.SUCCESS  && dojo.isArray(data.financePreviewData)) {
-                this.store = data.financePreviewData;
+                this.dataHandler(data.financePreviewData);
             } else if(data.state === stateCode.Error) {
                 topic.publish('tipService/warning', data.info);
             } else if(data.state === stateCode.NOTLOGGIN) {
