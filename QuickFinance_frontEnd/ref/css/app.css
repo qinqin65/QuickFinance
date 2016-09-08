@@ -1,8 +1,13 @@
+html {
+    height: 100%;
+}
+
 body {
     font-family: 'Segoe UI', sans-serif;
     margin: 0rem;
     position: relative;
     padding-bottom: 6rem;
+    min-height: 100%;
 }
 
 a {
