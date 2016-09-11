@@ -143,18 +143,34 @@ class FinancePreviewStore extends BaseStore {
         this.type = type;
     }
 
-    private dataHandler(data) {
+    private initStore(length: number) {
+        for(let i = 0; i < length; i++) {
+            this.store[i] = 0;
+        }
+    }
+
+    private dataHandler(data: Array<any>) {
         if(this.month == '0') {
-            
+            this.initStore(12);
+            for(let i = 0; i < data.length; i++) {
+                let curDate = new Date(data[i].date);
+                let curMonth = curDate.getMonth();
+                this.store[curMonth] += data[i].value;
+            }
         } else if(this.day == '0') {
-            let days: number = getCountDays(data.date);
-            for(let i = 1; i < days + 1; i++) {
-                let curDate = new Date(data.date);
-                if(curDate.getDate() == i) {
-                    this.store[i] = data.value;
-                } else {
-                    this.store[i] = 0;
-                }
+            let days: number = getCountDays(`${this.year}/${this.month}/1`);
+            this.initStore(days);
+            for(let i = 0; i < data.length; i++) {
+                let curDate = new Date(data[i].date);
+                let curDay = curDate.getDate() - 1;
+                this.store[curDay] += data[i].value;
+            }
+        } else {
+            this.initStore(24);
+            for(let i = 0; i < data.length; i++) {
+                let curDate = new Date(data[i].date);
+                let curHour = curDate.getHours() - 1;
+                this.store[curHour] += data[i].value;
             }
         }
     }
@@ -177,6 +193,7 @@ class FinancePreviewStore extends BaseStore {
         .then((data)=>{
             if(data.state === stateCode.SUCCESS  && dojo.isArray(data.financePreviewData)) {
                 this.dataHandler(data.financePreviewData);
+                topic.publish('finance/financeDataChanged', false);
             } else if(data.state === stateCode.Error) {
                 topic.publish('tipService/warning', data.info);
             } else if(data.state === stateCode.NOTLOGGIN) {
