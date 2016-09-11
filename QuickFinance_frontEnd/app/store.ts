@@ -144,39 +144,41 @@ class FinancePreviewStore extends BaseStore {
     }
 
     private initStore(length: number) {
+        this.store = [];
         for(let i = 0; i < length; i++) {
             this.store[i] = 0;
         }
     }
 
     private dataHandler(data: Array<any>) {
+        let getCursor = (date)=>{
+            let curDate = new Date(date);
+            return curDate.getMonth();
+        }
         if(this.month == '0') {
             this.initStore(12);
-            for(let i = 0; i < data.length; i++) {
-                let curDate = new Date(data[i].date);
-                let curMonth = curDate.getMonth();
-                this.store[curMonth] += data[i].value;
-            }
         } else if(this.day == '0') {
             let days: number = getCountDays(`${this.year}/${this.month}/1`);
             this.initStore(days);
-            for(let i = 0; i < data.length; i++) {
-                let curDate = new Date(data[i].date);
-                let curDay = curDate.getDate() - 1;
-                this.store[curDay] += data[i].value;
+            getCursor = (date)=>{
+                let curDate = new Date(date);
+                return curDate.getDate() - 1;
             }
         } else {
             this.initStore(24);
-            for(let i = 0; i < data.length; i++) {
-                let curDate = new Date(data[i].date);
-                let curHour = curDate.getHours() - 1;
-                this.store[curHour] += data[i].value;
+            getCursor = (date)=>{
+                let curDate = new Date(date);
+                return curDate.getHours() - 1;
             }
+        }
+        for(let i = 0; i < data.length; i++) {
+            let cursor = getCursor(data[i].date);
+            this.store[cursor] += data[i].value;
         }
     }
 
     requestStore() {
-        if(!this.year || !this.month || !this.day || this.hour || this.type) {
+        if(!this.year || !this.month || !this.day || !this.type) {
             return;
         }
         let option: any = {
