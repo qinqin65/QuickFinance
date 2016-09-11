@@ -1,5 +1,5 @@
-export let Error: number = 0;
-export let SUCCESS: number = 1;
-export let NOTLOGGIN: number = 2;
-export let INCOME: number = 3;
-export let OUTCOME: number = 4;
+export const Error: number = 0;
+export const SUCCESS: number = 1;
+export const NOTLOGGIN: number = 2;
+export const INCOME: number = 3;
+export const OUTCOME: number = 4;
