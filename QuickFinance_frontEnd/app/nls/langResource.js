@@ -53,6 +53,12 @@
     ////按钮
     comfirm: '确定',
     cancel: '取消',
-    saveSuccess: '保存成功'
+    saveSuccess: '保存成功',
+    ////帐务一览之日期选取
+    noSelection: '不选',
+    dateYear: '年份',
+    dateMonth: '月份',
+    dateDay: '天',
+    filter: '筛选'
   }
 });

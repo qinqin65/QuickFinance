@@ -16,7 +16,6 @@ a {
 label {
     display: inline-block;
     max-width: 100%;
-    /*margin-bottom: 5px;*/
     font-weight: 700;
 }
 
@@ -164,7 +163,7 @@ label {
 /*页脚*/
 .page-footer {
     position: absolute;
-    padding: 2rem 0;
+    padding: 1rem 0;
     color: #FFFFFF;
     text-align: center;
     background-color: #444444;
@@ -172,12 +171,6 @@ label {
     bottom: 0rem;
     left: 0rem;
     width: 100%;
-}
-
-@media screen and (max-width: 1366px) {
-    .page-footer {
-        padding: 1rem 0;
-    }
 }
 
 /*首页旋转木马*/
@@ -737,4 +730,21 @@ label {
     padding: 15px;
     border: 1px solid transparent;
     border-radius: 4px;
+}
+
+/*帐务一览*/
+.financeChartContainer {
+    display: flex;
+    justify-content: center;
+}
+
+#financeChartNode {
+    width: 800px;
+    height: 400px;
+}
+
+.previewDatePick {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
 }

@@ -11,7 +11,110 @@ import 'dojox/charting/plot2d/Markers';
 import 'dojox/charting/axis2d/Default';
 import 'xstyle/css!ref/css/dijit.css';
 import {accountToolSelect} from 'accountDetail';
-import {financePreviewStore} from 'store';
+import {financePreviewStore, AccountingType} from 'store';
+import * as lang from 'dojo/i18n!app/nls/langResource.js';
+import {getCountDays} from 'util';
+import * as stateCode from 'stateCode';
+
+export class DatePick extends React.Component<any, any> {
+  private curDate: Date;
+  private yearRange: number;
+  private currentYear: number;
+  private currentMonth: number;
+
+  constructor(props, context) {
+    super(props, context);
+    this.curDate = new Date();
+    this.yearRange = 50;
+    this.state = {
+      currentYear: this.curDate.getFullYear(),
+      currentMonth: this.curDate.getMonth() + 1,
+      currentDay: '0',
+      currentType: AccountingType.outcome
+    };
+  }
+
+  getYearRange() {
+    let results: Array<JSX.Element> = [];
+    let length = this.yearRange * 2 + 1;
+    let startYear = this.state.currentYear - this.yearRange;
+    for(let i = 0;i < length;i++) {
+      let year = startYear + i;
+      results.push(<option key={year} value={year}>{year}</option>);
+    }
+    return results;
+  }
+
+  getMonthRange() {
+    let results: Array<JSX.Element> = [];
+    let length = 12;
+    results.push(<option key={lang.noSelection} value='0'>{lang.noSelection}</option>);
+    for(let i = 0;i < length;i++) {
+      let month = i + 1;
+      results.push(<option key={month} value={month}>{month}</option>);
+    }
+    return results;
+  }
+
+  getDayRange() {
+    let results: Array<JSX.Element> = [];
+    let length = getCountDays(`${this.state.currentYear}/${this.state.currentMonth}/1`);
+    results.push(<option key={lang.noSelection} value='0'>{lang.noSelection}</option>);
+    for(let i = 0;i < length;i++) {
+      let day = i + 1;
+      results.push(<option key={day} value={day}>{day}</option>);
+    }
+    return results;
+  }
+
+  performFilter() {
+    let year: string = this.refs.previewDateYear.value;
+    let month: string = this.refs.previewDateMonth.value;
+    let day: string = this.refs.previewDateDay.value;
+    let type: AccountingType = this.refs.previewAccountType.value;
+    financePreviewStore.setParam(year, month, day, type);
+    financePreviewStore.requestStore();
+  }
+
+  componentDidMount() {
+    this.performFilter();
+  }
+
+  render() {
+    return (
+      <div className='previewDatePick'>
+        <label htmlFor="previewDateYear">{ lang.dateYear }</label>
+        <select className="accounting-block-select" ref="previewDateYear" id="previewDateYear" onChange={ (event: any)=>this.setState({currentYear: event.target.value}) } value={ this.state.currentYear }>
+          {
+            this.getYearRange()
+          }
+        </select>
+
+        <label htmlFor="previewDateMonth">{ lang.dateMonth }</label>
+        <select className="accounting-block-select" ref="previewDateMonth" id="previewDateMonth" onChange={ (event: any)=>this.setState({currentMonth: event.target.value}) } value={ this.state.currentMonth }>
+          {
+            this.getMonthRange()
+          }
+        </select>
+
+        <label htmlFor="previewDateDay">{ lang.dateDay }</label>
+        <select className="accounting-block-select" ref="previewDateDay" id="previewDateDay" onChange={ (event: any)=>this.setState({currentDay: event.target.value}) } value={this.state.currentDay}>
+          {
+            this.getDayRange()
+          }
+        </select>
+
+        <label htmlFor="previewAccountType">{ lang.accountType }</label>
+        <select className="accounting-block-select" ref="previewAccountType" id="previewAccountType" onChange={ (event: any)=>this.setState({currentType: event.target.value}) } value={this.state.currentType}>
+          <option key={stateCode.INCOME} value={stateCode.INCOME}>{lang.income}</option>
+          <option key={stateCode.OUTCOME} value={stateCode.OUTCOME}>{lang.outcome}</option>
+        </select>
+
+        <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.performFilter.bind(this) }>{ lang.filter }</button>
+      </div>
+    );
+  }
+}
 
 export class FinancePreview extends React.Component<any, any> {
   private chart: any;
@@ -57,14 +160,19 @@ export class FinancePreview extends React.Component<any, any> {
     this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
-  onChartDataUpdate() {
-    financePreviewStore.clearStore();
+  onChartDataUpdate(shouldClearStore) {
+    if(shouldClearStore) {
+      financePreviewStore.clearStore();
+    }
     this.chart.updateSeries("financePreviewData", financePreviewStore.getStore());
+    this.chart.render();
   }
 
   render() {
     return (
-        <div id="financeChartNode" style={{ width: '800px', height: '400px' }}></div>
+        <div className='financeChartContainer'>
+          <div id="financeChartNode"></div>
+        </div>
     )
   }
 }
