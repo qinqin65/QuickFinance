@@ -11,7 +11,7 @@ import 'dojox/charting/plot2d/Markers';
 import 'dojox/charting/axis2d/Default';
 import 'xstyle/css!ref/css/dijit.css';
 import {accountToolSelect} from 'accountDetail';
-import {financePreviewStore, AccountingType} from 'store';
+import {financePreviewStore, AccountingType, accountInfoStore} from 'store';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import {getCountDays} from 'util';
 import * as stateCode from 'stateCode';
@@ -72,7 +72,9 @@ export class DatePick extends React.Component<any, any> {
     let month: string = this.refs.previewDateMonth.value;
     let day: string = this.refs.previewDateDay.value;
     let type: AccountingType = this.refs.previewAccountType.value;
-    financePreviewStore.setParam(year, month, day, type);
+    let accountBook: string = accountInfoStore.currentAccountBook;
+    let account: string = accountInfoStore.currentAccount;
+    financePreviewStore.setParam(year, month, day, type, accountBook, account);
     financePreviewStore.requestStore();
   }
 

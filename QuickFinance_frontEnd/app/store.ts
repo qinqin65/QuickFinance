@@ -9,14 +9,14 @@ import {getCountDays} from 'util';
 abstract class BaseStore {
     protected store: Array<any>
     protected isRequesting: boolean
-    
+
     constructor() {
         this.store = [];
         this.isRequesting = false;
     }
-    
+
     abstract requestStore()
-    
+
     getStore():Array<string> {
         if(this.store.length === 0 && !this.isRequesting) {
             this.requestStore();
@@ -28,13 +28,13 @@ abstract class BaseStore {
 class SelectStore extends BaseStore {
     requestPath: string
     topicString: string
-    
+
     constructor(requestPath: string, topicString: string) {
         super();
         this.requestPath = requestPath;
         this.topicString = topicString;
     }
-    
+
     requestStore() {
         let option: any = {
             url: `${Config.requestHost}/${this.requestPath}`,
@@ -54,10 +54,10 @@ class SelectStore extends BaseStore {
                 topic.publish('tipService/warning', lang.xhrDataError);
             }
         }, (error)=>{
-        
+
         })
         .then(()=>this.isRequesting = false);
-        
+
         this.isRequesting = true;
     }
 }
@@ -67,7 +67,7 @@ class AccountInfoStore extends BaseStore {
     currentAccountBook: string
     currentAccount: string
     accountStore: Array<any>
-    
+
     constructor() {
         super();
         this.accountBook = '';
@@ -75,7 +75,7 @@ class AccountInfoStore extends BaseStore {
         this.currentAccount = '';
         this.accountStore = [];
     }
-    
+
     requestStore() {
         let option: any = {
             url: `${Config.requestHost}/accountBookData`,
@@ -103,17 +103,17 @@ class AccountInfoStore extends BaseStore {
             topic.publish('tipService/error', lang.xhrErr);
         })
         .then(()=>this.isRequesting = false);
-        
+
         this.isRequesting = true;
     }
-    
+
     getAccountStore():Array<any> {
         if(this.accountStore.length === 0 && !this.isRequesting) {
             this.requestStore();
         }
         return this.accountStore;
     }
-    
+
     setStore(data) {
         if(dojo.isArray(data.accountBooks) && dojo.isArray(data.accounts)) {
             this.store = data.accountBooks;
@@ -131,16 +131,20 @@ class FinancePreviewStore extends BaseStore {
     private day: string;
     private hour: string;
     private type: AccountingType;
+    private accountBook: string;
+    private account: string;
 
     constructor() {
         super();
     }
 
-    setParam(year: string, month: string, day: string, type: AccountingType) {
+    setParam(year: string, month: string, day: string, type: AccountingType, accountBook: string, account: string) {
         this.year = year;
         this.month = month;
         this.day = day;
         this.type = type;
+        this.accountBook = accountBook;
+        this.account = account;
     }
 
     private initStore(length: number) {
@@ -188,7 +192,9 @@ class FinancePreviewStore extends BaseStore {
                 year: this.year,
                 month: this.month,
                 day: this.day,
-                type: this.type
+                type: this.type,
+                accountBook: this.accountBook,
+                account: this.account
             }
         };
         xhr.get(option)
@@ -208,7 +214,7 @@ class FinancePreviewStore extends BaseStore {
             topic.publish('tipService/error', lang.xhrErr);
         })
         .then(()=>this.isRequesting = false);
-        
+
         this.isRequesting = true;
     }
 

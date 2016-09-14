@@ -558,6 +558,10 @@ label {
     list-style: none;
 }
 
+.financeapp-panel-items-selected {
+    background-color: #eee;
+}
+
 .financeapp-panel-items-active {
     color: white;
     cursor: pointer;

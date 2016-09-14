@@ -132,8 +132,10 @@ def financePreviewData(request):
         month = request.GET['month']
         day = request.GET['day']
         type = request.GET['type']
+        accountBook = request.GET['accountBook']
+        account = request.GET['account']
 
-        financeData = getFinanceData(request.user, year, month, day, type)
+        financeData = getFinanceData(request.user, year, month, day, type, accountBook, account)
 
         jsonResult = {'state': stateCode.SUCCESS}
         jsonResult['financePreviewData'] = list(financeData)

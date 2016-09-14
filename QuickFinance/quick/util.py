@@ -168,7 +168,7 @@ class CurrencyHandler():
 
         return Currency.objects.annotate(name=F(self.currencyNameMap[lanCode])).values('name', 'code')
 
-def getFinanceData(user, year, month, day, type):
+def getFinanceData(user, year, month, day, type, accountBookName, accountName):
     if year == '0':
         return []
 
@@ -182,7 +182,11 @@ def getFinanceData(user, year, month, day, type):
     if not user or not user.usersetting or not user.usersetting.defaultAccount:
         return []
 
-    account = user.usersetting.defaultAccount
+    if accountBookName and accountName:
+        accountBook = AccountBook.objects.get(user=user, accountBookName=accountBookName)
+        account = Account.objects.get(accountBook=accountBook, accountName=accountName)
+    else:
+        account = user.usersetting.defaultAccount
     if month == '0':
         return accountingModel.objects.filter(account = account, date__year = year).values('date', 'value')
     elif day == '0':
