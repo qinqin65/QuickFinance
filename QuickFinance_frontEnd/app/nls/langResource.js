@@ -6,6 +6,7 @@
     backtoTop: '返回顶部',
     tip: '提示：',
     quit: '退出',
+    setup: '设置',
     ////首页旋转木马
     //第一个
     conductFinance: '理财',
