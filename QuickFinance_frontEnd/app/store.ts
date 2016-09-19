@@ -138,6 +138,26 @@ class FinancePreviewStore extends BaseStore {
         super();
     }
 
+    getyear(): string {
+        return this.year;
+    }
+
+    getMonth(): string {
+        return this.month;
+    }
+
+    getDay(): string {
+        return this.day;
+    }
+
+    getType(): AccountingType {
+        return this.type;
+    }
+
+    isStoreEmpty() {
+        return this.store.length === 0;
+    }
+
     setParam(year: string, month: string, day: string, type: AccountingType, accountBook: string, account: string) {
         this.year = year;
         this.month = month;

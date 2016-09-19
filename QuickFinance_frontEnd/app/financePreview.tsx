@@ -27,10 +27,10 @@ export class DatePick extends React.Component<any, any> {
     this.curDate = new Date();
     this.yearRange = 50;
     this.state = {
-      currentYear: this.curDate.getFullYear(),
-      currentMonth: this.curDate.getMonth() + 1,
-      currentDay: '0',
-      currentType: AccountingType.outcome
+      currentYear: financePreviewStore.getyear() || this.curDate.getFullYear(),
+      currentMonth: financePreviewStore.getMonth() || this.curDate.getMonth() + 1,
+      currentDay: financePreviewStore.getDay() || '0',
+      currentType: financePreviewStore.getType() || AccountingType.outcome
     };
   }
 
@@ -79,7 +79,9 @@ export class DatePick extends React.Component<any, any> {
   }
 
   componentDidMount() {
-    this.performFilter();
+    if(financePreviewStore.isStoreEmpty()) {
+      this.performFilter();
+    }
   }
 
   render() {
