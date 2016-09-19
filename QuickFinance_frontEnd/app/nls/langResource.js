@@ -60,6 +60,11 @@
     dateYear: '年份',
     dateMonth: '月份',
     dateDay: '天',
-    filter: '筛选'
+    filter: '筛选',
+    ////设置
+    applicationSetup: '应用设置',
+    accountManager: '账本管理',
+    security: '安全',
+    changePassword: '修改密码'
   }
 });
