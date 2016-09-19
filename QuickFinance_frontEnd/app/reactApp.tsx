@@ -3,9 +3,11 @@ import * as topic from 'dojo/topic';
 import {MainShow} from 'mainShow';
 import Login from 'login';
 import Finance from 'financeApp';
+import Setup from 'setup';
+import {select} from 'navBar';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 
-enum app{Login, mainPage};
+enum app{Login, mainPage, setup};
 enum tipType{info, warning, error};
 
 const loginApp = (props?)=><div><MainShow /><Login /></div>
@@ -94,6 +96,13 @@ export class App extends React.Component<any, any> {
     
     this.topicHandler.push(topic.subscribe('user/login', (user)=>this.setState({renderApp: app.mainPage})));
     this.topicHandler.push(topic.subscribe('user/logout', (user)=>this.setState({renderApp: app.Login})));
+    this.topicHandler.push(topic.subscribe('nav/itemClicked', (item)=>{
+      if(item === select.setup) {
+        this.setState({renderApp: app.setup});
+      } else if(item === select.home) {
+        this.setState({renderApp: app.mainPage});
+      }
+    }));
   }
   
   componentWillUnmount() {
@@ -104,7 +113,9 @@ export class App extends React.Component<any, any> {
     return (
       <div>
         {
-          this.state.renderApp == app.Login ? loginApp() : <Finance />
+          this.state.renderApp == app.Login ? loginApp() : 
+          this.state.renderApp == app.mainPage ? <Finance /> :
+          this.state.renderApp == app.setup ? <Setup /> : null
         }
         <TipService />
       </div>
