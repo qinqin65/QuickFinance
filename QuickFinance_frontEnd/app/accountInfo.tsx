@@ -29,7 +29,7 @@ export class AccountBook extends React.Component<any, any> {
       return (
         <ul className="financeapp-panel-ul">
             <li className="financeapp-panel-items-active">{ lang.AccountBook }</li>
-            <select className="financeapp-panel-item-select" onChange={ this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
+            <select className="financeapp-panel-item-select select" onChange={ this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
               {
                 accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
               }

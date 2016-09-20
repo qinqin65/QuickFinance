@@ -4,6 +4,7 @@ import {BlockPanel} from 'blockPanel';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
 import {accountInfoStore} from 'store';
+import {Validete, validateType} from 'validate';
 
 enum setupItem{accountManager, security};
 
@@ -24,20 +25,55 @@ class AccountManager extends React.Component<any, any> {
 
 class AccountManagerDetail extends React.Component<any, any> {
   private topicHandler: Array<any>
+  private addAccountBookvalidates: Validete;
+  private addAccountvalidates: Validete;
 
   constructor(props, context) {
     super(props, context);
-    this.state = {currentAccountBook: ''};
+    this.state = {currentAccountBook: '', currentAccount: ''};
+    this.addAccountBookvalidates = new Validete();
+    this.addAccountvalidates = new Validete();
+  }
+
+  componentDidMount() {
+    this.addAccountBookvalidates.addValiItems('txtAddAccountBook', validateType.needed);
+    this.addAccountvalidates.addValiItems('txtAddAccount', validateType.needed);
+  }
+
+  addAccountBook() {
+    if(!this.addAccountBookvalidates.validate()) {
+      return;
+    }
+  }
+
+  addAccount() {
+    if(!this.addAccountvalidates.validate()) {
+      return;
+    }
   }
 
   render() {
       return (
         <BlockPanel title={ lang.accountManager }>
-          <select className="financeapp-panel-item-select" onChange={ (event: any)=>this.setState({currentAccountBook: event.target.value}) } value={ this.state.currentAccountBook }>
-            {
-              accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
-            }
-          </select>
+          <div>
+            <select className="select" onChange={ (event: any)=>this.setState({currentAccountBook: event.target.value}) } value={ this.state.currentAccountBook }>
+              {
+                accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
+              }
+            </select>
+            <input className="inputBox" ref='addAccountBook' type="text" id='txtAddAccountBook' />
+            <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccountBook.bind(this) }>{ lang.add }</button>
+          </div>
+
+          <div>
+            <select className="select" onChange={ (event: any)=>this.setState({currentAccount: event.target.value}) } value={ this.state.currentAccount }>
+              {
+                accountInfoStore.getAccountStore().map((accountData)=><option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>)
+              }
+            </select>
+            <input className="inputBox" ref='addAccountBook' type="text" id='txtAddAccount' />
+            <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccount.bind(this) }>{ lang.add }</button>
+          </div>
         </BlockPanel>
       );
   }

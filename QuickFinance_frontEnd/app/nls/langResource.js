@@ -55,6 +55,7 @@
     comfirm: '确定',
     cancel: '取消',
     saveSuccess: '保存成功',
+    add: '添加',
     ////帐务一览之日期选取
     noSelection: '不选',
     dateYear: '年份',
