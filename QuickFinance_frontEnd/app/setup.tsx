@@ -3,6 +3,7 @@ import {LeftPanel} from 'leftPanel';
 import {BlockPanel} from 'blockPanel';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
+import {accountInfoStore} from 'store';
 
 enum setupItem{accountManager, security};
 
@@ -26,11 +27,17 @@ class AccountManagerDetail extends React.Component<any, any> {
 
   constructor(props, context) {
     super(props, context);
+    this.state = {currentAccountBook: ''};
   }
 
   render() {
       return (
         <BlockPanel title={ lang.accountManager }>
+          <select className="financeapp-panel-item-select" onChange={ (event: any)=>this.setState({currentAccountBook: event.target.value}) } value={ this.state.currentAccountBook }>
+            {
+              accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
+            }
+          </select>
         </BlockPanel>
       );
   }
