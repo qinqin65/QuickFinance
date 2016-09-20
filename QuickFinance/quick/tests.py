@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.test import TestCase
 from django.contrib.auth.models import User
 from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
-from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData
+from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData, addAccountBook, addAccount
 from . import stateCode
 import random,datetime
 
@@ -123,3 +123,29 @@ class QuickTest(TestCase):
         self.assertEqual(len(testIncomeDataYear), 1, 'the count of income type of record of year must be 1')
         testOutcomeDataYear2 = getFinanceData(user2, '2016', '0', '0', stateCode.OUTCOME, None, None)
         self.assertEqual(len(testOutcomeDataYear2), 1, 'the count of outcome type of record of year of user2 must be 1')
+
+    def test_addAccountBook(self):
+        userName, password, email = self.genUserInfo()
+        user = createUserAndInit(userName, email, password)
+
+        testAccountBookName = 'testAccountBook'
+        testRemark = 'test'
+        addAccountBook(user, testAccountBookName, testRemark)
+
+        accountBook = AccountBook.objects.filter(user=user, accountBookName=testAccountBookName)
+        self.assertEqual(len(accountBook), 1, 'the count of account book must be 1 if added successfully')
+
+    def test_addAccount(self):
+        userName, password, email = self.genUserInfo()
+        user = createUserAndInit(userName, email, password)
+
+        testAccountBook = user.usersetting.defaultAccountBook
+        testAccountName = 'testAccount'
+        currency = user.usersetting.defaultCurrency
+        webUrl = 'www.test.com'
+        testRemark = 'test'
+
+        addAccount(user, testAccountBook.accountBookName, testAccountName, currency.code, webUrl, testRemark)
+
+        account = Account.objects.filter(accountBook=testAccountBook, accountName=testAccountName)
+        self.assertEqual(len(account), 1, 'the count of account must be 1 if added successfully')

@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData
+from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData, addAccountBook, addAccount
 
 @ensure_csrf_cookie
 def home(request):
@@ -139,6 +139,37 @@ def financePreviewData(request):
 
         jsonResult = {'state': stateCode.SUCCESS}
         jsonResult['financePreviewData'] = list(financeData)
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+def addAccountBook(request):
+    try:
+        accountBook = request.GET['accountBook']
+        remark = request.GET['remark']
+
+        addAccountBook(request.user, accountBook, remark)
+
+        jsonResult = {'state': stateCode.SUCCESS}
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
+    else:
+        return JsonResponse(jsonResult)
+
+@login_required
+def addAccount(request):
+    try:
+        accountBook = request.GET['accountBook']
+        account = request.GET['account']
+        currency = request.GET['currency']
+        webUrl = request.GET['webUrl']
+        remark = request.GET['remark']
+
+        addAccount(request.user, accountBook, account, currency, webUrl, remark)
+
+        jsonResult = {'state': stateCode.SUCCESS}
     except Exception as e:
         return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
     else:

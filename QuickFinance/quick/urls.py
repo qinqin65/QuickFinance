@@ -10,4 +10,6 @@ urlpatterns = [
     url(r'accountTypeSelectStore', views.accountTypeSelectStore, name='accountTypeSelectStore'),
     url(r'accounting', views.accounting, name='accounting'),
     url(r'financePreviewData', views.financePreviewData, name='financePreviewData'),
+    url(r'addAccountBook', views.addAccountBook, name='addAccountBook'),
+    url(r'addAccount', views.addAccount, name='addAccount')
 ]
