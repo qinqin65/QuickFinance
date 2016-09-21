@@ -68,7 +68,7 @@ class AccountManagerDetail extends React.Component<any, any> {
           <div>
             <select className="select" onChange={ (event: any)=>this.setState({currentAccount: event.target.value}) } value={ this.state.currentAccount }>
               {
-                accountInfoStore.getAccountStore().map((accountData)=><option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>)
+                accountInfoStore.getAccountStore().slice(1).map((accountData)=><option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>)
               }
             </select>
             <input className="inputBox" ref='addAccountBook' type="text" id='txtAddAccount' />
