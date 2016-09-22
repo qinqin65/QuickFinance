@@ -52,7 +52,20 @@ def getAccountBook(user, requestAccountBook):
     else:
         currentAccountBook = AccountBook.objects.get(user=user, pk=userSetting.defaultAccountBook.pk)
 
-    result = {'accountBooks': [], 'accounts': [{'accountName': _('total property'), 'accountTotal': userSetting.totalProperty, 'currency': {'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol, 'name': '' if userSetting.defaultCurrency is None else userSetting.defaultCurrency[currency.currencyNameMap[currency.lanCode]]}, 'webUrl': '', 'remark': ''}], 'currentAccountBook': None}
+    result = {
+        'accountBooks': [],
+        'accounts': [{
+            'accountName': _('total property'),
+            'accountTotal': userSetting.totalProperty,
+            'currency': {
+                'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol,
+                'name': '' if userSetting.defaultCurrency is None else userSetting.defaultCurrency[currency.currencyNameMap[currency.lanCode]]
+            },
+            'webUrl': '',
+            'remark': ''
+        }],
+        'currentAccountBook': None
+    }
 
     for book in accountBooks:
         result['accountBooks'].append({'name': book.accountBookName, 'remark': book.remark})
@@ -60,7 +73,16 @@ def getAccountBook(user, requestAccountBook):
     if(currentAccountBook):
         accounts = Account.objects.filter(accountBook=currentAccountBook)
         for account in accounts:
-            result['accounts'].append({'accountName': account.accountName, 'accountTotal': account.total, 'currency': {'symbol': '?' if account.currency is None else account.currency.symbol, 'name': '' if account.currency is None else account.currency[currency.currencyNameMap[currency.lanCode]]}, 'webUrl': account.webUrl, 'remark': account.remark})
+            result['accounts'].append({
+                'accountName': account.accountName,
+                'accountTotal': account.total,
+                'currency': {
+                    'symbol': '?' if account.currency is None else account.currency.symbol,
+                    'name': '' if account.currency is None else account.currency[currency.currencyNameMap[currency.lanCode]]
+                },
+                'webUrl': account.webUrl,
+                'remark': account.remark
+            })
         result['currentAccountBook'] = currentAccountBook.accountBookName
 
     return result
