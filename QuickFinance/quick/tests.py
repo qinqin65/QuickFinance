@@ -66,6 +66,8 @@ class QuickTest(TestCase):
 
         self.assertTrue(isinstance(result['accountBooks'], list), 'accountBooks must be a list')
         self.assertTrue(isinstance(result['accounts'], list), 'accounts must be a list')
+        self.assertTrue(isinstance(result['accountBooks'][0], dict), 'accountBooks\' item must be a dict')
+        self.assertTrue(isinstance(result['accounts'][0], dict), 'accounts\' item must be a dict')
 
     def test_Accounting(self):
         userName, password, email = self.genUserInfo()

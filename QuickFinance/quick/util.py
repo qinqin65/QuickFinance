@@ -52,15 +52,15 @@ def getAccountBook(user, requestAccountBook):
     else:
         currentAccountBook = AccountBook.objects.get(user=user, pk=userSetting.defaultAccountBook.pk)
 
-    result = {'accountBooks': [], 'accounts': [{'accountName': _('total property'), 'accountTotal': userSetting.totalProperty, 'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol}], 'currentAccountBook': None}
+    result = {'accountBooks': [], 'accounts': [{'accountName': _('total property'), 'accountTotal': userSetting.totalProperty, 'currency': {'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol, 'name': '' if userSetting.defaultCurrency is None else userSetting.defaultCurrency[currency.currencyNameMap[currency.lanCode]]}, 'webUrl': '', 'remark': ''}], 'currentAccountBook': None}
 
     for book in accountBooks:
-        result['accountBooks'].append(book.accountBookName)
+        result['accountBooks'].append({'name': book.accountBookName, 'remark': book.remark})
 
     if(currentAccountBook):
         accounts = Account.objects.filter(accountBook=currentAccountBook)
         for account in accounts:
-            result['accounts'].append({'accountName': account.accountName, 'accountTotal': account.total, 'symbol': '?' if account.currency is None else account.currency.symbol})
+            result['accounts'].append({'accountName': account.accountName, 'accountTotal': account.total, 'currency': {'symbol': '?' if account.currency is None else account.currency.symbol, 'name': '' if account.currency is None else account.currency[currency.currencyNameMap[currency.lanCode]]}, 'webUrl': account.webUrl, 'remark': account.remark})
         result['currentAccountBook'] = currentAccountBook.accountBookName
 
     return result
@@ -154,19 +154,19 @@ class CurrencyHandler():
         self.defaultCurrencyMap = 'zh-hans'
 
     @property
+    def lanCode(self):
+        code = get_language()
+        if code not in self.currencyMap:
+            code = self.defaultCurrencyMap
+        return code
+
+    @property
     def defaultCurrency(self):
-        lanCode = get_language()
-        if lanCode not in self.currencyMap:
-            lanCode = self.defaultCurrencyMap
-        return Currency.objects.get(code=self.currencyMap[lanCode])
+        return Currency.objects.get(code=self.currencyMap[self.lanCode])
 
     @property
     def allCurrency(self):
-        lanCode = get_language()
-        if lanCode not in self.currencyMap:
-            lanCode = self.defaultCurrencyMap
-
-        return Currency.objects.annotate(name=F(self.currencyNameMap[lanCode])).values('name', 'code')
+        return Currency.objects.annotate(name=F(self.currencyNameMap[self.lanCode])).values('name', 'code')
 
 def getFinanceData(user, year, month, day, type, accountBookName, accountName):
     if year == '0':
