@@ -59,7 +59,7 @@ def getAccountBook(user, requestAccountBook):
             'accountTotal': userSetting.totalProperty,
             'currency': {
                 'symbol': '?' if userSetting.defaultCurrency is None else userSetting.defaultCurrency.symbol,
-                'name': '' if userSetting.defaultCurrency is None else userSetting.defaultCurrency[currency.currencyNameMap[currency.lanCode]]
+                'name': '' if userSetting.defaultCurrency is None else getattr(userSetting.defaultCurrency, currency.currencyNameMap[currency.lanCode], None)
             },
             'webUrl': '',
             'remark': ''
@@ -78,7 +78,7 @@ def getAccountBook(user, requestAccountBook):
                 'accountTotal': account.total,
                 'currency': {
                     'symbol': '?' if account.currency is None else account.currency.symbol,
-                    'name': '' if account.currency is None else account.currency[currency.currencyNameMap[currency.lanCode]]
+                    'name': '' if account.currency is None else getattr(account.currency, currency.currencyNameMap[currency.lanCode], None)
                 },
                 'webUrl': account.webUrl,
                 'remark': account.remark
