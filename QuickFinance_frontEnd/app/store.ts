@@ -63,14 +63,12 @@ class SelectStore extends BaseStore {
 }
 
 class AccountInfoStore extends BaseStore {
-    accountBook: string
     currentAccountBook: string
     currentAccount: string
     accountStore: Array<any>
 
     constructor() {
         super();
-        this.accountBook = '';
         this.currentAccountBook = '';
         this.currentAccount = '';
         this.accountStore = [];
@@ -81,14 +79,13 @@ class AccountInfoStore extends BaseStore {
             url: `${Config.requestHost}/accountBookData`,
             handleAs: 'json',
             content: {
-                accountBook: this.accountBook
+                accountBook: this.currentAccountBook
             }
         };
         xhr.get(option)
         .then((data)=>{
             if(data.state === stateCode.SUCCESS  && dojo.isArray(data.accountBooks) && dojo.isArray(data.accounts)) {
                 this.store = data.accountBooks;
-                this.currentAccountBook = data.currentAccountBook;
                 this.accountStore = data.accounts;
                 topic.publish('financeapp/accountBookData', this);
             } else if(data.state === stateCode.Error) {

@@ -17,7 +17,7 @@ export class AccountBook extends React.Component<any, any> {
   }
 
   selectHandler(event) {
-    accountInfoStore.accountBook = event.target.value;
+    accountInfoStore.currentAccountBook = event.target.value;
     accountInfoStore.requestStore();
   }
 
@@ -31,7 +31,7 @@ export class AccountBook extends React.Component<any, any> {
             <li className="financeapp-panel-items-active">{ lang.AccountBook }</li>
             <select className="financeapp-panel-item-select select" onChange={ this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
               {
-                accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
+                accountInfoStore.getStore().map((accountBook)=><option key={ accountBook.name } value={ accountBook.name }>{ accountBook.name }</option>)
               }
             </select>
         </ul>
@@ -58,7 +58,20 @@ export class Account extends React.Component<any, any> {
         <ul className="financeapp-panel-ul">
           <li className="financeapp-panel-items-active">{ lang.account }</li>
           {
-            accountInfoStore.getAccountStore().map((accountData)=><li onClick={ ()=>{accountInfoStore.currentAccount = accountData.accountName;this.setState({currentAccount: accountData.accountName});topic.publish('finance/financeDataChanged', true);} } key={ accountData.accountName } className={ this.state.currentAccount == accountData.accountName ? "financeapp-panel-items financeapp-panel-items-selected" : "financeapp-panel-items" }><span>{ accountData.accountName }</span><span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.symbol }{ accountData.accountTotal }</span></li>)
+            accountInfoStore.getAccountStore().map(
+              (accountData)=>
+                <li onClick={ ()=>{
+                      accountInfoStore.currentAccount = accountData.accountName;
+                      this.setState({currentAccount: accountData.accountName});
+                      topic.publish('finance/financeDataChanged', true);
+                    }
+                  }
+                  key={ accountData.accountName }
+                  className={ this.state.currentAccount == accountData.accountName ? "financeapp-panel-items financeapp-panel-items-selected" : "financeapp-panel-items" }>
+                  <span>{ accountData.accountName }</span>
+                  <span style={{ float: 'right', lineHeight: '1.5rem' }}>{ accountData.currency ? accountData.currency.symbol : '?' }{ accountData.accountTotal }</span>
+                </li>
+            )
           }
         </ul>
       )
