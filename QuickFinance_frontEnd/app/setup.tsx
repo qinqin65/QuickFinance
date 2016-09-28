@@ -3,7 +3,7 @@ import {LeftPanel} from 'leftPanel';
 import {BlockPanel} from 'blockPanel';
 import * as lang from 'dojo/i18n!app/nls/langResource.js';
 import * as topic from 'dojo/topic';
-import {accountInfoStore} from 'store';
+import {accountInfoStore, currencySelectStore} from 'store';
 import {Validete, validateType} from 'validate';
 
 enum setupItem{accountManager, security};
@@ -32,14 +32,20 @@ class AccountManagerDetail extends React.Component<any, any> {
 
   constructor(props, context) {
     super(props, context);
-    this.state = {currentAccount: ''};
+    this.state = {currentAccount: '', selectCurrencyValue: '', currencySelect: currencySelectStore.getStore()};
     this.addAccountBookvalidates = new Validete();
     this.addAccountvalidates = new Validete();
+    this.topicHandler = [];
+    this.topicHandler.push(topic.subscribe('selectStore/currencySelectStore', ()=>this.setState({currencySelect: currencySelectStore.getStore()})));
   }
 
   componentDidMount() {
     this.addAccountBookvalidates.addValiItems('addAccountBookName', validateType.needed);
     this.addAccountvalidates.addValiItems('txtAddAccountName', validateType.needed);
+  }
+
+  componentWillUnmount() {
+    this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
   selectHandler(event) {
@@ -65,7 +71,7 @@ class AccountManagerDetail extends React.Component<any, any> {
           <div>
             <select className="select" onChange={ (event: any)=>this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
               {
-                accountInfoStore.getStore().map((accountBook)=>{
+                accountInfoStore.getStore().map((accountBook: any)=>{
                   if(accountBook.name == accountInfoStore.currentAccountBook) {
                     this.currentAccountBook = accountBook;
                   }
@@ -73,24 +79,30 @@ class AccountManagerDetail extends React.Component<any, any> {
                 })
               }
             </select>
-            <input placeholder={ lang.accountBookName } value={ this.currentAccountBook ? this.currentAccountBook.name : '' } className="inputBox" ref='addAccountBookName' type="text" id='addAccountBookName' />
-            <input placeholder={ lang.remark } value={ this.currentAccountBook ? this.currentAccountBook.remark : '' } className="inputBox" ref='addAccountBookRemark' type="text" id='txtAddAccountBookRemark' />
+            <input placeholder={ lang.accountBookName } className="inputBox" ref='addAccountBookName' type="text" id='addAccountBookName' />
+            <input placeholder={ lang.remark } className="inputBox" ref='addAccountBookRemark' type="text" id='txtAddAccountBookRemark' />
             <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccountBook.bind(this) }>{ lang.add }</button>
           </div>
 
           <div>
             <select className="select" onChange={ (event: any)=>this.setState({currentAccount: event.target.value}) } value={ this.state.currentAccount }>
               {
-                accountInfoStore.getAccountStore().slice(1).map((accountData)=>{
+                accountInfoStore.getAccountStore().slice(1).map((accountData: any)=>{
                   if(this.state.currentAccount == accountData.accountName) {
                     this.currentAccount = accountData;
                   }
-                  return <option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>
+                  return <option key={ accountData.accountName }>{ accountData.accountName }</option>
                 })
               }
             </select>
-            <input placeholder={ lang.accountName } value={ this.currentAccount ? this.currentAccount.accountName : '' } className="inputBox" ref='addAccountName' type="text" id='txtAddAccountName' />
-            <input placeholder={ lang.remark } value={ this.currentAccount ? this.currentAccount.remark : '' } className="inputBox" ref='addAccountNameRemark' type="text" id='txtAddAccountRemark' />
+            <input placeholder={ lang.accountName } className="inputBox" ref='addAccountName' type="text" id='txtAddAccountName' />
+            <select className="accounting-block-select" style={{ marginLeft: '2rem' }} ref="accountingCurrency" id="accountingCurrency" onChange={ (event: any)=>this.setState({selectCurrencyValue: event.target.value}) } value={ this.state.selectCurrencyValue }>
+              {
+                this.state.currencySelect.map((accountingCurrency: any)=><option key={ accountingCurrency.code } value={ accountingCurrency.code }>{ accountingCurrency.name }</option>)
+              }
+            </select>
+            <input placeholder={ lang.webUrl } className="inputBox" ref='addAccountNameRemark' type="url" id='txtAddAccountRemark' />
+            <input placeholder={ lang.remark } className="inputBox" ref='addAccountNameRemark' type="text" id='txtAddAccountRemark' />
             <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccount.bind(this) }>{ lang.add }</button>
           </div>
         </BlockPanel>
@@ -114,8 +126,6 @@ class Security extends React.Component<any, any> {
 }
 
 class SecurityDetail extends React.Component<any, any> {
-  private topicHandler: Array<any>
-
   constructor(props, context) {
     super(props, context);
   }

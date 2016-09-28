@@ -67,6 +67,7 @@
     accountManager: '账本管理',
     accountBookName: '账本名称',
     accountName:'账户名称',
+    webUrl: '网址',
     remark: '备注',
     security: '安全',
     changePassword: '修改密码'
