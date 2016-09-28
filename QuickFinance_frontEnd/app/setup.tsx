@@ -27,17 +27,24 @@ class AccountManagerDetail extends React.Component<any, any> {
   private topicHandler: Array<any>
   private addAccountBookvalidates: Validete;
   private addAccountvalidates: Validete;
+  private currentAccountBook: any;
+  private currentAccount: any;
 
   constructor(props, context) {
     super(props, context);
-    this.state = {currentAccountBook: '', currentAccount: ''};
+    this.state = {currentAccount: ''};
     this.addAccountBookvalidates = new Validete();
     this.addAccountvalidates = new Validete();
   }
 
   componentDidMount() {
-    this.addAccountBookvalidates.addValiItems('txtAddAccountBook', validateType.needed);
-    this.addAccountvalidates.addValiItems('txtAddAccount', validateType.needed);
+    this.addAccountBookvalidates.addValiItems('addAccountBookName', validateType.needed);
+    this.addAccountvalidates.addValiItems('txtAddAccountName', validateType.needed);
+  }
+
+  selectHandler(event) {
+    accountInfoStore.currentAccountBook = event.target.value;
+    accountInfoStore.requestStore();
   }
 
   addAccountBook() {
@@ -56,22 +63,34 @@ class AccountManagerDetail extends React.Component<any, any> {
       return (
         <BlockPanel title={ lang.accountManager }>
           <div>
-            <select className="select" onChange={ (event: any)=>this.setState({currentAccountBook: event.target.value}) } value={ this.state.currentAccountBook }>
+            <select className="select" onChange={ (event: any)=>this.selectHandler.bind(this) } value={ accountInfoStore.currentAccountBook }>
               {
-                accountInfoStore.getStore().map((accountBook)=><option key={ accountBook } value={ accountBook }>{ accountBook }</option>)
+                accountInfoStore.getStore().map((accountBook)=>{
+                  if(accountBook.name == accountInfoStore.currentAccountBook) {
+                    this.currentAccountBook = accountBook;
+                  }
+                  return <option key={ accountBook.name } value={ accountBook.name }>{ accountBook.name }</option>
+                })
               }
             </select>
-            <input className="inputBox" ref='addAccountBook' type="text" id='txtAddAccountBook' />
+            <input placeholder={ lang.accountBookName } value={ this.currentAccountBook ? this.currentAccountBook.name : '' } className="inputBox" ref='addAccountBookName' type="text" id='addAccountBookName' />
+            <input placeholder={ lang.remark } value={ this.currentAccountBook ? this.currentAccountBook.remark : '' } className="inputBox" ref='addAccountBookRemark' type="text" id='txtAddAccountBookRemark' />
             <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccountBook.bind(this) }>{ lang.add }</button>
           </div>
 
           <div>
             <select className="select" onChange={ (event: any)=>this.setState({currentAccount: event.target.value}) } value={ this.state.currentAccount }>
               {
-                accountInfoStore.getAccountStore().slice(1).map((accountData)=><option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>)
+                accountInfoStore.getAccountStore().slice(1).map((accountData)=>{
+                  if(this.state.currentAccount == accountData.accountName) {
+                    this.currentAccount = accountData;
+                  }
+                  return <option key={ accountData.accountName } value={ accountData.accountName }>{ accountData.accountName }</option>
+                })
               }
             </select>
-            <input className="inputBox" ref='addAccountBook' type="text" id='txtAddAccount' />
+            <input placeholder={ lang.accountName } value={ this.currentAccount ? this.currentAccount.accountName : '' } className="inputBox" ref='addAccountName' type="text" id='txtAddAccountName' />
+            <input placeholder={ lang.remark } value={ this.currentAccount ? this.currentAccount.remark : '' } className="inputBox" ref='addAccountNameRemark' type="text" id='txtAddAccountRemark' />
             <button className="bt-comfirm" style={{ marginRight: '1rem' }} onClick = { this.addAccount.bind(this) }>{ lang.add }</button>
           </div>
         </BlockPanel>
