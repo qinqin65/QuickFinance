@@ -1,4 +1,4 @@
-﻿define({
+define({
   root: {
     home: '首页',
     help: '帮助',
