@@ -78,7 +78,7 @@ export class Nav extends React.Component<any, any> {
 
     this.topicHandler.push(topic.subscribe('nav/itemClicked', (selectItem)=>this.setState({select: selectItem})));
     this.topicHandler.push(topic.subscribe('user/login', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));
-    this.topicHandler.push(topic.subscribe('user/logout', (user)=>{this.userName = user.userName;this.setState({isLogin: user.isLogin})}));
+    this.topicHandler.push(topic.subscribe('user/logout', (user)=>{this.userName = user.userName;this.setState({select: select.home, isLogin: user.isLogin})}));
   }
 
   componentWillUnmount() {
