@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2016-09-08 04:00+0000\n"
+"POT-Creation-Date: 2016-09-29 22:42+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,70 +17,74 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: quick/templates/quick/index.html:8
+#: templates/quick/index.html:8
 msgid "quick finance"
 msgstr "快账-在线记账"
 
-#: quick/util.py:23
+#: util.py:23
 msgid "user does not login"
 msgstr "用户未登录"
 
-#: quick/util.py:28
+#: util.py:28
 msgid "default Account Book"
 msgstr "默认账本"
 
-#: quick/util.py:31
+#: util.py:31
 msgid "wallet"
 msgstr "钱包"
 
-#: quick/util.py:55 quick/util.py:94
+#: util.py:58 util.py:116
 msgid "total property"
 msgstr "全部账户"
 
-#: quick/views.py:28
+#: views.py:28
 msgid "login failed"
 msgstr "登录失败"
 
-#: quick/views.py:32
+#: views.py:32
 msgid "user or password is invalid"
 msgstr "用户名或密码错误"
 
-#: quick/views.py:44
+#: views.py:44
 msgid "user is not allowed to login"
 msgstr "用户不被允许登录"
 
-#: quick/views.py:51
+#: views.py:51
 msgid "logout failed"
 msgstr "退出失败"
 
-#: quick/views.py:53
+#: views.py:53
 msgid "logout success"
 msgstr "退出成功"
 
-#: quick/views.py:65
+#: views.py:65
 msgid "user already exist"
 msgstr "用户已注册"
 
-#: quick/views.py:67
+#: views.py:67
 msgid "register failed"
 msgstr "注册失败"
 
-#: quick/views.py:79
+#: views.py:78
+msgid "changing password failed"
+msgstr "修改密码失败"
+
+#: views.py:90
 msgid "error occured when processing account book"
 msgstr "处理帐本时出错"
 
-#: quick/views.py:90
+#: views.py:101
 msgid "error occured when get currency select store"
 msgstr "获取币种时出错"
 
-#: quick/views.py:101
+#: views.py:112
 msgid "error occured when get account type store"
 msgstr "获取收支类别时出错"
 
-#: quick/views.py:124
+#: views.py:135
 msgid "accounting failed"
 msgstr "记账失败"
 
-#: quick/views.py:141
+#: views.py:154 views.py:168 views.py:185
 msgid "request finance data failed"
 msgstr "请求账务数据失败"

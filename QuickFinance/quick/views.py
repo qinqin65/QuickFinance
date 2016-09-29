@@ -68,6 +68,22 @@ def register(request):
     else:
         return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
 
+@require_POST
+def changingPassword(request):
+    try:
+        oldpassword = request.POST['oldPassword']
+        newPassword = request.POST['newPassword']
+        user = authenticate(username=request.user.username, password=oldpassword)
+        if user is None:
+            return JsonResponse({'state': stateCode.ERROR, 'info': _('user or password is invalid')})
+        else:
+            user.set_password(newPassword)
+            user.save()
+            return JsonResponse({'state': stateCode.SUCCESS})
+    except Exception as e:
+        return JsonResponse({'state': stateCode.ERROR, 'info': _('changing password failed')})
+
+
 @login_required
 def accountBookData(request):
     try:
