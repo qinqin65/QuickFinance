@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData, addAccountBook, addAccount
+from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData, addAccountBookUtil, addAccountUtil
 
 @ensure_csrf_cookie
 def home(request):
@@ -150,7 +150,7 @@ def addAccountBook(request):
         accountBook = request.GET['accountBook']
         remark = request.GET['remark']
 
-        addAccountBook(request.user, accountBook, remark)
+        addAccountBookUtil(request.user, accountBook, remark)
 
         jsonResult = {'state': stateCode.SUCCESS}
     except Exception as e:
@@ -167,7 +167,7 @@ def addAccount(request):
         webUrl = request.GET['webUrl']
         remark = request.GET['remark']
 
-        addAccount(request.user, accountBook, account, currency, webUrl, remark)
+        addAccountUtil(request.user, accountBook, account, currency, webUrl, remark)
 
         jsonResult = {'state': stateCode.SUCCESS}
     except Exception as e:

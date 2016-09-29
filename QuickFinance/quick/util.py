@@ -216,14 +216,25 @@ def getFinanceData(user, year, month, day, type, accountBookName, accountName):
     else:
         return accountingModel.objects.filter(account = account, date__year = year, date__month = month, date__day = day).values('date', 'value')
 
-def addAccountBook(user, accountBookName, remark):
-    accountBook = AccountBook(user=user, accountBookName=accountBookName, remark=remark)
+def addAccountBookUtil(user, accountBookName, remark):
+    accountBookObjects = AccountBook.objects.filter(user=user, accountBookName=accountBookName)
+    if len(accountBookObjects):
+        accountBook = accountBookObjects.first()
+        accountBook.remark = remark
+    else:
+        accountBook = AccountBook(user=user, accountBookName=accountBookName, remark=remark)
     accountBook.save()
 
-def addAccount(user, accountBookName, accountName, currency, webUrl, remark):
+def addAccountUtil(user, accountBookName, accountName, currency, webUrl, remark):
     accountBook = AccountBook.objects.get(user=user, accountBookName=accountBookName)
-    currentCurrency = Currency.objects.get(code=currency)
-    account = Account(accountBook=accountBook, accountName=accountName, currency=currentCurrency, webUrl=webUrl, remark=remark)
+    accountObjects = Account.objects.filter(accountBook=accountBook, accountName=accountName)
+    if len(accountObjects):
+        account = accountObjects.first()
+        account.webUrl = webUrl
+        account.remark = remark
+    else:
+        currentCurrency = Currency.objects.get(code=currency)
+        account = Account(accountBook=accountBook, accountName=accountName, currency=currentCurrency, webUrl=webUrl, remark=remark)
     account.save()
 
 currency = CurrencyHandler()
