@@ -70,6 +70,9 @@ define({
     webUrl: '网址',
     remark: '备注',
     security: '安全',
-    changePassword: '修改密码'
+    changePassword: '修改密码',
+    oldPassword: '原密码',
+    newPassword: '新密码',
+    changingPasswordSuccess: '修改密码成功，请重新登录！'
   }
 });

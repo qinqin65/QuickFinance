@@ -53,7 +53,7 @@ class AccountManagerDetail extends React.Component<any, any> {
     this.topicHandler.forEach((topicItem)=>topicItem.remove());
   }
 
-  accountBookChanged(event) {
+  accountBookChanged(event?) {
     if(event) {
       accountInfoStore.currentAccountBook = event.target.value;
     }
@@ -200,13 +200,52 @@ class Security extends React.Component<any, any> {
 }
 
 class SecurityDetail extends React.Component<any, any> {
+  validates: Validete;
+
   constructor(props, context) {
     super(props, context);
+    this.validates = new Validete();
+  }
+
+  componentDidMount() {
+    this.validates.addValiItems('txtOldPassword', validateType.needed);
+    this.validates.addValiItems('txtNewPassword', validateType.needed);
+    this.validates.addValiItems('txtNewPasswordRepeat', validateType.needed);
+    this.validates.addValiItems('txtNewPassword', validateType.passwordLength);
+    this.validates.addValiItems(['txtNewPassword', 'txtNewPasswordRepeat'], validateType.passwordEqual);
+  }
+
+  btnHandler() {
+    if(!this.validates.validate()) {
+      return;
+    }
+    let option: any = {
+        handleAs: 'json',
+        data: {
+            oldPassword: this.refs.oldPassword.value,
+            newPassword: this.refs.newPassword.value
+        }
+    };
+    xhr.post(`${Config.requestHost}/changingPassword`, option)
+    .then((data)=>{
+        if(!data.state || data.state != stateCode.SUCCESS) {
+            topic.publish('tipService/warning', data.info);
+        } else {
+            topic.publish('tipService/info', lang.changingPasswordSuccess);
+            user.logout();
+        }
+    }, (error)=>{
+        topic.publish('tipService/error', lang.xhrErr);
+    })
   }
 
   render() {
       return (
         <BlockPanel title={ lang.changePassword }>
+          <input placeholder={ lang.oldPassword } className="inputBox block" ref='oldPassword' type="password" id='txtOldPassword' />
+          <input placeholder={ lang.newPassword } className="inputBox block" ref='newPassword' type="password" id='txtNewPassword' />
+          <input placeholder={ lang.newPassword } className="inputBox block" ref='newPasswordRepeat' type="password" id='txtNewPasswordRepeat' />
+          <button className="bt-comfirm block" style={{ marginRight: '1rem' }} onClick = { this.btnHandler.bind(this) }>{ lang.changePassword }</button>
         </BlockPanel>
       );
   }

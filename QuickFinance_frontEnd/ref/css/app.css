@@ -123,6 +123,10 @@ label {
     padding: 0.5rem 1rem;
 }
 
+.block {
+    display: block;
+}
+
 /*导航条*/
 .main-nav {
     background-color: #428bca
@@ -540,7 +544,7 @@ label {
 .financeapp-panel-container {
     width: 13.666667%;
     position: absolute;
-    top: 3.4rem;
+    top: 3.6rem;
     bottom: 0;
     left: 0;
     display: block;
@@ -548,6 +552,12 @@ label {
     overflow-y: auto;
     background-color: #f5f5f5;
     border-right: 1px solid #eee;
+}
+
+@media screen and (max-width: 1366px) {
+    .financeapp-panel-container {
+        top: 3.4rem;
+    }
 }
 
 .financeapp-panel-ul {
