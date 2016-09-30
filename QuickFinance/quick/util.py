@@ -204,8 +204,11 @@ def getFinanceData(user, year, month, day, type, accountBookName, accountName):
     if not user or not user.usersetting or not user.usersetting.defaultAccount:
         return []
 
-    if accountBookName and accountName:
+    if accountBookName:
         accountBook = AccountBook.objects.get(user=user, accountBookName=accountBookName)
+    else:
+        accountBook = user.usersetting.defaultAccountBook
+    if accountName:
         account = Account.objects.get(accountBook=accountBook, accountName=accountName)
     else:
         account = user.usersetting.defaultAccount
