@@ -164,6 +164,11 @@ class FinancePreviewStore extends BaseStore {
         this.account = account;
     }
 
+    clearParam() {
+        let curDate = new Date();
+        this.setParam(curDate.getFullYear(), curDate.getMonth() + 1, '0', AccountingType.outcome, accountInfoStore.currentAccountBook, accountInfoStore.currentAccount);
+    }
+
     private initStore(length: number) {
         this.store = [];
         for(let i = 0; i < length; i++) {

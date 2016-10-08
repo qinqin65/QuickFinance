@@ -58,7 +58,7 @@ class AccountManagerDetail extends React.Component<any, any> {
       accountInfoStore.currentAccountBook = event.target.value;
     }
     accountInfoStore.requestStore();
-    financePreviewStore.setParam('', '', '', null, '', '');
+    financePreviewStore.clearParam();
     financePreviewStore.clearStore();
   }
 

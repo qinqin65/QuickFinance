@@ -167,6 +167,7 @@ export class FinancePreview extends React.Component<any, any> {
   onChartDataUpdate(shouldClearStore) {
     if(shouldClearStore) {
       financePreviewStore.clearStore();
+      financePreviewStore.clearParam();
     }
     this.chart.updateSeries("financePreviewData", financePreviewStore.getStore());
     this.chart.render();
