@@ -5,7 +5,7 @@ import Config from 'config';
 import * as stateCode from 'stateCode';
 import * as xhr from 'xhr';
 import {user} from 'user';
-import {accountInfoStore} from 'store';
+import {accountInfoStore, financePreviewStore} from 'store';
 
 export class AccountBook extends React.Component<any, any> {
   private topicHandler: Array<any>
@@ -18,6 +18,7 @@ export class AccountBook extends React.Component<any, any> {
 
   selectHandler(event) {
     accountInfoStore.currentAccountBook = event.target.value;
+    financePreviewStore.setAccountBook(event.target.value);
     accountInfoStore.requestStore();
   }
 
@@ -59,9 +60,10 @@ export class Account extends React.Component<any, any> {
           <li className="financeapp-panel-items-active">{ lang.account }</li>
           {
             accountInfoStore.getAccountStore().map(
-              (accountData)=>
+              (accountData, index)=>
                 <li onClick={ ()=>{
                       accountInfoStore.currentAccount = accountData.accountName;
+                      financePreviewStore.setAccount(index == 0 ? '' : accountData.accountName);
                       this.setState({currentAccount: accountData.accountName});
                       topic.publish('finance/financeDataChanged', true);
                     }
