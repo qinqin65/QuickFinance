@@ -27,11 +27,17 @@ export class DatePick extends React.Component<any, any> {
     this.curDate = new Date();
     this.yearRange = 50;
     this.state = {
-      currentYear: financePreviewStore.getyear() || this.curDate.getFullYear(),
+      currentYear: financePreviewStore.getYear() || this.curDate.getFullYear(),
       currentMonth: financePreviewStore.getMonth() || this.curDate.getMonth() + 1,
       currentDay: financePreviewStore.getDay() || '0',
       currentType: financePreviewStore.getType() || AccountingType.outcome
     };
+  }
+
+  componentDidMount() {
+    if(financePreviewStore.isStoreEmpty()) {
+      this.performFilter();
+    }
   }
 
   getYearRange() {
@@ -78,38 +84,52 @@ export class DatePick extends React.Component<any, any> {
     financePreviewStore.requestStore();
   }
 
-  componentDidMount() {
-    if(financePreviewStore.isStoreEmpty()) {
-      this.performFilter();
-    }
+  yearChanged(event: any) {
+    financePreviewStore.setYear(event.target.value);
+    this.setState({currentYear: event.target.value});
+  }
+
+  monthChanged(event: any) {
+    financePreviewStore.setMonth(event.target.value);
+    this.setState({currentMonth: event.target.value});
+  }
+
+  dayChanged(event: any) {
+    financePreviewStore.setDay(event.target.value);
+    this.setState({currentDay: event.target.value});
+  }
+
+  typeChanged(event: any) {
+    financePreviewStore.setType(event.target.value);
+    this.setState({currentType: event.target.value});
   }
 
   render() {
     return (
       <div className='previewDatePick'>
         <label htmlFor="previewDateYear">{ lang.dateYear }</label>
-        <select className="accounting-block-select" ref="previewDateYear" id="previewDateYear" onChange={ (event: any)=>this.setState({currentYear: event.target.value}) } value={ this.state.currentYear }>
+        <select className="accounting-block-select" ref="previewDateYear" id="previewDateYear" onChange={ this.yearChanged.bind(this) } value={ this.state.currentYear }>
           {
             this.getYearRange()
           }
         </select>
 
         <label htmlFor="previewDateMonth">{ lang.dateMonth }</label>
-        <select className="accounting-block-select" ref="previewDateMonth" id="previewDateMonth" onChange={ (event: any)=>this.setState({currentMonth: event.target.value}) } value={ this.state.currentMonth }>
+        <select className="accounting-block-select" ref="previewDateMonth" id="previewDateMonth" onChange={ this.monthChanged.bind(this) } value={ this.state.currentMonth }>
           {
             this.getMonthRange()
           }
         </select>
 
         <label htmlFor="previewDateDay">{ lang.dateDay }</label>
-        <select className="accounting-block-select" ref="previewDateDay" id="previewDateDay" onChange={ (event: any)=>this.setState({currentDay: event.target.value}) } value={this.state.currentDay}>
+        <select className="accounting-block-select" ref="previewDateDay" id="previewDateDay" onChange={ this.dayChanged.bind(this) } value={this.state.currentDay}>
           {
             this.getDayRange()
           }
         </select>
 
         <label htmlFor="previewAccountType">{ lang.accountType }</label>
-        <select className="accounting-block-select" ref="previewAccountType" id="previewAccountType" onChange={ (event: any)=>this.setState({currentType: event.target.value}) } value={this.state.currentType}>
+        <select className="accounting-block-select" ref="previewAccountType" id="previewAccountType" onChange={ this.typeChanged.bind(this) } value={this.state.currentType}>
           <option key={stateCode.INCOME} value={stateCode.INCOME}>{lang.income}</option>
           <option key={stateCode.OUTCOME} value={stateCode.OUTCOME}>{lang.outcome}</option>
         </select>
@@ -167,7 +187,6 @@ export class FinancePreview extends React.Component<any, any> {
   onChartDataUpdate(shouldClearStore) {
     if(shouldClearStore) {
       financePreviewStore.clearStore();
-      financePreviewStore.clearParam();
     }
     this.chart.updateSeries("financePreviewData", financePreviewStore.getStore());
     this.chart.render();
