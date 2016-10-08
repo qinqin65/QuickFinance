@@ -126,7 +126,6 @@ class FinancePreviewStore extends BaseStore {
     private year: string;
     private month: string;
     private day: string;
-    private hour: string;
     private type: AccountingType;
     private accountBook: string;
     private account: string;
@@ -135,20 +134,36 @@ class FinancePreviewStore extends BaseStore {
         super();
     }
 
-    getyear(): string {
+    getYear(): string {
         return this.year;
+    }
+
+    setYear(year: string) {
+        this.year = year;
     }
 
     getMonth(): string {
         return this.month;
     }
 
+    setMonth(month: string) {
+        this.month = month;
+    }
+
     getDay(): string {
         return this.day;
     }
 
+    setDay(day: string) {
+        this.day = day;
+    }
+
     getType(): AccountingType {
         return this.type;
+    }
+
+    setType(type: string) {
+        this.type = type;
     }
 
     isStoreEmpty() {
