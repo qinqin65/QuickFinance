@@ -162,8 +162,16 @@ class FinancePreviewStore extends BaseStore {
         return this.type;
     }
 
-    setType(type: string) {
+    setType(type: AccountingType) {
         this.type = type;
+    }
+
+    setAccountBook(accountBook: string) {
+        this.accountBook = accountBook;
+    }
+
+    setAccount(account: string) {
+        this.account = account;
     }
 
     isStoreEmpty() {
