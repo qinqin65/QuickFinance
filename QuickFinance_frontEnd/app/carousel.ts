@@ -21,7 +21,7 @@ export default class Carousel {
     }
 
     indicatorHandle(evt) {
-        if(evt.srcElement.nodeName == 'OL') {
+        if(!evt.srcElement || evt.srcElement.nodeName == 'OL') {
             return;
         }
 
