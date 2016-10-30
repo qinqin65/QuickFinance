@@ -49,10 +49,7 @@ USE_TZ = False
 # URL prefix for static files.
 # Example: "http://media.lawrence.com/static/"
 STATIC_URL = '/static/'
-
-STATICFILES_DIRS = [
-    path.join(PROJECT_ROOT, "app/nls/"),
-]
+STATIC_ROOT = path.join(PROJECT_ROOT, 'static')
 
 # Make this unique, and don't share it with anybody.
 SECRET_KEY = 'n(bd1f1c%e8=_xad02x5qtfn%wgwpi492e$8_erx+d)!tpeoim'
