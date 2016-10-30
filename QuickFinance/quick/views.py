@@ -8,7 +8,9 @@ from django.utils.translation import ugettext as _
 from django.core import serializers
 from django.views.decorators.csrf import ensure_csrf_cookie
 from . import stateCode
-from .util import debug, login_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData, addAccountBookUtil, addAccountUtil
+from .util import debug, login_required, validate_required, createUserAndInit, getAccountBook, currency, getAccountType, Accounting, getFinanceData, addAccountBookUtil, addAccountUtil
+from geetest import GeetestLib
+from QuickFinance import settings
 
 @ensure_csrf_cookie
 def home(request):
@@ -53,6 +55,7 @@ def logout(request):
         return JsonResponse({'state': stateCode.SUCCESS, 'info': _('logout success')})
 
 @require_POST
+@validate_required
 def register(request):
     try:
         userName = request.POST['userName']
@@ -69,6 +72,8 @@ def register(request):
         return JsonResponse({'state': stateCode.SUCCESS, 'user': {'userName': user.username}})
 
 @require_POST
+@login_required
+@validate_required
 def changingPassword(request):
     try:
         oldpassword = request.POST['oldPassword']
@@ -118,8 +123,8 @@ def accountTypeSelectStore(request):
     else:
         return JsonResponse(jsonResult)
 
-@login_required
 @require_POST
+@login_required
 def accounting(request):
     try:
         value = request.POST['value']
@@ -190,3 +195,25 @@ def addAccount(request):
         return JsonResponse({'state': stateCode.ERROR, 'info': _('request finance data failed')})
     else:
         return JsonResponse(jsonResult)
+
+def get_captcha(request):
+    gt =  GeetestLib(settings.GEETEST_CAPTCHAID, settings.GEETEST_PRIVATEKEY)
+    status = gt.pre_process()
+    request.session[gt.GT_STATUS_SESSION_KEY] = status
+    response_str = gt.get_response_str()
+    return JsonResponse({'state': stateCode.SUCCESS, 'responseStr': response_str})
+
+@require_POST
+def validate_capthca(request):
+    gt = GeetestLib(settings.GEETEST_CAPTCHAID, settings.GEETEST_PRIVATEKEY)
+    status = request.session[gt.GT_STATUS_SESSION_KEY]
+    challenge = request.POST[gt.FN_CHALLENGE]
+    validate = request.POST[gt.FN_VALIDATE]
+    seccode = request.POST[gt.FN_SECCODE]
+    if status:
+        result = gt.success_validate(challenge, validate, seccode)
+    else:
+        result = gt.failback_validate(challenge, validate, seccode)
+    request.session['isValidated'] = result
+    result = stateCode.SUCCESS if result else stateCode.ERROR
+    return JsonResponse({'state': result, 'info': _('validate failed')})

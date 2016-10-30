@@ -9,6 +9,7 @@ import Config from 'config';
 import * as xhr from 'xhr';
 import * as stateCode from 'stateCode';
 import {user} from 'user';
+import {ValidateCode} from 'validateCode';
 
 enum setupItem{accountManager, security};
 
@@ -201,6 +202,7 @@ class Security extends React.Component<any, any> {
 
 class SecurityDetail extends React.Component<any, any> {
   validates: Validete;
+  validateCode: ValidateCode;
 
   constructor(props, context) {
     super(props, context);
@@ -213,30 +215,37 @@ class SecurityDetail extends React.Component<any, any> {
     this.validates.addValiItems('txtNewPasswordRepeat', validateType.needed);
     this.validates.addValiItems('txtNewPassword', validateType.passwordLength);
     this.validates.addValiItems(['txtNewPassword', 'txtNewPasswordRepeat'], validateType.passwordEqual);
+
+    this.validateCode = new ValidateCode('popup-captcha');
+  }
+
+  componentWillUnmount() {
+    this.validateCode.destroy();
   }
 
   btnHandler() {
-    if(!this.validates.validate()) {
-      return;
+    if(this.validates.validate()) {
+      topic.publish('validateCode/validate', ()=>{
+        let option: any = {
+            handleAs: 'json',
+            data: {
+                oldPassword: this.refs.oldPassword.value,
+                newPassword: this.refs.newPassword.value
+            }
+        };
+        xhr.post(`${Config.requestHost}/changingPassword`, option)
+        .then((data)=>{
+            if(!data.state || data.state != stateCode.SUCCESS) {
+                topic.publish('tipService/warning', data.info);
+            } else {
+                topic.publish('tipService/info', lang.changingPasswordSuccess);
+                user.logout();
+            }
+        }, (error)=>{
+            topic.publish('tipService/error', lang.xhrErr);
+        })
+      });
     }
-    let option: any = {
-        handleAs: 'json',
-        data: {
-            oldPassword: this.refs.oldPassword.value,
-            newPassword: this.refs.newPassword.value
-        }
-    };
-    xhr.post(`${Config.requestHost}/changingPassword`, option)
-    .then((data)=>{
-        if(!data.state || data.state != stateCode.SUCCESS) {
-            topic.publish('tipService/warning', data.info);
-        } else {
-            topic.publish('tipService/info', lang.changingPasswordSuccess);
-            user.logout();
-        }
-    }, (error)=>{
-        topic.publish('tipService/error', lang.xhrErr);
-    })
   }
 
   render() {
@@ -245,6 +254,7 @@ class SecurityDetail extends React.Component<any, any> {
           <input placeholder={ lang.oldPassword } className="inputBox block" ref='oldPassword' type="password" id='txtOldPassword' />
           <input placeholder={ lang.newPassword } className="inputBox block" ref='newPassword' type="password" id='txtNewPassword' />
           <input placeholder={ lang.newPassword } className="inputBox block" ref='newPasswordRepeat' type="password" id='txtNewPasswordRepeat' />
+          <div id="popup-captcha" style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}></div>
           <button className="bt-comfirm block" style={{ marginRight: '1rem' }} onClick = { this.btnHandler.bind(this) }>{ lang.changePassword }</button>
         </BlockPanel>
       );

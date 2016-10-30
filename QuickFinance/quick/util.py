@@ -24,6 +24,16 @@ def login_required(func):
 
     return _wrapped_func
 
+def validate_required(func):
+    @wraps(func)
+    def _wrapped_func(request, *args, **kwargs):
+        if (request.session.get('isValidated')):
+            return func(request, *args, **kwargs)
+        else:
+            return JsonResponse({'state': stateCode.ERROR, 'info': _('user was not validated')})
+
+    return _wrapped_func
+
 def initAccount(user):
     accountBook = AccountBook(user=user, accountBookName=_('default Account Book'))
     accountBook.save()

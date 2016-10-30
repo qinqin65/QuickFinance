@@ -73,6 +73,8 @@ define({
     changePassword: '修改密码',
     oldPassword: '原密码',
     newPassword: '新密码',
-    changingPasswordSuccess: '修改密码成功，请重新登录！'
+    changingPasswordSuccess: '修改密码成功，请重新登录！',
+    ////验证码
+    validateWarning: '请先完成验证！'
   }
 });
