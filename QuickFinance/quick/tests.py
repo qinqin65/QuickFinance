@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.test import TestCase
 from django.contrib.auth.models import User
 from .models import AccountBook, Account ,AccountType ,Income, Outcome, UserSetting, Currency, CurrencyRate
-from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData, addAccountBook, addAccount
+from .util import initAccount, createUserAndInit, getAccountType, Accounting, getAccountBook, getFinanceData, addAccountBookUtil, addAccountUtil
 from . import stateCode
 import random,datetime
 
@@ -132,7 +132,7 @@ class QuickTest(TestCase):
 
         testAccountBookName = 'testAccountBook'
         testRemark = 'test'
-        addAccountBook(user, testAccountBookName, testRemark)
+        addAccountBookUtil(user, testAccountBookName, testRemark)
 
         accountBook = AccountBook.objects.filter(user=user, accountBookName=testAccountBookName)
         self.assertEqual(len(accountBook), 1, 'the count of account book must be 1 if added successfully')
@@ -143,11 +143,17 @@ class QuickTest(TestCase):
 
         testAccountBook = user.usersetting.defaultAccountBook
         testAccountName = 'testAccount'
+        testAccountName2 = 'testAccount2'
         currency = user.usersetting.defaultCurrency
         webUrl = 'www.test.com'
         testRemark = 'test'
 
-        addAccount(user, testAccountBook.accountBookName, testAccountName, currency.code, webUrl, testRemark)
+        addAccountUtil(user, testAccountBook.accountBookName, testAccountName, currency.code, webUrl, testRemark)
 
         account = Account.objects.filter(accountBook=testAccountBook, accountName=testAccountName)
         self.assertEqual(len(account), 1, 'the count of account must be 1 if added successfully')
+
+        addAccountUtil(user, '', testAccountName2, currency.code, webUrl, testRemark)
+
+        account = Account.objects.filter(accountBook=user.usersetting.defaultAccountBook, accountName=testAccountName2)
+        self.assertEqual(len(account), 1, 'the count of account must be 1 if added account with default account book successfully')

@@ -239,7 +239,7 @@ def addAccountBookUtil(user, accountBookName, remark):
     accountBook.save()
 
 def addAccountUtil(user, accountBookName, accountName, currency, webUrl, remark):
-    accountBook = AccountBook.objects.get(user=user, accountBookName=accountBookName)
+    accountBook = AccountBook.objects.get(user=user, accountBookName=accountBookName if accountBookName != '' else user.usersetting.defaultAccountBook.accountBookName)
     accountObjects = Account.objects.filter(accountBook=accountBook, accountName=accountName)
     if len(accountObjects):
         account = accountObjects.first()
