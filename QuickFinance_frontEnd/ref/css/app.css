@@ -552,6 +552,7 @@ label {
     overflow-y: auto;
     background-color: #f5f5f5;
     border-right: 1px solid #eee;
+    bottom: 8rem;
 }
 
 @media screen and (max-width: 1366px) {
