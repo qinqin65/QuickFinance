@@ -37671,7 +37671,7 @@ define(["require"], function(moduleRequire){
 			}
 			function checkForParser(){
 				var parser = testElementStyle('x-parse', null, 'content');
-				if(parser && parser != 'none'){
+				if(parser && parser != 'none' && parser != 'normal'){
 					// TODO: wait for parser to load
 					require([eval(parser)], callback);
 				}else{

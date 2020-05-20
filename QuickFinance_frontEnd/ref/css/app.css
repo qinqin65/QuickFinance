@@ -344,20 +344,14 @@ label {
 
 /*登录模块*/
 .login {
-    display: inline-block;
-    float: right;
     margin: 0 auto;
-    margin-top: 7rem;
     width: 418px;
     border: 2px solid #eee;
-    position: relative;
+    position: absolute;
     background-color: #f6f6f6;
-}
-
-@media screen and (max-width: 1366px) {
-    .login {
-        margin-top: 4rem;
-    }
+    top: 40%;
+    transform: translate(-50%, -40%);
+    left: 50%;
 }
 
 .login_header {

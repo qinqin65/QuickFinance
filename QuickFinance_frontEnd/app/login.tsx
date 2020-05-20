@@ -61,6 +61,8 @@ class MainLogin extends React.Component<any, any> {
             </label>
         </div>
         
+        <div className="g-recaptcha" data-sitekey="6Le_ofkUAAAAAD_0241VuurKTCIEY2YATjMeWVDM"></div>
+
         <button className="btn-lg" type="submit" onClick = { this.btLoginHandle.bind(this) }>{ lang.login }</button>
       </div>
     )
@@ -69,7 +71,6 @@ class MainLogin extends React.Component<any, any> {
 
 class Register extends React.Component<any, any> {
   validates: Validete;
-  validateCode: ValidateCode;
   
   constructor(props, context) {
     super(props, context);
@@ -85,11 +86,6 @@ class Register extends React.Component<any, any> {
     this.validates.addValiItems('regInputPassword', validateType.passwordLength);
     this.validates.addValiItems(['regInputPassword', 'regInputPasswordAgain'], validateType.passwordEqual);
     
-    this.validateCode = new ValidateCode('popup-captcha');
-  }
-
-  componentWillUnmount() {
-    this.validateCode.destroy();
   }
 
   register() {
@@ -99,7 +95,8 @@ class Register extends React.Component<any, any> {
   
   registerHandle() {
     if(this.validates.validate()) {
-      topic.publish('validateCode/validate', this.register.bind(this));
+      // topic.publish('validateCode/validate', this.register.bind(this));
+      this.register();
     }
   }
   
@@ -118,7 +115,7 @@ class Register extends React.Component<any, any> {
         <label htmlFor="regInputPasswordAgain" className="sr-only">{ lang.passwordAgain }</label>
         <input type="password" id="regInputPasswordAgain" className="form-control" placeholder={ lang.password } required="" />
         
-        <div id="popup-captcha" style={{ marginBottom: '0.5rem' }}></div>
+        <div className="g-recaptcha" data-sitekey="6Le_ofkUAAAAAD_0241VuurKTCIEY2YATjMeWVDM"></div>
 
         <button id="btSubmit" className="btn-lg" type="submit" onClick = { this.registerHandle.bind(this) }>{ lang.register }</button>
       </div>

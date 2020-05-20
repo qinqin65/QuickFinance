@@ -3,206 +3,206 @@
     "model": "quick.AccountType",
     "pk": 1,
     "fields": {
-      "name": "三餐"
+      "name": "food"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 2,
     "fields": {
-      "name": "水果零食"
+      "name": "fruit"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 3,
     "fields": {
-      "name": "服饰"
+      "name": "garment"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 4,
     "fields": {
-      "name": "房租"
+      "name": "house rent"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 5,
     "fields": {
-      "name": "日常开销"
+      "name": "everyday expenditure"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 6,
     "fields": {
-      "name": "水电煤气"
+      "name": "electricity bill"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 7,
     "fields": {
-      "name": "美容美发"
+      "name": "hair cut"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 8,
     "fields": {
-      "name": "行车交通"
+      "name": "transport"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 9,
     "fields": {
-      "name": "话费"
+      "name": "phone bill"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 10,
     "fields": {
-      "name": "网费"
+      "name": "internet bill"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 11,
     "fields": {
-      "name": "休闲娱乐"
+      "name": "entertainment"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 12,
     "fields": {
-      "name": "文化教育"
+      "name": "education"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 13,
     "fields": {
-      "name": "人情往来"
+      "name": "social intercourse"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 14,
     "fields": {
-      "name": "医疗医药"
+      "name": "medical"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 15,
     "fields": {
-      "name": "家具物品"
+      "name": "furniture"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 16,
     "fields": {
-      "name": "意外丢失"
+      "name": "unexpected lose"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 17,
     "fields": {
-      "name": "坏账损失"
+      "name": "bad debt"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 18,
     "fields": {
-      "name": "投资亏损"
+      "name": "investing lost"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 19,
     "fields": {
-      "name": "赔偿罚款"
+      "name": "forfeit"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 20,
     "fields": {
-      "name": "保险支出"
+      "name": "insurance"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 21,
     "fields": {
-      "name": "打印复印"
+      "name": "printing"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 22,
     "fields": {
-      "name": "工资"
+      "name": "salary"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 23,
     "fields": {
-      "name": "利息"
+      "name": "investing interest"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 24,
     "fields": {
-      "name": "礼金"
+      "name": "gift"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 25,
     "fields": {
-      "name": "投资收益"
+      "name": "investing lucre"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 26,
     "fields": {
-      "name": "意外所得"
+      "name": "windfall"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 27,
     "fields": {
-      "name": "转帐"
+      "name": "transfer"
     }
   },
   {
     "model": "quick.AccountType",
     "pk": 28,
     "fields": {
-      "name": "其它"
+      "name": "other"
     }
   },
   {
     "model": "quick.Currency",
     "pk": 1,
     "fields": {
-      "code": "CNY",
-      "symbol": "￥",
-      "name_zh_cn": "人民币",
-      "name_en": "china yuan"
+      "code": "AUD",
+      "symbol": "$",
+      "name_zh_cn": "澳元",
+      "name_en": "Australian dollar"
     }
   },
   {
@@ -212,7 +212,17 @@
       "code": "USD",
       "symbol": "$",
       "name_zh_cn": "美元",
-      "name_en": "us dollar"
+      "name_en": "US dollar"
+    }
+  },
+  {
+    "model": "quick.Currency",
+    "pk": 3,
+    "fields": {
+      "code": "CNY",
+      "symbol": "￥",
+      "name_zh_cn": "人民币",
+      "name_en": "China yuan"
     }
   },
   {
@@ -231,6 +241,24 @@
       "currency": 2,
       "toCurrency": 1,
       "rate": 6.6530
+    }
+  },
+  {
+    "model": "quick.CurrencyRate",
+    "pk": 3,
+    "fields": {
+      "currency": 2,
+      "toCurrency": 3,
+      "rate": 1.53
+    }
+  },
+  {
+    "model": "quick.CurrencyRate",
+    "pk": 4,
+    "fields": {
+      "currency": 3,
+      "toCurrency": 2,
+      "rate": 0.65
     }
   }
 ]

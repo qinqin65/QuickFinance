@@ -17,7 +17,7 @@ def debug(func):
 def login_required(func):
     @wraps(func)
     def _wrapped_func(request, *args, **kwargs):
-        if(request.user.is_authenticated()):
+        if(request.user.is_authenticated):
             return func(request, *args, **kwargs)
         else:
             return JsonResponse({'state': stateCode.NOTLOGGIN, 'info': _('user does not login')})
@@ -27,10 +27,10 @@ def login_required(func):
 def validate_required(func):
     @wraps(func)
     def _wrapped_func(request, *args, **kwargs):
-        if (request.session.get('isValidated')):
+        # if (request.session.get('isValidated')):
             return func(request, *args, **kwargs)
-        else:
-            return JsonResponse({'state': stateCode.ERROR, 'info': _('user was not validated')})
+        # else:
+        #     return JsonResponse({'state': stateCode.ERROR, 'info': _('user was not validated')})
 
     return _wrapped_func
 
@@ -181,9 +181,9 @@ class Accounting():
 
 class CurrencyHandler():
     def __init__(self):
-        self.currencyMap = {'zh-hans': 'CNY', 'en': 'USD'}
-        self.currencyNameMap = {'zh-hans': 'name_zh_cn', 'en': 'name_en'}
-        self.defaultCurrencyMap = 'zh-hans'
+        self.currencyMap = {'zh-hans': 'CNY', 'en': 'USD', 'en-AU': 'AUD'}
+        self.currencyNameMap = {'zh-hans': 'name_zh_cn', 'en': 'name_en', 'en-AU': 'name_en'}
+        self.defaultCurrencyMap = 'en-AU'
 
     @property
     def lanCode(self):

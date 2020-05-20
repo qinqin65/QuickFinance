@@ -11,7 +11,7 @@
     "fs-path": "0.0.22"
   },
   "devDependencies": {
-    "gulp": "^3.9.1"
+    "gulp": "4.0.2"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

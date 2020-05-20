@@ -13,6 +13,4 @@ urlpatterns = [
     url(r'financePreviewData', views.financePreviewData, name='financePreviewData'),
     url(r'addAccountBook', views.addAccountBook, name='addAccountBook'),
     url(r'addAccount', views.addAccount, name='addAccount'),
-    url(r'getCaptcha', views.get_captcha, name='getCaptcha'),
-    url(r'validateCapthca', views.validate_capthca, name='validateCapthca')
 ]

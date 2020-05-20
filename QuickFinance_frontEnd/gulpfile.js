@@ -23,7 +23,7 @@ gulp.task('default', function() {
 });
 
 gulp.task('copytodjango', function () {
-    new Promise(function(resolve, reject) {
+    var p = new Promise(function(resolve, reject) {
         exec('tsc', function(err) {
             if (err) {
                 console.error(err);
@@ -70,4 +70,6 @@ gulp.task('copytodjango', function () {
     .catch(function(err) {
         console.error(err);
     });
+
+    return p;
 });

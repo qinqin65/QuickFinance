@@ -1,6 +1,5 @@
 ﻿import * as React from 'react';
 import * as topic from 'dojo/topic';
-import {MainShow} from 'mainShow';
 import Login from 'login';
 import Finance from 'financeApp';
 import Setup from 'setup';
@@ -10,7 +9,7 @@ import * as lang from 'dojo/i18n!app/nls/langResource.js';
 enum app{Login, mainPage, setup};
 enum tipType{info, warning, error};
 
-const loginApp = (props?)=><div><MainShow /><Login /></div>
+const loginApp = (props?)=><div><Login /></div>
 
 class TipService extends React.Component<any, any> {
   private tipTIme: number

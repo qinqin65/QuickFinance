@@ -27,11 +27,11 @@ DATABASES = {
 # timezone as the operating system.
 # If running in a Windows environment this must be set to the same as your
 # system time zone.
-TIME_ZONE = 'Asia/Shanghai'
+TIME_ZONE = 'Australia/Melbourne'
 
 # Language code for this installation. All choices can be found here:
 # http://www.i18nguy.com/unicode/language-identifiers.html
-LANGUAGE_CODE = 'zh-Hans'
+LANGUAGE_CODE = 'en-US'
 
 SITE_ID = 1
 
@@ -111,6 +111,3 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-
-GEETEST_CAPTCHAID = 'fa4946e539942dfde16e815bc4f58a12'
-GEETEST_PRIVATEKEY = '20fc47320ded50f2f5ea5946bbf1550a'
