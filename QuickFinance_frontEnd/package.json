@@ -8,7 +8,7 @@
   },
   "main": "app.js",
   "dependencies": {
-    "fs-path": "0.0.22"
+    "fs-path": "0.0.25"
   },
   "devDependencies": {
     "gulp": "4.0.2"
